@@ -1,0 +1,961 @@
+# Zendure zenSDK (Gielz) + Forecasting | set: public (without HVAC) | reference: FC-20261027
+# Based on Gielz1986/Zendure-HA-zenSDK (Michiel Hofker). See README.md for license and changes.
+# =====================================================================
+# Zendure Forecasting (add-on to zendure_gielz1986_global.yaml)
+# Mode: "Dynamic Smart Matching + Forecasting"
+#
+# Place this file next to zendure_gielz1986_global.yaml (same packages folder).
+# This file contains:
+#   1. Input fields (helpers) for the forecast settings
+#   2. Power sensors + integration sensors (kWh counters)
+#   3. Statistics: 7 days (solar self-consumption, average usage) and measured charge power
+#   4. The planner: sensor.zendure_forecast_plan (+ sensor.zendure_forecast_chart)
+#      incl. scenario A/B, path check, efficiency filter and cheap-dip discharge hold
+#
+# Fixed values (thresholds, fallback values) are at the top of the planner under
+# "Settings (fixed values)" with the prefix c_.
+# =====================================================================
+
+# ---------------------------------------------------------------------
+# 1. Input fields
+# ---------------------------------------------------------------------
+input_text:
+  forecast_setting_solar_remaining_today_sensor:
+    name: Forecast Solar Remaining Today Sensor
+    icon: mdi:solar-power-variant
+    max: 250
+    mode: text
+
+  forecast_setting_solar_tomorrow_sensor:
+    name: Forecast Solar Tomorrow Sensor
+    icon: mdi:solar-power-variant-outline
+    max: 250
+    mode: text
+
+  forecast_setting_solar_production_sensor:
+    name: Forecast Solar Panels Production Sensor (total kWh)
+    icon: mdi:solar-panel
+    max: 250
+    mode: text
+
+input_number:
+  forecast_setting_self_consumption_override:
+    name: Forecast Solar Self-Consumption (only fill in to override)
+    icon: mdi:home-lightning-bolt
+    min: 0
+    max: 100
+    step: 1
+    mode: box
+    unit_of_measurement: "%"
+
+  forecast_setting_charge_margin:
+    name: Forecast Battery Charge Margin
+    icon: mdi:battery-plus-variant
+    min: 0
+    max: 50
+    step: 1
+    mode: box
+    unit_of_measurement: "%"
+
+  forecast_setting_default_daily_usage:
+    name: Forecast Default Daily Usage (until history exists)
+    icon: mdi:home-lightning-bolt-outline
+    min: 0
+    max: 50
+    step: 0.5
+    mode: box
+    unit_of_measurement: "kWh"
+
+  forecast_setting_solar_reliability:
+    name: Forecast Solar Forecast Reliability
+    icon: mdi:weather-partly-cloudy
+    min: 0
+    max: 100
+    step: 5
+    mode: box
+    unit_of_measurement: "%"
+
+input_boolean:
+  forecast_setting_hold_discharge_in_dip:
+    name: Forecast Hold Discharge In Cheap Dip
+    icon: mdi:battery-lock
+  dashboard_setting_show_forecasting:
+    name: Show Forecasting On Dashboard
+    icon: mdi:calendar-clock
+
+input_button:
+  forecast_recalculate:
+    name: Forecast Recalculate
+    icon: mdi:calculator-variant
+
+# ---------------------------------------------------------------------
+# 2. Integration sensors (kWh counters, derived from power sensors)
+# ---------------------------------------------------------------------
+sensor:
+  - platform: integration
+    name: "Forecast Grid Import Total"
+    unique_id: forecast_grid_import_total
+    source: sensor.forecast_grid_import_power
+    unit_prefix: k
+    round: 3
+    method: trapezoidal
+
+  - platform: integration
+    name: "Forecast Grid Export Total"
+    unique_id: forecast_grid_export_total
+    source: sensor.forecast_grid_export_power
+    unit_prefix: k
+    round: 3
+    method: trapezoidal
+
+  - platform: integration
+    name: "Forecast Grid Export From Solar Total"
+    unique_id: forecast_grid_export_from_solar_total
+    source: sensor.forecast_grid_export_from_solar_power
+    unit_prefix: k
+    round: 3
+    method: trapezoidal
+
+  - platform: integration
+    name: "Forecast Zendure Charge Total"
+    unique_id: forecast_zendure_charge_total
+    source: sensor.forecast_zendure_charge_power
+    unit_prefix: k
+    round: 3
+    method: trapezoidal
+
+  - platform: integration
+    name: "Forecast Zendure Discharge Total"
+    unique_id: forecast_zendure_discharge_total
+    source: sensor.forecast_zendure_discharge_power
+    unit_prefix: k
+    round: 3
+    method: trapezoidal
+
+  - platform: integration
+    name: "Forecast Zendure Charge From Solar Total"
+    unique_id: forecast_zendure_charge_from_solar_total
+    source: sensor.forecast_zendure_charge_from_solar_power
+    unit_prefix: k
+    round: 3
+    method: trapezoidal
+
+  # -------------------------------------------------------------------
+  # 3. Statistics over the last 7 days (rolling)
+  #    Based on the counters "Forecast Counter ..." (see template section)
+  # -------------------------------------------------------------------
+  # Average actual grid charge power over recent charging sessions
+  - platform: statistics
+    name: "Forecast Measured Charge Power"
+    unique_id: forecast_measured_charge_power
+    entity_id: sensor.forecast_grid_charge_power
+    state_characteristic: mean
+    max_age:
+      days: 14
+    sampling_size: 3000
+    precision: 0
+
+  - platform: statistics
+    name: "Forecast Solar Production 7 Days"
+    unique_id: forecast_solar_production_7_days
+    entity_id: sensor.forecast_counter_solar_production
+    state_characteristic: change
+    max_age:
+      days: 7
+    sampling_size: 1500
+    precision: 2
+
+  - platform: statistics
+    name: "Forecast Grid Import 7 Days"
+    unique_id: forecast_grid_import_7_days
+    entity_id: sensor.forecast_counter_grid_import
+    state_characteristic: change
+    max_age:
+      days: 7
+    sampling_size: 1500
+    precision: 2
+
+  - platform: statistics
+    name: "Forecast Grid Export 7 Days"
+    unique_id: forecast_grid_export_7_days
+    entity_id: sensor.forecast_counter_grid_export
+    state_characteristic: change
+    max_age:
+      days: 7
+    sampling_size: 1500
+    precision: 2
+
+  - platform: statistics
+    name: "Forecast Grid Export From Solar 7 Days"
+    unique_id: forecast_grid_export_from_solar_7_days
+    entity_id: sensor.forecast_counter_grid_export_from_solar
+    state_characteristic: change
+    max_age:
+      days: 7
+    sampling_size: 1500
+    precision: 2
+
+  - platform: statistics
+    name: "Forecast Zendure Charge 7 Days"
+    unique_id: forecast_zendure_charge_7_days
+    entity_id: sensor.forecast_counter_zendure_charge
+    state_characteristic: change
+    max_age:
+      days: 7
+    sampling_size: 1500
+    precision: 2
+
+  - platform: statistics
+    name: "Forecast Zendure Discharge 7 Days"
+    unique_id: forecast_zendure_discharge_7_days
+    entity_id: sensor.forecast_counter_zendure_discharge
+    state_characteristic: change
+    max_age:
+      days: 7
+    sampling_size: 1500
+    precision: 2
+
+  - platform: statistics
+    name: "Forecast Zendure Charge From Solar 7 Days"
+    unique_id: forecast_zendure_charge_from_solar_7_days
+    entity_id: sensor.forecast_counter_zendure_charge_from_solar
+    state_characteristic: change
+    max_age:
+      days: 7
+    sampling_size: 1500
+    precision: 2
+
+template:
+  # Hold discharging in a cheap dip (only mode Dynamic Smart Matching + Forecasting)
+  - binary_sensor:
+      - name: "Forecast Discharge Held In Dip"
+        unique_id: forecast_discharge_held_in_dip
+        icon: mdi:battery-lock
+        state: >
+          {{ is_state('input_select.zendure_operation_mode', 'Dynamic Smart Matching + Forecasting')
+             and is_state_attr('sensor.zendure_forecast_plan', 'hold_discharge', true) }}
+
+  # -------------------------------------------------------------------
+  # Power sensors (source for the integration sensors above)
+  #   Energy meter: positive = import, negative = export
+  #   Zendure:      sensor.zendure_power
+  #                positive = charging, negative = discharging
+  # -------------------------------------------------------------------
+  - sensor:
+      - name: "Forecast Grid Import Power"
+        unique_id: forecast_grid_import_power
+        unit_of_measurement: "W"
+        device_class: power
+        state_class: measurement
+        availability: "{{ has_value('sensor.home_energy_meter_power') }}"
+        state: "{{ [states('sensor.home_energy_meter_power') | float(0), 0] | max }}"
+
+      - name: "Forecast Grid Export Power"
+        unique_id: forecast_grid_export_power
+        unit_of_measurement: "W"
+        device_class: power
+        state_class: measurement
+        availability: "{{ has_value('sensor.home_energy_meter_power') }}"
+        state: "{{ [0 - states('sensor.home_energy_meter_power') | float(0), 0] | max }}"
+
+      # Export that comes from solar: grid export minus what the battery is discharging at that moment
+      # (otherwise export from the battery, e.g. in Dynamic Trading, would count as solar export)
+      - name: "Forecast Grid Export From Solar Power"
+        unique_id: forecast_grid_export_from_solar_power
+        unit_of_measurement: "W"
+        device_class: power
+        state_class: measurement
+        availability: >
+          {{ has_value('sensor.home_energy_meter_power')
+             and has_value('sensor.zendure_power') }}
+        state: >
+          {% set export_w = [0 - states('sensor.home_energy_meter_power') | float(0), 0] | max %}
+          {% set discharging = [0 - states('sensor.zendure_power') | float(0), 0] | max %}
+          {{ ([export_w - discharging, 0] | max) | round(0) }}
+
+      - name: "Forecast Zendure Charge Power"
+        unique_id: forecast_zendure_charge_power
+        unit_of_measurement: "W"
+        device_class: power
+        state_class: measurement
+        availability: "{{ has_value('sensor.zendure_power') }}"
+        state: "{{ [states('sensor.zendure_power') | float(0), 0] | max }}"
+
+      - name: "Forecast Zendure Discharge Power"
+        unique_id: forecast_zendure_discharge_power
+        unit_of_measurement: "W"
+        device_class: power
+        state_class: measurement
+        availability: "{{ has_value('sensor.zendure_power') }}"
+        state: "{{ [0 - states('sensor.zendure_power') | float(0), 0] | max }}"
+
+      # The part of the charge power that does NOT come from the grid (i.e. from solar surplus).
+      # The grid part is the grid import, capped at the charge power.
+      # Charge power from the grid as the battery actually achieves it. Only available while
+      # charging from the grid (> 300 W), so the statistic only counts real charging sessions.
+      - name: "Forecast Grid Charge Power"
+        unique_id: forecast_grid_charge_power
+        unit_of_measurement: "W"
+        device_class: power
+        state_class: measurement
+        availability: >
+          {% set charging = [states('sensor.zendure_power') | float(0), 0] | max %}
+          {% set import_w = [states('sensor.home_energy_meter_power') | float(0), 0] | max %}
+          {{ has_value('sensor.home_energy_meter_power')
+             and has_value('sensor.zendure_power')
+             and ([import_w, charging] | min) > 300 }}
+        state: >
+          {% set charging = [states('sensor.zendure_power') | float(0), 0] | max %}
+          {% set import_w = [states('sensor.home_energy_meter_power') | float(0), 0] | max %}
+          {{ [import_w, charging] | min | round(0) }}
+
+      - name: "Forecast Zendure Charge From Solar Power"
+        unique_id: forecast_zendure_charge_from_solar_power
+        unit_of_measurement: "W"
+        device_class: power
+        state_class: measurement
+        availability: >
+          {{ has_value('sensor.home_energy_meter_power')
+             and has_value('sensor.zendure_power') }}
+        state: >
+          {% set charging = [states('sensor.zendure_power') | float(0), 0] | max %}
+          {% set import_w = [states('sensor.home_energy_meter_power') | float(0), 0] | max %}
+          {{ (charging - [import_w, charging] | min) | round(0) }}
+
+  # -------------------------------------------------------------------
+  # Counters are "frozen" every 10 minutes so the 7-day statistic
+  # does not have to process thousands of samples per hour.
+  # -------------------------------------------------------------------
+  - trigger:
+      - platform: time_pattern
+        minutes: "/10"
+      - platform: homeassistant
+        event: start
+    sensor:
+      - name: "Forecast Counter Solar Production"
+        unique_id: forecast_counter_solar_production
+        unit_of_measurement: "kWh"
+        device_class: energy
+        state_class: total_increasing
+        availability: >
+          {% set e = states('input_text.forecast_setting_solar_production_sensor') %}
+          {{ e | lower | regex_match('^sensor\\..+') and has_value(e) }}
+        state: >
+          {% set e = states('input_text.forecast_setting_solar_production_sensor') %}
+          {% set u = state_attr(e, 'unit_of_measurement') %}
+          {% set v = states(e) | float(0) %}
+          {% if u == 'Wh' %}
+            {{ (v / 1000) | round(3) }}
+          {% elif u == 'MWh' %}
+            {{ (v * 1000) | round(3) }}
+          {% else %}
+            {{ v | round(3) }}
+          {% endif %}
+
+      - name: "Forecast Counter Grid Import"
+        unique_id: forecast_counter_grid_import
+        unit_of_measurement: "kWh"
+        device_class: energy
+        state_class: total_increasing
+        availability: "{{ has_value('sensor.forecast_grid_import_total') }}"
+        state: "{{ states('sensor.forecast_grid_import_total') | float(0) }}"
+
+      - name: "Forecast Counter Grid Export"
+        unique_id: forecast_counter_grid_export
+        unit_of_measurement: "kWh"
+        device_class: energy
+        state_class: total_increasing
+        availability: "{{ has_value('sensor.forecast_grid_export_total') }}"
+        state: "{{ states('sensor.forecast_grid_export_total') | float(0) }}"
+
+      - name: "Forecast Counter Grid Export From Solar"
+        unique_id: forecast_counter_grid_export_from_solar
+        unit_of_measurement: "kWh"
+        device_class: energy
+        state_class: total_increasing
+        availability: "{{ has_value('sensor.forecast_grid_export_from_solar_total') }}"
+        state: "{{ states('sensor.forecast_grid_export_from_solar_total') | float(0) }}"
+
+      - name: "Forecast Counter Zendure Charge"
+        unique_id: forecast_counter_zendure_charge
+        unit_of_measurement: "kWh"
+        device_class: energy
+        state_class: total_increasing
+        availability: "{{ has_value('sensor.forecast_zendure_charge_total') }}"
+        state: "{{ states('sensor.forecast_zendure_charge_total') | float(0) }}"
+
+      - name: "Forecast Counter Zendure Discharge"
+        unique_id: forecast_counter_zendure_discharge
+        unit_of_measurement: "kWh"
+        device_class: energy
+        state_class: total_increasing
+        availability: "{{ has_value('sensor.forecast_zendure_discharge_total') }}"
+        state: "{{ states('sensor.forecast_zendure_discharge_total') | float(0) }}"
+
+      - name: "Forecast Counter Zendure Charge From Solar"
+        unique_id: forecast_counter_zendure_charge_from_solar
+        unit_of_measurement: "kWh"
+        device_class: energy
+        state_class: total_increasing
+        availability: "{{ has_value('sensor.forecast_zendure_charge_from_solar_total') }}"
+        state: "{{ states('sensor.forecast_zendure_charge_from_solar_total') | float(0) }}"
+
+  # -------------------------------------------------------------------
+  # 4. THE PLANNER
+  #    All calculations are in "variables" (once per calculation)
+  #    and are reused by the state and the attributes.
+  #
+  #    State:  Charge | Waiting | Not needed | Not favorable |
+  #            No prices | No battery data
+  #    The automation only charges when the state is "Charge".
+  # -------------------------------------------------------------------
+  - trigger:
+      - platform: time_pattern
+        minutes: "/1"
+      - platform: homeassistant
+        event: start
+      - platform: state
+        entity_id:
+          - input_button.forecast_recalculate
+          - input_text.forecast_setting_solar_remaining_today_sensor
+          - input_text.forecast_setting_solar_tomorrow_sensor
+          - input_text.forecast_setting_solar_production_sensor
+          - input_number.forecast_setting_self_consumption_override
+          - input_number.forecast_setting_charge_margin
+          - input_number.forecast_setting_solar_reliability
+          - input_number.forecast_setting_default_daily_usage
+          - input_boolean.forecast_setting_hold_discharge_in_dip
+          - sensor.forecast_measured_charge_power
+          - input_number.dynamic_setting_minimal_spread
+          - input_number.zendure_setting_max_charge_power
+          - input_boolean.dynamic_setting_15_minute_interval
+          - sensor.dynamic_nordpool
+          - sensor.zendure_total_state_of_charge
+          - sensor.zendure_minimum_state_of_charge
+          - sensor.zendure_maximum_state_of_charge
+    variables:
+      # ---- Settings (fixed values, adjust here) ----------------------
+      c_self_consumption_default_pct: 30   # self-consumption while there is no history yet
+      c_min_production_kwh: 2             # minimum solar production in 7 days for a calculation
+      c_min_usage_kwh: 1               # lower calculated daily usage is ignored
+      c_sun_offset_s: 7200               # solar counts as "sufficient" 2 hours after sunrise
+      c_min_bridge_s: 1800         # bridging is at least 30 minutes
+      c_charge_start_kwh: 0.3             # a charging round starts from this grid charge (kWh)
+      c_charge_stop_kwh: 0.05             # a charging round stops below this remainder (kWh)
+      c_charge_min_w: 500                 # measured charge power below this level is ignored
+      c_price_floor: 0.02               # lower bound in price comparisons (EUR/kWh)
+      c_path_min_hours: 0.25               # path check only for a gap of at least 15 minutes
+      c_path_min_shortfall_kwh: 0.2          # and a shortfall of at least 0.2 kWh
+
+      # ---- Time -------------------------------------------------------
+      now_ts: "{{ as_timestamp(now()) }}"
+      end_today_ts: "{{ as_timestamp(today_at('00:00') + timedelta(days=1)) }}"
+      # Actual length of today (25 or 23 hours on the day of the DST change)
+      day_length: "{{ end_today_ts - as_timestamp(today_at('00:00')) }}"
+      dt_h: "{{ 0.25 if is_state('input_boolean.dynamic_setting_15_minute_interval', 'on') else 1.0 }}"
+
+      # ---- Battery ----------------------------------------------------
+      p_set_kw: "{{ [states('input_number.zendure_setting_max_charge_power') | float(2400), 100] | max / 1000 }}"
+      # Measured average grid charge power (W); unknown or below c_charge_min_w = not yet usable
+      p_measured_w: "{{ states('sensor.forecast_measured_charge_power') | float(0) }}"
+      # Calculate with what the battery actually achieves, never more than the configured maximum
+      p_max_kw: "{{ ([p_set_kw, p_measured_w / 1000] | min) if p_measured_w >= c_charge_min_w else p_set_kw }}"
+      e_slot: "{{ (p_max_kw * dt_h) | round(4) }}"
+      cap: "{{ states('sensor.zendure_total_capacity') | float(0) }}"
+      soc: "{{ states('sensor.zendure_total_state_of_charge') | float(0) }}"
+      soc_min: "{{ states('sensor.zendure_minimum_state_of_charge') | float(0) }}"
+      soc_max: "{{ states('sensor.zendure_maximum_state_of_charge') | float(100) }}"
+      s_max: "{{ ([soc_max - soc_min, 0] | max / 100 * cap) | round(3) }}"
+      s_now: "{{ ([[soc, soc_max] | min - soc_min, 0] | max / 100 * cap) | round(3) }}"
+      room: "{{ ([soc_max - soc, 0] | max / 100 * cap) | round(3) }}"
+      # Efficiency (same rules as the existing Available/Required Energy sensors)
+      # Efficiency from the measured 24h average (>= 70%), otherwise from the total RTE
+      eff_rte_base: "{{ (states('sensor.zendure_rte_total') | float(0) / 100) ** 0.5 * 100 }}"
+      eff_in: >
+        {% set m = states('sensor.zendure_import_efficiency_24h') | float(0) %}
+        {% set e = m if m >= 70 else eff_rte_base %}
+        {{ (e if 50 <= e <= 100 else 92) / 100 }}
+      eff_out: >
+        {% set m = states('sensor.zendure_export_efficiency_24h') | float(0) %}
+        {% set e = m if m >= 70 else eff_rte_base %}
+        {{ (e if 50 <= e <= 100 else 92) / 100 }}
+      eff_rt: "{{ (eff_in * eff_out) | round(4) }}"
+
+      # ---- Solar energy (kWh) -----------------------------------------
+      # -1 = sensor not filled in or not available
+      solar_rest_raw: >
+        {% set e = states('input_text.forecast_setting_solar_remaining_today_sensor') %}
+        {% if e | lower | regex_match('^sensor\\..+') and has_value(e) %}
+          {% set u = state_attr(e, 'unit_of_measurement') %}
+          {% set v = states(e) | float(0) %}
+          {% if u == 'Wh' %}{{ v / 1000 }}{% elif u == 'MWh' %}{{ v * 1000 }}{% else %}{{ v }}{% endif %}
+        {% else %}-1{% endif %}
+      solar_tomorrow_raw: >
+        {% set e = states('input_text.forecast_setting_solar_tomorrow_sensor') %}
+        {% if e | lower | regex_match('^sensor\\..+') and has_value(e) %}
+          {% set u = state_attr(e, 'unit_of_measurement') %}
+          {% set v = states(e) | float(0) %}
+          {% if u == 'Wh' %}{{ v / 1000 }}{% elif u == 'MWh' %}{{ v * 1000 }}{% else %}{{ v }}{% endif %}
+        {% else %}-1{% endif %}
+      # 0 = do not use (=100%)
+      reliab: >
+        {% set b = states('input_number.forecast_setting_solar_reliability') | float(0) %}
+        {{ (b if b > 0 else 100) / 100 }}
+      solar_rest: "{{ ([solar_rest_raw, 0] | max * reliab) | round(2) }}"
+      solar_tomorrow: "{{ ([solar_tomorrow_raw, 0] | max * reliab) | round(2) }}"
+
+      # ---- History over 7 days ----------------------------------------
+      prod7: "{{ states('sensor.forecast_solar_production_7_days') | float(0) }}"
+      imp7: "{{ states('sensor.forecast_grid_import_7_days') | float(0) }}"
+      exp7: "{{ states('sensor.forecast_grid_export_7_days') | float(0) }}"
+      exp_solar7: "{{ states('sensor.forecast_grid_export_from_solar_7_days') | float(0) }}"
+      charge7: "{{ states('sensor.forecast_zendure_charge_7_days') | float(0) }}"
+      discharge7: "{{ states('sensor.forecast_zendure_discharge_7_days') | float(0) }}"
+      charge_solar7: "{{ states('sensor.forecast_zendure_charge_from_solar_7_days') | float(0) }}"
+      hist_days: >
+        {% set c = state_attr('sensor.forecast_solar_production_7_days', 'age_coverage_ratio') %}
+        {{ (7 * (c | float(1) if c is not none else 1)) | round(2) }}
+
+      # Directly used solar in 7 days = production - export from solar - charging from solar
+      direct_7_kwh: "{{ [prod7 - exp_solar7 - charge_solar7, 0] | max }}"
+      # Solar self-consumption (%) = directly used solar / production
+      self_consumption_calculated: >
+        {% if prod7 >= c_min_production_kwh %}
+          {{ ([direct_7_kwh / prod7 * 100, 100] | min) | round(1) }}
+        {% else %}-1{% endif %}
+      self_consumption_override: "{{ states('input_number.forecast_setting_self_consumption_override') | float(0) }}"
+      self_consumption_pct: >
+        {% if self_consumption_override > 0 %}{{ self_consumption_override }}
+        {% elif self_consumption_calculated >= 0 %}{{ self_consumption_calculated }}
+        {% else %}{{ c_self_consumption_default_pct }}{% endif %}
+      self_consumption_source: >
+        {% if self_consumption_override > 0 %}Overwrite
+        {% elif self_consumption_calculated >= 0 %}Calculated (7 days, kWh per day)
+        {% else %}Default (no history yet){% endif %}
+      direct: "{{ self_consumption_pct / 100 }}"
+      # Direct solar usage in kWh per day (7-day average). This is fairly constant,
+      # so on a dull day the percentage is high and on a sunny day it is low.
+      direct_day_kwh: >
+        {% if prod7 >= c_min_production_kwh and hist_days >= 0.5 %}
+          {{ (direct_7_kwh / hist_days) | round(2) }}
+        {% else %}-1{% endif %}
+      # kWh model only when there is history and no override is filled in
+      direct_model_kwh: "{{ self_consumption_override <= 0 and direct_day_kwh >= 0 }}"
+
+      # Average usage per day = import - export + production - charging + discharging
+      usage_day_calculated: >
+        {% if hist_days >= 0.5 and (imp7 + prod7) > 0 %}
+          {{ (([imp7 - exp7 + prod7 - charge7 + discharge7, 0] | max) / hist_days) | round(2) }}
+        {% else %}-1{% endif %}
+      # Default daily usage (input field); 0 = internal fallback of 8 kWh
+      usage_default: >
+        {% set g = states('input_number.forecast_setting_default_daily_usage') | float(0) %}
+        {{ g if g > 0 else 8 }}
+      usage_day: "{{ usage_day_calculated if usage_day_calculated >= c_min_usage_kwh else usage_default }}"
+      usage_source: "{{ 'Calculated (7 days)' if usage_day_calculated >= c_min_usage_kwh else 'Default (input field, no history yet)' }}"
+      l_hour: "{{ usage_day / 24 }}"
+
+      # ---- Margin -----------------------------------------------------
+      margin_pct: "{{ states('input_number.forecast_setting_charge_margin') | float(0) }}"
+      margin_dc: "{{ (margin_pct / 100 * cap) | round(3) }}"
+
+      # ---- Sun (rise) -------------------------------------------------
+      next_sun_ts: "{{ as_timestamp(state_attr('sun.sun', 'next_rising'), now_ts + 43200) }}"
+      sun_day_is_today: "{{ next_sun_ts < end_today_ts }}"
+      solar_forecast_next: "{{ solar_rest if sun_day_is_today else solar_tomorrow }}"
+      solar_sufficient: >
+        {% set raw = solar_rest_raw if sun_day_is_today else solar_tomorrow_raw %}
+        {{ raw >= 0 and solar_forecast_next >= usage_day }}
+      t_sun_ts: "{{ next_sun_ts + c_sun_offset_s }}"
+
+      # ---- Price slots ------------------------------------------------
+      prices_today: "{{ state_attr('sensor.dynamic_nordpool', 'raw_today') or [] }}"
+      prices_tomorrow: "{{ state_attr('sensor.dynamic_nordpool', 'raw_tomorrow') or [] }}"
+      prices_ok: "{{ prices_today | length > 0 }}"
+      tomorrow_known: "{{ prices_tomorrow | length > 0 }}"
+      # Today's slots that are still (partly) in the future
+      cand: >
+        {%- set ns = namespace(l=[]) -%}
+        {%- for p in prices_today -%}
+          {%- set e = as_timestamp(p.end) -%}
+          {%- if e > now_ts -%}
+            {%- set ns.l = ns.l + [{'s': as_timestamp(p.start), 'e': e, 'v': p.value | float(0)}] -%}
+          {%- endif -%}
+        {%- endfor -%}
+        {{ ns.l }}
+      # Tomorrow's slots (or, if prices are not known yet: today's pattern +24h)
+      tmrw: >
+        {%- set ns = namespace(l=[]) -%}
+        {%- if tomorrow_known -%}
+          {%- for p in prices_tomorrow -%}
+            {%- set ns.l = ns.l + [{'s': as_timestamp(p.start), 'e': as_timestamp(p.end), 'v': p.value | float(0)}] -%}
+          {%- endfor -%}
+        {%- else -%}
+          {%- for p in prices_today -%}
+            {%- set ns.l = ns.l + [{'s': as_timestamp(p.start) + day_length, 'e': as_timestamp(p.end) + day_length, 'v': p.value | float(0)}] -%}
+          {%- endfor -%}
+        {%- endif -%}
+        {{ ns.l }}
+      # Price statistics for the whole day and the current price (for dip detection)
+      p_day_avg: >
+        {% set v = prices_today | map(attribute='value') | list %}
+        {% if v | length > 0 %}{{ (v | sum / (v | length)) | round(5) }}{% else %}0{% endif %}
+      p_day_min: >
+        {% set v = prices_today | map(attribute='value') | list %}
+        {% if v | length > 0 %}{{ v | min }}{% else %}0{% endif %}
+      price_now: >
+        {%- set ns = namespace(p=none) -%}
+        {%- for p in prices_today -%}
+          {%- if as_timestamp(p.start) <= now_ts < as_timestamp(p.end) -%}{%- set ns.p = p.value | float(0) -%}{%- endif -%}
+        {%- endfor -%}
+        {{ ns.p if ns.p is not none else 999 }}
+      # Number of slots needed to fill the battery completely
+      n_ref: >
+        {% if e_slot > 0 and s_max > 0 %}
+          {{ [(s_max / eff_in / e_slot) | round(0, 'ceil') | int, 1] | max }}
+        {% else %}1{% endif %}
+      p_today_ref: >
+        {% set s = cand | sort(attribute='v') %}
+        {% set n = [n_ref, s | length] | min %}
+        {% if n > 0 %}{{ (s[:n] | map(attribute='v') | sum / n) | round(5) }}{% else %}0{% endif %}
+      p_tomorrow_ref: >
+        {% set s = tmrw | sort(attribute='v') %}
+        {% set n = [n_ref, s | length] | min %}
+        {% if n > 0 %}{{ (s[:n] | map(attribute='v') | sum / n) | round(5) }}{% else %}0{% endif %}
+      t_cheap_tomorrow_ts: >
+        {% set s = tmrw | sort(attribute='v') %}
+        {% set n = [n_ref, s | length] | min %}
+        {% if n > 0 %}{{ s[:n] | map(attribute='s') | min }}{% else %}{{ end_today_ts }}{% endif %}
+      spread_min: "{{ states('input_number.dynamic_setting_minimal_spread') | float(0) }}"
+      spread_tomorrow: >
+        {{ ((p_tomorrow_ref - p_today_ref) / ([p_today_ref | abs, c_price_floor] | max) * 100) | round(1) }}
+      # A = tomorrow cheaper/equal (or unknown): bridge only
+      # B = tomorrow more expensive: charge as full as possible
+      scenario: "{{ 'B' if (tomorrow_known and spread_tomorrow > 0 and spread_tomorrow >= spread_min) else 'A' }}"
+
+      # ---- Direct solar usage per forecast ----------------------------
+      # Share of the sun hours still to come (for today's direct usage)
+      day_fraction: >
+        {% if is_state('sun.sun', 'above_horizon') %}
+          {% set sets = as_timestamp(state_attr('sun.sun', 'next_setting'), now_ts) %}
+          {% set rise = next_sun_ts - 86400 %}
+          {{ ([[(sets - now_ts) / ([sets - rise, 3600] | max), 0] | max, 1] | min) | round(3) }}
+        {% else %}1{% endif %}
+      # Remaining sun hours today (0 if the sun is down or not up yet)
+      sun_hours_rest: >
+        {% if is_state('sun.sun', 'above_horizon') %}
+          {{ ([(as_timestamp(state_attr('sun.sun', 'next_setting'), now_ts) - now_ts) / 3600, 0] | max) | round(2) }}
+        {% else %}0{% endif %}
+      direct_rest_kwh: >
+        {% if direct_model_kwh %}{{ ([solar_rest, direct_day_kwh * day_fraction] | min) | round(3) }}
+        {% else %}{{ (solar_rest * direct) | round(3) }}{% endif %}
+      direct_tomorrow_kwh: >
+        {% if direct_model_kwh %}{{ ([solar_tomorrow, direct_day_kwh] | min) | round(3) }}
+        {% else %}{{ (solar_tomorrow * direct) | round(3) }}{% endif %}
+      direct_rest_pct: "{{ (direct_rest_kwh / solar_rest * 100) | round(1) if solar_rest > 0 else self_consumption_pct }}"
+      direct_tomorrow_pct: "{{ (direct_tomorrow_kwh / solar_tomorrow * 100) | round(1) if solar_tomorrow > 0 else self_consumption_pct }}"
+
+      # ---- Bridging period --------------------------------------------
+      t_end_ts: >
+        {% set t = [t_cheap_tomorrow_ts, t_sun_ts] | min if solar_sufficient else t_cheap_tomorrow_ts %}
+        {{ [t, now_ts + c_min_bridge_s] | max }}
+      hours_bridge: "{{ ((t_end_ts - now_ts) / 3600) | round(2) }}"
+      # Today's sun falls within the bridge, unless the bridge ends before sunrise
+      sun_in_bridge: "{{ (not sun_day_is_today) or (t_end_ts > t_sun_ts) }}"
+      load_bridge: "{{ (l_hour * hours_bridge) | round(3) }}"
+      direct_bridge: "{{ direct_rest_kwh if sun_in_bridge else 0 }}"
+      # What the battery (or the grid) has to deliver during the bridge
+      need_bridge_ac: "{{ ([load_bridge - direct_bridge, 0] | max) | round(3) }}"
+      need_bridge_dc: "{{ (need_bridge_ac / eff_out) | round(3) }}"
+      # Solar surplus that can go to the battery
+      solar_surplus_ac: "{{ ([solar_rest - direct_rest_kwh, 0] | max) | round(3) if sun_in_bridge else 0 }}"
+      solar_dc: "{{ ([solar_surplus_ac * eff_in, room] | min) | round(3) }}"
+
+      # ---- Target and grid charging -----------------------------------
+      target_dc: "{{ s_max if scenario == 'B' else ([need_bridge_dc + margin_dc, s_max] | min) | round(3) }}"
+      grid_dc: "{{ ([[target_dc - s_now - solar_dc, 0] | max, room] | min) | round(3) }}"
+      grid_ac: "{{ (grid_dc / eff_in) | round(3) }}"
+      n_slots: >
+        {% if grid_ac >= c_charge_stop_kwh and e_slot > 0 %}{{ (grid_ac / e_slot) | round(0, 'ceil') | int }}{% else %}0{% endif %}
+      # Average price of all slots in the bridging period
+      p_bridge_avg: >
+        {% set ns = namespace(sum=0, n=0) %}
+        {% for x in cand %}{% if x.s < t_end_ts %}{% set ns.sum = ns.sum + x.v %}{% set ns.n = ns.n + 1 %}{% endif %}{% endfor %}
+        {% for x in tmrw %}{% if x.s < t_end_ts %}{% set ns.sum = ns.sum + x.v %}{% set ns.n = ns.n + 1 %}{% endif %}{% endfor %}
+        {% if ns.n > 0 %}{{ (ns.sum / ns.n) | round(5) }}{% else %}{{ p_today_ref }}{% endif %}
+      # Comparison price: for B the cheapest charge price tomorrow, for A the bridge average
+      p_compare: "{{ p_tomorrow_ref if scenario == 'B' else p_bridge_avg }}"
+      # Stored energy yields less due to round-trip loss: discount its value accordingly
+      p_compare_eff: "{{ (p_compare * eff_rt) if p_compare > 0 else p_compare }}"
+      chosen_base: >
+        {%- set ns = namespace(l=[]) -%}
+        {%- for x in cand | sort(attribute='v') -%}
+          {%- set sp = (p_compare_eff - x.v) / ([x.v | abs, c_price_floor] | max) * 100 -%}
+          {#- Scenario A: also below the day average (on a flat day there is no dip) -#}
+          {%- set dip_ok = scenario == 'B' or x.v <= p_day_avg -%}
+          {%- if ns.l | length < n_slots and sp >= spread_min and sp > 0 and dip_ok -%}
+            {%- set ns.l = ns.l + [x] -%}
+          {%- endif -%}
+        {%- endfor -%}
+        {{ ns.l | sort(attribute='s') }}
+      # ---- Path check: does the battery reach the first charge slot? ---------
+      # If not, the house buys from the grid in the gap until that slot. Then plan a number
+      # of slots earlier (before the gap), but only if they are cheaper than buying in the gap.
+      t_charge_ts: >
+        {% if chosen_base | length > 0 %}{{ [chosen_base | map(attribute='s') | min, now_ts] | max }}{% else %}{{ now_ts }}{% endif %}
+      gap_hours: "{{ ((t_charge_ts - now_ts) / 3600) | round(2) }}"
+      gap_sun_share: "{{ ([gap_hours / sun_hours_rest, 1] | min) if sun_hours_rest > 0 else 0 }}"
+      gap_load: "{{ (l_hour * gap_hours) | round(3) }}"
+      gap_direct: "{{ ([gap_load, direct_rest_kwh * gap_sun_share] | min) | round(3) }}"
+      gap_available: "{{ ((s_now + solar_surplus_ac * gap_sun_share * eff_in) * eff_out) | round(3) }}"
+      gap_shortfall_ac: "{{ ([gap_load - gap_direct - gap_available, 0] | max) | round(3) }}"
+      p_gap_avg: >
+        {% set ns = namespace(sum=0, n=0) %}
+        {% for x in cand %}{% if x.s < t_charge_ts %}{% set ns.sum = ns.sum + x.v %}{% set ns.n = ns.n + 1 %}{% endif %}{% endfor %}
+        {% if ns.n > 0 %}{{ (ns.sum / ns.n) | round(5) }}{% else %}0{% endif %}
+      path_active: "{{ chosen_base | length > 0 and gap_hours >= c_path_min_hours and gap_shortfall_ac >= c_path_min_shortfall_kwh }}"
+      n_extra: >
+        {% if path_active and e_slot > 0 %}
+          {{ [(gap_shortfall_ac / eff_out / eff_in / e_slot) | round(0, 'ceil') | int, n_slots] | min }}
+        {% else %}0{% endif %}
+      # Extra slots: cheapest slots that end before the first charge slot and are cheaper than buying in the gap
+      extra_slots: >
+        {%- set ns = namespace(l=[]) -%}
+        {%- set p_value = (p_gap_avg * eff_rt) if p_gap_avg > 0 else p_gap_avg -%}
+        {%- for x in cand | sort(attribute='v') -%}
+          {%- set sp = (p_value - x.v) / ([x.v | abs, c_price_floor] | max) * 100 -%}
+          {%- if ns.l | length < n_extra and x.e <= t_charge_ts and sp >= spread_min and sp > 0 -%}
+            {%- set ns.l = ns.l + [x] -%}
+          {%- endif -%}
+        {%- endfor -%}
+        {{ ns.l }}
+      chosen: >
+        {%- set extra_s = extra_slots | map(attribute='s') | list -%}
+        {%- set ns = namespace(l=extra_slots) -%}
+        {%- for x in chosen_base | sort(attribute='v') -%}
+          {%- if x.s not in extra_s and ns.l | length < n_slots -%}
+            {%- set ns.l = ns.l + [x] -%}
+          {%- endif -%}
+        {%- endfor -%}
+        {{ ns.l | sort(attribute='s') }}
+      slot_now: >
+        {% set ns = namespace(a=false) %}
+        {% for x in chosen %}{% if x.s <= now_ts < x.e %}{% set ns.a = true %}{% endif %}{% endfor %}
+        {{ ns.a }}
+      planned_ac: "{{ ([chosen | length * e_slot, grid_ac] | min) | round(3) }}"
+      p_chosen_avg: >
+        {% if chosen | length > 0 %}{{ (chosen | map(attribute='v') | sum / (chosen | length)) | round(5) }}{% else %}0{% endif %}
+      cost: "{{ (planned_ac * p_chosen_avg) | round(2) }}"
+
+      # ---- Cheap dip: do not discharge the battery --------------------------
+      # Dip = current price below (lowest day price / efficiency) and below the day average.
+      dip_threshold: "{{ (p_day_min + (p_day_min | abs) * (1 / eff_rt - 1)) | round(5) if eff_rt > 0 else p_day_min }}"
+      in_dip: "{{ prices_ok and price_now < 999 and price_now <= dip_threshold and price_now < p_day_avg }}"
+      # Only hold if grid charging is still needed (battery won't fill up from solar)
+      hold_discharge: >
+        {{ is_state('input_boolean.forecast_setting_hold_discharge_in_dip', 'on') and in_dip and grid_ac >= c_charge_stop_kwh }}
+
+      # ---- Overview for tomorrow --------------------------------------
+      tomorrow_direct: "{{ direct_tomorrow_kwh | round(2) }}"
+      tomorrow_battery_usage: "{{ ([usage_day - tomorrow_direct, 0] | max) | round(2) }}"
+      tomorrow_solar_surplus: "{{ ([solar_tomorrow - direct_tomorrow_kwh, 0] | max) | round(2) }}"
+      tomorrow_solar_dc: "{{ ([tomorrow_solar_surplus * eff_in, s_max] | min) | round(2) }}"
+      tomorrow_grid_charge: >
+        {% set goal = [tomorrow_battery_usage / eff_out + margin_dc, s_max] | min %}
+        {{ (([goal - tomorrow_solar_dc, 0] | max) / eff_in) | round(2) }}
+      n_tomorrow: >
+        {% if e_slot > 0 and tomorrow_grid_charge >= c_charge_stop_kwh %}{{ (tomorrow_grid_charge / e_slot) | round(0, 'ceil') | int }}{% else %}0{% endif %}
+      tomorrow_charge_slots: >
+        {%- set ns = namespace(l=[]) -%}
+        {%- for x in (tmrw | sort(attribute='v'))[:n_tomorrow] -%}
+          {%- set ns.l = ns.l + [x.s] -%}
+        {%- endfor -%}
+        {{ ns.l }}
+    sensor:
+      - name: "Zendure Forecast Plan"
+        unique_id: zendure_forecast_plan
+        icon: mdi:calendar-clock
+        state: >
+          {% if not prices_ok %}
+            No prices
+          {% elif cap <= 0 or not has_value('sensor.zendure_total_state_of_charge') %}
+            No battery data
+          {% else %}
+            {% set threshold = c_charge_stop_kwh if this.state == 'Charge' else c_charge_start_kwh %}
+            {% if grid_ac < threshold %}
+              Not needed
+            {% elif chosen | length == 0 %}
+              Not favorable
+            {% elif slot_now %}
+              Charge
+            {% else %}
+              Waiting
+            {% endif %}
+          {% endif %}
+        attributes:
+          # --- Plan today ---
+          scenario: >
+            {% if not tomorrow_known %}A (tomorrow's prices not yet known, today's pattern assumed)
+            {% elif scenario == 'B' %}B (tomorrow more expensive: charge as full as possible)
+            {% else %}A (tomorrow cheaper or equal: bridge only){% endif %}
+          tomorrow_prices_known: "{{ tomorrow_known }}"
+          grid_charge_today_kwh: "{{ grid_ac }}"
+          planned_grid_charge_kwh: "{{ planned_ac }}"
+          target_stored_kwh: "{{ target_dc }}"
+          battery_now_kwh: "{{ s_now }}"
+          battery_max_kwh: "{{ s_max }}"
+          expected_battery_usage_kwh: "{{ need_bridge_ac }}"
+          expected_solar_to_battery_kwh: "{{ solar_dc }}"
+          solar_surplus_kwh: "{{ solar_surplus_ac }}"
+          bridge_until: "{{ (t_end_ts | timestamp_custom('%Y-%m-%d %H:%M', true)) }}"
+          bridge_hours: "{{ hours_bridge }}"
+          solar_sufficient_next_day: "{{ solar_sufficient }}"
+          price_today_ref: "{{ p_today_ref }}"
+          price_tomorrow_ref: "{{ p_tomorrow_ref }}"
+          spread_tomorrow_pct: "{{ spread_tomorrow }}"
+          average_charge_price: "{{ p_chosen_avg }}"
+          estimated_cost: "{{ cost }}"
+          planned_slots: >
+            {%- set ns = namespace(l=[]) -%}
+            {%- for x in chosen -%}
+              {%- set ns.l = ns.l + [{'start': x.s | timestamp_custom('%H:%M', true), 'end': x.e | timestamp_custom('%H:%M', true), 'price': x.v}] -%}
+            {%- endfor -%}
+            {{ ns.l }}
+          # --- Path check (does the battery reach the first charge slot?) ---
+          pathcheck_gap_hours: "{{ gap_hours }}"
+          pathcheck_shortfall_kwh: "{{ gap_shortfall_ac }}"
+          pathcheck_extra_slots: "{{ extra_slots | length }}"
+          # --- Dip and charge power ---
+          price_now: "{{ price_now if price_now < 999 else none }}"
+          dip_threshold: "{{ dip_threshold }}"
+          in_dip: "{{ in_dip }}"
+          hold_discharge: "{{ hold_discharge }}"
+          charge_power_used_kw: "{{ p_max_kw | round(2) }}"
+          charge_power_measured_w: "{{ p_measured_w if p_measured_w >= c_charge_min_w else none }}"
+          charge_power_set_kw: "{{ p_set_kw }}"
+          efficiency_round_trip_pct: "{{ (eff_rt * 100) | round(1) }}"
+          # --- Inputs as used ---
+          solar_remaining_today_kwh: "{{ solar_rest }}"
+          solar_tomorrow_kwh: "{{ solar_tomorrow }}"
+          solar_remaining_today_sensor_ok: "{{ solar_rest_raw >= 0 }}"
+          solar_tomorrow_sensor_ok: "{{ solar_tomorrow_raw >= 0 }}"
+          reliability_pct: "{{ (reliab * 100) | round(0) }}"
+          self_consumption_pct: "{{ direct_rest_pct if solar_rest > 0 else direct_tomorrow_pct }}"
+          self_consumption_today_pct: "{{ direct_rest_pct }}"
+          self_consumption_tomorrow_pct: "{{ direct_tomorrow_pct }}"
+          direct_usage_day_kwh: "{{ direct_day_kwh if direct_day_kwh >= 0 else none }}"
+          self_consumption_source: "{{ self_consumption_source }}"
+          self_consumption_calculated_pct: "{{ self_consumption_calculated if self_consumption_calculated >= 0 else none }}"
+          usage_day_kwh: "{{ usage_day }}"
+          usage_source: "{{ usage_source }}"
+          history_days: "{{ hist_days }}"
+          margin_pct: "{{ margin_pct }}"
+          margin_kwh: "{{ margin_dc }}"
+          efficiency_charge_pct: "{{ (eff_in * 100) | round(1) }}"
+          efficiency_discharge_pct: "{{ (eff_out * 100) | round(1) }}"
+          # --- Tomorrow ---
+          tomorrow_solar_direct_kwh: "{{ tomorrow_direct }}"
+          tomorrow_battery_usage_kwh: "{{ tomorrow_battery_usage }}"
+          tomorrow_solar_to_battery_kwh: "{{ tomorrow_solar_dc }}"
+          tomorrow_grid_charge_estimate_kwh: "{{ tomorrow_grid_charge }}"
+          tomorrow_cheapest_start: >
+            {% if tomorrow_known %}{{ t_cheap_tomorrow_ts | timestamp_custom('%H:%M', true) }}{% else %}unknown{% endif %}
+
+      # Chart data is in a separate sensor object: together the attributes exceed
+      # the 16 kB recorder limit, and this way the history of the plan itself is kept.
+      # Tip: exclude this object from the recorder (recorder: exclude: entities).
+      - name: "Zendure Forecast Chart"
+        unique_id: zendure_forecast_chart
+        icon: mdi:chart-bar
+        state: "{{ prices_today | length }}"
+        attributes:
+          # Same structure as sensor.dynamic_lowest_price_period (raw_today / raw_tomorrow)
+          raw_today: >
+            {%- set chosen_s = chosen | map(attribute='s') | list -%}
+            [
+            {%- for p in prices_today -%}
+              {%- set s = as_timestamp(p.start) -%}
+              {"start": "{{ p.start }}", "end": "{{ p.end }}", "value": {{ p.value }},
+               "goedkoop": "{{ 'Yes' if s in chosen_s else 'No' }}", "duur": "No"}{{ ',' if not loop.last }}
+            {%- endfor -%}
+            ]
+          raw_tomorrow: >
+            [
+            {%- for p in prices_tomorrow -%}
+              {%- set s = as_timestamp(p.start) -%}
+              {"start": "{{ p.start }}", "end": "{{ p.end }}", "value": {{ p.value }},
+               "goedkoop": "{{ 'Yes' if s in tomorrow_charge_slots else 'No' }}", "duur": "No"}{{ ',' if not loop.last }}
+            {%- endfor -%}
+            ]
+
+      # --- Derived sensors (with unit) for dashboard and history ---
+      - name: "Forecast Solar Remaining Today"
+        unique_id: forecast_solar_remaining_today
+        unit_of_measurement: "kWh"
+        device_class: energy
+        icon: mdi:solar-power-variant
+        availability: "{{ solar_rest_raw >= 0 }}"
+        state: "{{ solar_rest_raw | round(2) }}"
+        attributes:
+          after_reliability_kwh: "{{ solar_rest }}"
+
+      - name: "Forecast Solar Tomorrow"
+        unique_id: forecast_solar_tomorrow
+        unit_of_measurement: "kWh"
+        device_class: energy
+        icon: mdi:solar-power-variant-outline
+        availability: "{{ solar_tomorrow_raw >= 0 }}"
+        state: "{{ solar_tomorrow_raw | round(2) }}"
+        attributes:
+          after_reliability_kwh: "{{ solar_tomorrow }}"
+
+      - name: "Forecast Solar Self Consumption"
+        unique_id: forecast_solar_self_consumption
+        unit_of_measurement: "%"
+        icon: mdi:home-lightning-bolt
+        state: "{{ direct_tomorrow_pct if solar_tomorrow > 0 else self_consumption_pct }}"
+        attributes:
+          source: "{{ self_consumption_source }}"
+          direct_usage_day_kwh: "{{ direct_day_kwh if direct_day_kwh >= 0 else none }}"
+          today_pct: "{{ direct_rest_pct }}"
+          average_7_days_pct: "{{ self_consumption_calculated if self_consumption_calculated >= 0 else none }}"
+          history_days: "{{ hist_days }}"
+
+      - name: "Forecast Charge Margin"
+        unique_id: forecast_charge_margin
+        unit_of_measurement: "kWh"
+        device_class: energy
+        icon: mdi:battery-plus-variant
+        state: "{{ margin_dc }}"
+        attributes:
+          percentage: "{{ margin_pct }}"
+
+      - name: "Forecast Average Usage Per Day"
+        unique_id: forecast_average_usage_per_day
+        unit_of_measurement: "kWh"
+        device_class: energy
+        icon: mdi:home-lightning-bolt-outline
+        state: "{{ usage_day }}"
+        attributes:
+          source: "{{ usage_source }}"
+
+      - name: "Forecast Grid Charge Today"
+        unique_id: forecast_grid_charge_today
+        unit_of_measurement: "kWh"
+        device_class: energy
+        icon: mdi:transmission-tower-import
+        state: "{{ grid_ac }}"
+
+      - name: "Forecast Expected Battery Usage"
+        unique_id: forecast_expected_battery_usage
+        unit_of_measurement: "kWh"
+        device_class: energy
+        icon: mdi:battery-arrow-down
+        state: "{{ need_bridge_ac }}"
+
+      - name: "Forecast Expected Solar To Battery"
+        unique_id: forecast_expected_solar_to_battery
+        unit_of_measurement: "kWh"
+        device_class: energy
+        icon: mdi:battery-arrow-up
+        state: "{{ solar_dc }}"

@@ -2,6 +2,88 @@
 Choose your preferred language
 
  [![English 🌍 Global](https://img.shields.io/badge/English-Global-blue?style=for-the-badge)](README.md) [![Dutch 🇳🇱 NL](https://img.shields.io/badge/Dutch-NL-orange?style=for-the-badge)](README.nl.md)<br><br>
+
+## 🔮 This fork: Forecasting mode
+
+> **This is a fork of [Gielz1986/Zendure-HA-zenSDK](https://github.com/Gielz1986/Zendure-HA-zenSDK)** by Michiel Hofker (Gielz1986). All credit for the integration, the automation and the dashboard goes to the original project. This fork adds **one extra mode: Dynamic Smart Matching + Forecasting** (Dutch: *Dynamisch NOM + Forecasting*). For everything else (modes, wiki, support, updates), see the original repository. The original README follows below this section.
+
+**Reference:** `FC-20261027` · based on Gielz configuration `v20261007` · available in Dutch (NL) and Global (EN).
+
+### What the mode does
+
+The battery charges at the cheapest moments, but **only as much as is actually needed**, taking into account your solar forecast, your usage and tomorrow's prices.
+
+- Calculates a charging plan every minute (`sensor.zendure_forecast_plan`) with the state *Charge / Waiting / Not needed / Not favorable*.
+- **Scenario A** (tomorrow cheaper or equal, or prices not yet known): charges enough to bridge until tomorrow's cheap moment or until there is enough sun, plus an adjustable margin.
+- **Scenario B** (tomorrow more expensive): charges as full as possible, as long as the price now is lower than tomorrow's charging moment.
+- Takes expected solar (today and tomorrow) into account, with a reliability percentage.
+- **Solar self-consumption** is calculated from the last 7 days in kWh per day (on a dull day the percentage is higher than on a sunny one), with a manual override.
+- **Average daily usage** comes from 7 days of history (import, export, production, battery in/out), with an adjustable starting value.
+- **Efficiency filter:** a charge slot must be cheaper than the value of the stored energy after round-trip loss, and in scenario A below the day average.
+- **Path check:** if the battery won't last until the first charge slot, extra cheaper slots are planned earlier.
+- **Measured charge power** is used to determine the number of slots.
+- Optional: **hold discharging in a cheap dip** (save the battery).
+- Dashboard: a Forecasting section on the Zendure tab (plan for today and tomorrow, tiles, collected 7-day data, recalculate button) and a Configuration (Forecasting) block with all input fields. Both can be shown or hidden with **Show Forecasting On Dashboard**.
+
+### What changed compared with the original
+
+| File (NL / Global) | Change |
+|---|---|
+| `packages/zendure_forecasting.yaml` / `packages/zendure_forecasting_global.yaml` | **New.** Helpers, counters, 7-day statistics, the planner and derived sensors. |
+| `packages/zendure_gielz1986_nl.yaml` / `packages/zendure_gielz1986_global.yaml` | Only one extra option in the mode selector. |
+| `automation_nl.yaml` / `automation_global.yaml` | The new mode in the mode selection and in the 6 existing Smart Matching lists (zero-on-the-meter, SOC protection, emergency stop), its own charging block that only charges when the plan says *Charge*, and a discharge hold for the cheap dip. Existing modes are unchanged. |
+| `dashboard_nl.yaml` / `dashboard_global.yaml` | New Forecasting section, new Configuration (Forecasting) block and a switch in Configuration (Dashboard). |
+
+Each changed file starts with a two-line header with the reference and the original author.
+
+### Installation
+
+First install the original integration as described below (packages file, automation, dashboard). Then:
+
+1. Put `zendure_forecasting_global.yaml` (Global) or `zendure_forecasting.yaml` (NL) in the same `packages` folder as the Gielz package, and replace the Gielz package with the version from this fork.
+2. Replace the automation and the dashboard with the versions from this fork (or merge the changes into your own version).
+3. Restart Home Assistant.
+4. On the Configuration tab, under **Configuration (Forecasting)**, enter: the sensor for solar remaining today, solar tomorrow (kWh, e.g. Forecast.Solar or Solcast) and a total counter of your solar panels (kWh). Optionally set the default daily usage and the charge margin.
+5. Select the mode **Dynamic Smart Matching + Forecasting**.
+
+**Requires:** the Gielz package, Nord Pool (as already set up in Gielz), a P1/home energy meter, a solar forecast integration and apexcharts-card for the Gielz dashboard. The planner becomes more accurate after about a week of history.
+
+> **Status:** personal project. The Dutch version is in use by the author. The Global (EN) version is a translation of the Dutch set: it was checked offline (the planner gives the same results as the Dutch version in 400 simulated situations), but has not yet run in a live Home Assistant. No warranty: start with a low charge margin and check the plan on the dashboard.
+
+### Pros and cons
+
+**Compared with the original Dynamic Smart Matching mode**
+
+| ➕ Pros | ➖ Cons |
+|---|---|
+| Charges only what is needed instead of a fixed number of cheap periods: fewer unnecessary grid kWh and cycles. | More to set up: a solar forecast integration and a total counter for your solar panels. |
+| Uses your solar forecast, so a sunny day ahead means less grid charging. | Needs about a week of history before usage and self-consumption are measured; until then it uses default values. |
+| Looks at tomorrow's prices (scenario A/B) and checks whether the battery lasts until the first charge slot. | Only as good as your solar forecast; the reliability setting helps, but cannot fix a poor forecast. |
+| Adapts to your system: measured efficiency, measured charge power, 7-day self-consumption. | Extra sensors and a planner that recalculates every minute. |
+| The plan is fully visible on the dashboard, with a recalculate button. | Rule-based: a good plan, not a mathematically proven optimum. |
+
+**Compared with a full optimizer such as [Day Ahead Optimizer (DAO)](https://github.com/corneel27/day-ahead)**
+
+| This fork | DAO |
+|---|---|
+| No extra software: everything is YAML in Home Assistant, no add-on or Docker. | A Home Assistant add-on (or Docker container) with its own configuration. |
+| An extra mode on top of your existing Gielz setup, not a separate system controlling the Zendure. | A separate system that schedules your devices. |
+| Uses your own solar forecast sensors. | Uses weather data from Meteoserver. |
+| Battery only. | Battery, heat pump, boiler, EV and more. |
+| Rule-based plan (scenario A/B, path check, efficiency filter). | Mathematical optimization over all hours at once. |
+| Young project, not widely tested. | Established project with a community and a wiki. |
+
+In short: if you only want to optimize your Zendure battery without an extra add-on, this mode is a good fit. If you want to schedule battery, heat pump/boiler and EV together with a real optimizer, DAO is the more logical route. They don't exclude each other: this mode can stay as a fallback.
+
+### License
+
+This fork falls under the same license as the original ([LICENSE](LICENSE)): **personal and strictly non-commercial use only**, sharing and modifying allowed with the full license text included and the modifications stated (see the table above). Commercial use requires permission from the original author.
+
+---
+
+*Below: the original README by Gielz1986.*
+
+
 ![Preview](Images/Global-Dashboard-290526.gif)
 <a href="https://github.com/Gielz1986/Zendure-HA-zenSDK/wiki/Global-%E2%80%90-Available-entities">
 Go to the explanation of all entities and the dashboard

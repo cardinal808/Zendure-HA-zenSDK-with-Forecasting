@@ -1,3 +1,5 @@
+# Zendure zenSDK (Gielz) + Forecasting | set: public (without HVAC) | reference: FC-20261027
+# Based on Gielz1986/Zendure-HA-zenSDK (Michiel Hofker). See README.md for license and changes.
 alias: Zendure zenSDK (Gielz) Global
 description: Configuration Version (v20261007)
 triggers:
@@ -119,6 +121,17 @@ actions:
             data:
               sn: '{{ states(''sensor.zendure_serial_number'') }}'
         alias: Smart Matching
+      - conditions:
+          - condition: trigger
+            id: modus_trigger
+          - condition: state
+            entity_id: input_select.zendure_operation_mode
+            state: Dynamic Smart Matching + Forecasting
+        sequence:
+          - action: rest_command.zendure_stop_with_everything
+            data:
+              sn: '{{ states(''sensor.zendure_serial_number'') }}'
+        alias: Dynamic Smart Matching + Forecasting
       - conditions:
           - condition: trigger
             id: modus_trigger
@@ -323,7 +336,9 @@ actions:
                 state: Smart Discharge Only
               - condition: state
                 entity_id: input_select.zendure_operation_mode
-                state: Dynamic Smart Matching
+                state:
+                  - Dynamic Smart Matching
+                  - Dynamic Smart Matching + Forecasting
               - condition: state
                 entity_id: input_select.zendure_operation_mode
                 state:
@@ -788,6 +803,7 @@ actions:
             entity_id: input_select.zendure_operation_mode
             state:
               - Dynamic Smart Matching
+              - Dynamic Smart Matching + Forecasting
               - Dynamic Smart Matching (Expensive)
               - Dynamic Trading + Smart Matching
               - Smart Charge Only
@@ -895,6 +911,12 @@ actions:
           - condition: trigger
             id:
               - aansturing_trigger
+          - alias: Discharging not held (cheap dip)
+            condition: not
+            conditions:
+              - condition: state
+                entity_id: binary_sensor.forecast_discharge_held_in_dip
+                state: 'on'
           - alias: >-
               sensor.home_energy_meter_power bigger then
               input_number.zendure_setting_start_discharging_at
@@ -947,6 +969,7 @@ actions:
                     entity_id: input_select.zendure_operation_mode
                     state:
                       - Dynamic Smart Matching
+                      - Dynamic Smart Matching + Forecasting
                   - condition: state
                     entity_id: input_select.zendure_operation_mode
                     state:
@@ -1021,6 +1044,12 @@ actions:
           - condition: trigger
             id:
               - aansturing_trigger
+          - alias: Discharging not held (cheap dip)
+            condition: not
+            conditions:
+              - condition: state
+                entity_id: binary_sensor.forecast_discharge_held_in_dip
+                state: 'on'
           - condition: state
             entity_id: sensor.zendure_soc_limit_status
             state:
@@ -1056,6 +1085,7 @@ actions:
                     entity_id: input_select.zendure_operation_mode
                     state:
                       - Dynamic Smart Matching
+                      - Dynamic Smart Matching + Forecasting
                   - condition: state
                     entity_id: input_select.zendure_operation_mode
                     state:
@@ -1173,7 +1203,9 @@ actions:
                 state: Smart Charge Only
               - condition: state
                 entity_id: input_select.zendure_operation_mode
-                state: Dynamic Smart Matching
+                state:
+                  - Dynamic Smart Matching
+                  - Dynamic Smart Matching + Forecasting
               - condition: state
                 entity_id: input_select.zendure_operation_mode
                 state:
@@ -1295,7 +1327,9 @@ actions:
                 state: Smart Charge Only
               - condition: state
                 entity_id: input_select.zendure_operation_mode
-                state: Dynamic Smart Matching
+                state:
+                  - Dynamic Smart Matching
+                  - Dynamic Smart Matching + Forecasting
               - condition: state
                 entity_id: input_select.zendure_operation_mode
                 state:
@@ -1351,6 +1385,44 @@ actions:
               entity_id: input_select.zendure_operation_mode
               name: ' '
         alias: During charging balance to -xxx watt (100% of the demand)
+      - conditions:
+          - condition: trigger
+            id:
+              - aansturing_trigger
+          - alias: Discharging held (cheap dip)
+            condition: state
+            entity_id: binary_sensor.forecast_discharge_held_in_dip
+            state: 'on'
+            for:
+              hours: 0
+              minutes: 0
+              seconds: 10
+          - condition: state
+            entity_id: sensor.zendure_charging_mode
+            state: Discharging
+          - condition: state
+            entity_id: input_boolean.dynamic_discharging_running
+            state:
+              - 'off'
+          - condition: state
+            entity_id: input_select.zendure_operation_mode
+            state:
+              - Smart Matching
+              - Smart Discharge Only
+              - Dynamic Smart Matching
+              - Dynamic Smart Matching + Forecasting
+              - Dynamic Smart Matching (Expensive)
+              - Dynamic Trading + Smart Matching
+        sequence:
+          - action: rest_command.zendure_stop_with_everything
+            data:
+              sn: '{{ states(''sensor.zendure_serial_number'') }}'
+          - action: logbook.log
+            data:
+              message: 🌀Discharging stopped (cheap dip, charging only) —
+              entity_id: input_select.zendure_operation_mode
+              name: ' '
+        alias: Stop discharging (cheap dip, charging only)
   - alias: Manual Control
     choose:
       - conditions:
@@ -1658,6 +1730,111 @@ actions:
               entity_id: input_select.zendure_operation_mode
               name: ' '
         alias: Dynamic Smart Matching cheap charging
+      - conditions:
+          - condition: trigger
+            id:
+              - aansturing_trigger
+          - condition: template
+            value_template: >-
+              {{
+              states('input_text.dynamic_setting_nordpool_sensor').lower().startswith('sensor')
+              }}
+            alias: input_text.dynamic_setting_nordpool_sensor is filled
+          - condition: state
+            entity_id: input_select.zendure_operation_mode
+            state: Dynamic Smart Matching + Forecasting
+          - alias: Forecast planner (sensor.zendure_forecast_plan) says Charge
+            condition: state
+            entity_id: sensor.zendure_forecast_plan
+            state: Charge
+            for:
+              hours: 0
+              minutes: 0
+              seconds: 10
+          - condition: state
+            entity_id: sensor.zendure_soc_limit_status
+            state:
+              - Normal Operation
+              - Discharge Limit Reached
+              - unknown
+          - alias: SOC lower than maximum configured SOC
+            condition: template
+            value_template: |2-
+                    {{ states('sensor.zendure_total_state_of_charge') | float(0) < 
+                       states('sensor.zendure_maximum_state_of_charge') | float(0) }}
+          - alias: Charging not running and off for at least 2 minutes (prevents rapid switching)
+            condition: state
+            entity_id: input_boolean.dynamic_charging_running
+            state:
+              - 'off'
+            for:
+              hours: 0
+              minutes: 2
+              seconds: 0
+        sequence:
+          - action: input_boolean.turn_on
+            data: {}
+            target:
+              entity_id:
+                - input_boolean.dynamic_charging_running
+          - action: rest_command.zendure_save_in_ram
+            data:
+              sn: '{{ states(''sensor.zendure_serial_number'') }}'
+          - delay:
+              hours: 0
+              minutes: 0
+              seconds: 5
+              milliseconds: 0
+          - action: rest_command.zendure_quick_charge
+            data:
+              sn: '{{ states(''sensor.zendure_serial_number'') }}'
+              inputLimit: >-
+                {{ states('input_number.zendure_setting_max_charge_power') |
+                int }}
+          - action: logbook.log
+            data:
+              message: >-
+                🔮Dynamic Smart Matching + Forecasting charging started — planned grid charge
+                {{ state_attr('sensor.zendure_forecast_plan', 'grid_charge_today_kwh') }} kWh
+              entity_id: input_select.zendure_operation_mode
+              name: ' '
+          - wait_for_trigger:
+              - alias: Planner no longer says Charge
+                trigger: template
+                value_template: >-
+                  {{ not is_state('sensor.zendure_forecast_plan', 'Charge') }}
+                for:
+                  hours: 0
+                  minutes: 0
+                  seconds: 10
+              - alias: Maximum configured SOC reached
+                trigger: template
+                value_template: >
+                  {{ states('sensor.zendure_total_state_of_charge') | float(0)
+                  >=
+                     states('sensor.zendure_maximum_state_of_charge') | float(0) }}
+                for:
+                  hours: 0
+                  minutes: 0
+                  seconds: 15
+              - trigger: state
+                entity_id:
+                  - input_select.zendure_operation_mode
+            continue_on_timeout: false
+          - action: input_boolean.turn_off
+            target:
+              entity_id:
+                - input_boolean.dynamic_charging_running
+            data: {}
+          - action: rest_command.zendure_stop_with_everything
+            data:
+              sn: '{{ states(''sensor.zendure_serial_number'') }}'
+          - action: logbook.log
+            data:
+              message: 🔮Dynamic Smart Matching + Forecasting charging completed —
+              entity_id: input_select.zendure_operation_mode
+              name: ' '
+        alias: Dynamic Smart Matching + Forecasting charging
       - conditions:
           - condition: trigger
             id:

@@ -1,5 +1,89 @@
 #  Zendure Home Assistant Integratie
 
+ [![English 🌍 Global](https://img.shields.io/badge/English-Global-blue?style=for-the-badge)](README.md) [![Dutch 🇳🇱 NL](https://img.shields.io/badge/Dutch-NL-orange?style=for-the-badge)](README.nl.md)<br><br>
+
+## 🔮 Deze fork: Forecasting-modus
+
+> **Dit is een fork van [Gielz1986/Zendure-HA-zenSDK](https://github.com/Gielz1986/Zendure-HA-zenSDK)** van Michiel Hofker (Gielz1986). Alle eer voor de integratie, de automation en het dashboard gaat naar het oorspronkelijke project. Deze fork voegt **één extra modus toe: Dynamisch NOM + Forecasting** (Engels: *Dynamic Smart Matching + Forecasting*). Voor al het andere (modussen, wiki, ondersteuning, updates) zie je de oorspronkelijke repository. De originele README staat onder deze sectie.
+
+**Referentie:** `FC-20261027` · gebaseerd op Gielz-configuratie `v20261007` · beschikbaar in het Nederlands (NL) en Engels (Global).
+
+### Wat de modus doet
+
+De accu laadt op de goedkoopste momenten, maar **alleen zoveel als nodig is**, rekening houdend met je zonvoorspelling, je verbruik en de prijzen van morgen.
+
+- Berekent elke minuut een laadplan (`sensor.zendure_forecast_plan`) met status *Laden / Wachten / Niet nodig / Niet gunstig*.
+- **Scenario A** (morgen goedkoper of gelijk, of prijzen nog onbekend): laadt genoeg om te overbruggen tot het goedkope moment van morgen of tot er voldoende zon is, plus een instelbare marge.
+- **Scenario B** (morgen duurder): laadt zo vol mogelijk, mits de prijs nu lager is dan het laadmoment van morgen.
+- Houdt rekening met zon die je nog verwacht (vandaag en morgen), met een betrouwbaarheidspercentage.
+- **Zelfverbruik zon** wordt berekend uit de afgelopen 7 dagen in kWh per dag (op een sombere dag is het percentage hoger dan op een zonnige), met een handmatige overwrite.
+- **Gemiddeld dagverbruik** komt uit 7 dagen historie (import, export, productie, accu in/uit), met een instelbare startwaarde.
+- **Rendementsfilter:** een laadslot moet goedkoper zijn dan de waarde van de opgeslagen energie na round-trip-verlies, en in scenario A onder het daggemiddelde.
+- **Pad-check:** reikt de accu niet tot het eerste laadslot, dan worden extra goedkopere slots eerder gepland.
+- **Gemeten laadvermogen** wordt gebruikt voor het aantal slots.
+- Optioneel: **niet ontladen in een goedkoop dal** (accu sparen).
+- Dashboard: sectie Forecasting op tab Zendure (plan vandaag en morgen, tegels, verzamelde 7-daagse gegevens, herbereken-knop) en een blok Configuratie (Forecasting) met alle invoervelden. Beide zijn te tonen of te verbergen met **Forecasting Tonen Op Dashboard**.
+
+### Wat er veranderd is ten opzichte van het origineel
+
+| Bestand (NL / Global) | Wijziging |
+|---|---|
+| `packages/zendure_forecasting.yaml` / `packages/zendure_forecasting_global.yaml` | **Nieuw.** Helpers, tellers, 7-daagse statistieken, de planner en afgeleide sensoren. |
+| `packages/zendure_gielz1986_nl.yaml` / `packages/zendure_gielz1986_global.yaml` | Alleen één extra optie in de modus-keuzelijst. |
+| `automation_nl.yaml` / `automation_global.yaml` | De nieuwe modus in de modus-keuze en in de 6 bestaande NOM-lijsten (nul-op-de-meter, SOC-bescherming, noodstop), een eigen laadblok dat alleen laadt als het plan *Laden* zegt, en een ontlaad-blokkade voor het goedkope dal. Bestaande modi zijn niet gewijzigd. |
+| `dashboard_nl.yaml` / `dashboard_global.yaml` | Nieuwe sectie Forecasting, nieuw blok Configuratie (Forecasting) en een schakelaar in Configuratie (Dashboard). |
+
+Elk gewijzigd bestand begint met een kop van twee regels met de referentie en de oorspronkelijke auteur.
+
+### Installatie
+
+Installeer eerst de oorspronkelijke integratie zoals hieronder beschreven (packages-bestand, automation, dashboard). Daarna:
+
+1. Zet `zendure_forecasting.yaml` (NL) of `zendure_forecasting_global.yaml` (Global) in dezelfde `packages`-map als het Gielz-pakket, en vervang het Gielz-pakket door de versie uit deze fork.
+2. Vervang de automation en het dashboard door de versies uit deze fork (of voeg de wijzigingen samen met je eigen versie).
+3. Herstart Home Assistant.
+4. Vul in tab Configuratie bij **Configuratie (Forecasting)** in: de sensor voor zon resterend vandaag, zon morgen (kWh, bijv. Forecast.Solar of Solcast) en een totaalteller van je zonnepanelen (kWh). Zet eventueel het standaard dagverbruik en de laadmarge.
+5. Kies de modus **Dynamisch NOM + Forecasting**.
+
+**Vereist:** het Gielz-pakket, Nord Pool (zoals al ingesteld in Gielz), een P1-meter, een zon-forecast integratie en apexcharts-card voor het Gielz-dashboard. De planner wordt na ongeveer een week historie nauwkeuriger.
+
+> **Status:** persoonlijk project. De Nederlandse versie is in gebruik bij de auteur. De Engelse (Global) versie is een vertaling van de Nederlandse set: offline gecontroleerd (de planner geeft in 400 gesimuleerde situaties dezelfde uitkomst als de Nederlandse versie), maar nog niet in een echte Home Assistant gedraaid. Geen garantie: begin met een lage laadmarge en controleer het plan op het dashboard.
+
+### Voor- en nadelen
+
+**Ten opzichte van de oorspronkelijke modus Dynamisch NOM**
+
+| ➕ Voordelen | ➖ Nadelen |
+|---|---|
+| Laadt alleen wat nodig is in plaats van een vast aantal goedkope periodes: minder onnodige kWh uit het net en minder cycli. | Meer in te stellen: een zon-forecast integratie en een totaalteller van je zonnepanelen. |
+| Gebruikt je zonvoorspelling: een zonnige dag erna betekent minder netladen. | Heeft ongeveer een week historie nodig voordat verbruik en zelfverbruik gemeten zijn; tot die tijd gebruikt het standaardwaarden. |
+| Kijkt naar de prijzen van morgen (scenario A/B) en controleert of de accu het eerste laadslot haalt. | Zo goed als je zonvoorspelling; de betrouwbaarheidsinstelling helpt, maar maakt een slechte voorspelling niet goed. |
+| Past zich aan op je systeem: gemeten rendement, gemeten laadvermogen, 7-daags zelfverbruik. | Extra sensoren en een planner die elke minuut herberekent. |
+| Het plan is volledig zichtbaar op het dashboard, met een herbereken-knop. | Regelgebaseerd: een goed plan, geen wiskundig bewezen optimum. |
+
+**Ten opzichte van een volledige optimizer zoals [Day Ahead Optimizer (DAO)](https://github.com/corneel27/day-ahead)**
+
+| Deze fork | DAO |
+|---|---|
+| Geen extra software: alles is YAML in Home Assistant, geen add-on of Docker. | Een Home Assistant add-on (of Docker-container) met een eigen configuratie. |
+| Een extra modus op je bestaande Gielz-opzet, geen apart systeem dat de Zendure aanstuurt. | Een apart systeem dat je apparaten plant. |
+| Gebruikt je eigen zon-forecast sensoren. | Gebruikt weerdata van Meteoserver. |
+| Alleen de batterij. | Batterij, warmtepomp, boiler, EV en meer. |
+| Regelgebaseerd plan (scenario A/B, pad-check, rendementsfilter). | Wiskundige optimalisatie over alle uren tegelijk. |
+| Jong project, nog weinig getest. | Gevestigd project met een community en een wiki. |
+
+Kort gezegd: wil je alleen je Zendure-batterij optimaliseren zonder extra add-on, dan past deze modus goed. Wil je batterij, warmtepomp/boiler en EV samen plannen met een echte optimizer, dan is DAO de logischere route. Ze sluiten elkaar niet uit: deze modus kan als terugvaloptie blijven staan.
+
+### Licentie
+
+Deze fork valt onder dezelfde licentie als het origineel ([LICENSE](LICENSE)): **alleen persoonlijk en strikt niet-commercieel gebruik**, delen en aanpassen toegestaan mits de volledige licentietekst wordt meegegeven en de wijzigingen worden vermeld (zie de tabel hierboven). Commercieel gebruik vereist toestemming van de oorspronkelijke auteur.
+
+---
+
+*Hieronder: de originele README van Gielz1986.*
+
+
+
 ![Preview](Images/NL-Dashboard-290526.gif) <br>
 <a href="https://github.com/Gielz1986/Zendure-HA-zenSDK/wiki/NL-%E2%80%90-Beschikbare-entiteiten">
 Ga naar de uitleg over alle entiteiten en het dashboard

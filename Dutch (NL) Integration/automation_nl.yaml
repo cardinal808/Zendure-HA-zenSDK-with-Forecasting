@@ -1,3 +1,5 @@
+# Zendure zenSDK (Gielz) + Forecasting | set: publiek (zonder HVAC) | referentie: FC-20261027
+# Gebaseerd op Gielz1986/Zendure-HA-zenSDK (Michiel Hofker). Zie README.md voor licentie en wijzigingen.
 alias: Zendure zenSDK (Gielz)
 description: Configuratie Versie (v20261007)
 triggers:
@@ -129,6 +131,17 @@ actions:
             data:
               sn: '{{ states(''sensor.zendure_2400_ac_serienummer'') }}'
         alias: Dynamisch NOM
+      - conditions:
+          - condition: trigger
+            id: modus_trigger
+          - condition: state
+            entity_id: input_select.zendure_2400_ac_modus_selecteren
+            state: Dynamisch NOM + Forecasting
+        sequence:
+          - action: rest_command.zendure_stop_met_alles
+            data:
+              sn: '{{ states(''sensor.zendure_2400_ac_serienummer'') }}'
+        alias: Dynamisch NOM + Forecasting
       - conditions:
           - condition: trigger
             id: modus_trigger
@@ -322,7 +335,9 @@ actions:
                 state: Alleen slim ontladen
               - condition: state
                 entity_id: input_select.zendure_2400_ac_modus_selecteren
-                state: Dynamisch NOM
+                state:
+                  - Dynamisch NOM
+                  - Dynamisch NOM + Forecasting
               - condition: state
                 entity_id: input_select.zendure_2400_ac_modus_selecteren
                 state:
@@ -799,6 +814,7 @@ actions:
             entity_id: input_select.zendure_2400_ac_modus_selecteren
             state:
               - Dynamisch NOM
+              - Dynamisch NOM + Forecasting
               - Dynamisch NOM (Duur)
               - Dynamisch Handelen + NOM
               - Alleen slim opladen
@@ -907,6 +923,12 @@ actions:
           - condition: trigger
             id:
               - aansturing_trigger
+          - alias: Ontladen niet geblokkeerd (goedkoop dal)
+            condition: not
+            conditions:
+              - condition: state
+                entity_id: binary_sensor.forecast_dal_ontladen_geblokkeerd
+                state: 'on'
           - alias: >-
               sensor.p1_aansturing_vermogen groter dan
               input_number.zendure_2400_ac_start_ontladen_bij
@@ -959,6 +981,7 @@ actions:
                     entity_id: input_select.zendure_2400_ac_modus_selecteren
                     state:
                       - Dynamisch NOM
+                      - Dynamisch NOM + Forecasting
                   - condition: state
                     entity_id: input_select.zendure_2400_ac_modus_selecteren
                     state:
@@ -1035,6 +1058,12 @@ actions:
           - condition: trigger
             id:
               - aansturing_trigger
+          - alias: Ontladen niet geblokkeerd (goedkoop dal)
+            condition: not
+            conditions:
+              - condition: state
+                entity_id: binary_sensor.forecast_dal_ontladen_geblokkeerd
+                state: 'on'
           - condition: state
             entity_id: sensor.zendure_2400_ac_soc_limiet_status
             state:
@@ -1070,6 +1099,7 @@ actions:
                     entity_id: input_select.zendure_2400_ac_modus_selecteren
                     state:
                       - Dynamisch NOM
+                      - Dynamisch NOM + Forecasting
                   - condition: state
                     entity_id: input_select.zendure_2400_ac_modus_selecteren
                     state:
@@ -1189,7 +1219,9 @@ actions:
                 state: Alleen slim opladen
               - condition: state
                 entity_id: input_select.zendure_2400_ac_modus_selecteren
-                state: Dynamisch NOM
+                state:
+                  - Dynamisch NOM
+                  - Dynamisch NOM + Forecasting
               - condition: state
                 entity_id: input_select.zendure_2400_ac_modus_selecteren
                 state:
@@ -1313,7 +1345,9 @@ actions:
                 state: Alleen slim opladen
               - condition: state
                 entity_id: input_select.zendure_2400_ac_modus_selecteren
-                state: Dynamisch NOM
+                state:
+                  - Dynamisch NOM
+                  - Dynamisch NOM + Forecasting
               - condition: state
                 entity_id: input_select.zendure_2400_ac_modus_selecteren
                 state:
@@ -1371,6 +1405,44 @@ actions:
               entity_id: input_select.zendure_2400_ac_modus_selecteren
               name: ' '
         alias: Tijdens opladen balanceren naar -xxx watt (100% van aanbod)
+      - conditions:
+          - condition: trigger
+            id:
+              - aansturing_trigger
+          - alias: Ontladen geblokkeerd (goedkoop dal)
+            condition: state
+            entity_id: binary_sensor.forecast_dal_ontladen_geblokkeerd
+            state: 'on'
+            for:
+              hours: 0
+              minutes: 0
+              seconds: 10
+          - condition: state
+            entity_id: sensor.zendure_2400_ac_modus
+            state: Ontladen
+          - condition: state
+            entity_id: input_boolean.dynamisch_ontladen_loopt
+            state:
+              - 'off'
+          - condition: state
+            entity_id: input_select.zendure_2400_ac_modus_selecteren
+            state:
+              - Nul op de meter
+              - Alleen slim ontladen
+              - Dynamisch NOM
+              - Dynamisch NOM + Forecasting
+              - Dynamisch NOM (Duur)
+              - Dynamisch Handelen + NOM
+        sequence:
+          - action: rest_command.zendure_stop_met_alles
+            data:
+              sn: '{{ states(''sensor.zendure_2400_ac_serienummer'') }}'
+          - action: logbook.log
+            data:
+              message: 🌀Ontladen gestopt (goedkoop dal, alleen laden toegestaan) —
+              entity_id: input_select.zendure_2400_ac_modus_selecteren
+              name: ' '
+        alias: Ontladen stoppen (goedkoop dal, alleen laden toegestaan)
   - alias: Handmatige Aansturing
     choose:
       - conditions:
@@ -1684,6 +1756,111 @@ actions:
               entity_id: input_select.zendure_2400_ac_modus_selecteren
               name: ' '
         alias: Dynamisch NOM goedkoop laden
+      - conditions:
+          - condition: trigger
+            id:
+              - aansturing_trigger
+          - condition: template
+            value_template: >-
+              {{
+              states('input_text.dynamisch_nordpool_sensor').lower().startswith('sensor')
+              }}
+            alias: input_text.dynamisch_nordpool_sensor is gevuld
+          - condition: state
+            entity_id: input_select.zendure_2400_ac_modus_selecteren
+            state: Dynamisch NOM + Forecasting
+          - alias: Forecast planner (sensor.zendure_forecast_plan) zegt Laden
+            condition: state
+            entity_id: sensor.zendure_forecast_plan
+            state: Laden
+            for:
+              hours: 0
+              minutes: 0
+              seconds: 10
+          - condition: state
+            entity_id: sensor.zendure_2400_ac_soc_limiet_status
+            state:
+              - Normale werking
+              - Ontlaadlimiet bereikt
+              - unknown
+          - alias: SOC lager dan maximaal ingestelde SOC
+            condition: template
+            value_template: |2-
+                    {{ states('sensor.zendure_2400_ac_laadpercentage') | float(0) < 
+                       states('sensor.zendure_2400_ac_maximale_laadpercentage') | float(0) }}
+          - alias: Laden loopt niet en is minstens 2 minuten uit (voorkomt snel schakelen)
+            condition: state
+            entity_id: input_boolean.dynamisch_laden_loopt
+            state:
+              - 'off'
+            for:
+              hours: 0
+              minutes: 2
+              seconds: 0
+        sequence:
+          - action: input_boolean.turn_on
+            data: {}
+            target:
+              entity_id:
+                - input_boolean.dynamisch_laden_loopt
+          - action: rest_command.zendure_opslaan_in_ram
+            data:
+              sn: '{{ states(''sensor.zendure_2400_ac_serienummer'') }}'
+          - delay:
+              hours: 0
+              minutes: 0
+              seconds: 5
+              milliseconds: 0
+          - action: rest_command.zendure_snel_laden
+            data:
+              sn: '{{ states(''sensor.zendure_2400_ac_serienummer'') }}'
+              inputLimit: >-
+                {{ states('input_number.zendure_2400_ac_max_oplaadvermogen') |
+                int }}
+          - action: logbook.log
+            data:
+              message: >-
+                🔮Dynamisch NOM + Forecasting laden gestart — gepland netladen
+                {{ state_attr('sensor.zendure_forecast_plan', 'netladen_vandaag_kwh') }} kWh
+              entity_id: input_select.zendure_2400_ac_modus_selecteren
+              name: ' '
+          - wait_for_trigger:
+              - alias: Planner zegt niet meer Laden
+                trigger: template
+                value_template: >-
+                  {{ not is_state('sensor.zendure_forecast_plan', 'Laden') }}
+                for:
+                  hours: 0
+                  minutes: 0
+                  seconds: 10
+              - alias: Maximale ingestelde SOC bereikt
+                trigger: template
+                value_template: >
+                  {{ states('sensor.zendure_2400_ac_laadpercentage') | float(0)
+                  >=
+                     states('sensor.zendure_2400_ac_maximale_laadpercentage') | float(0) }}
+                for:
+                  hours: 0
+                  minutes: 0
+                  seconds: 15
+              - trigger: state
+                entity_id:
+                  - input_select.zendure_2400_ac_modus_selecteren
+            continue_on_timeout: false
+          - action: input_boolean.turn_off
+            target:
+              entity_id:
+                - input_boolean.dynamisch_laden_loopt
+            data: {}
+          - action: rest_command.zendure_stop_met_alles
+            data:
+              sn: '{{ states(''sensor.zendure_2400_ac_serienummer'') }}'
+          - action: logbook.log
+            data:
+              message: 🔮Dynamisch NOM + Forecasting laden voltooid —
+              entity_id: input_select.zendure_2400_ac_modus_selecteren
+              name: ' '
+        alias: Dynamisch NOM + Forecasting laden
       - conditions:
           - condition: trigger
             id:
