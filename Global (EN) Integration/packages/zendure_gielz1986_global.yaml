@@ -1,3 +1,5 @@
+# Zendure zenSDK (Gielz) + Forecasting | set: public (without HVAC) | reference: FC-20261027
+# Based on Gielz1986/Zendure-HA-zenSDK (Michiel Hofker). See README.md for license and changes.
 input_select:
   zendure_operation_mode:
     name: Zendure Operation Mode
@@ -9,6 +11,7 @@ input_select:
       - Smart Discharge Only
       - Smart Charge Only
       - Dynamic Smart Matching
+      - Dynamic Smart Matching + Forecasting
       - Dynamic Smart Matching (Expensive)
       - Dynamic Trading
       - Dynamic Trading + Smart Matching

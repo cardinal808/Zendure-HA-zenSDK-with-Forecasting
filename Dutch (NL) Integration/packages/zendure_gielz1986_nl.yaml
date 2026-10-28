@@ -1,3 +1,5 @@
+# Zendure zenSDK (Gielz) + Forecasting | set: publiek (zonder HVAC) | referentie: FC-20261027
+# Gebaseerd op Gielz1986/Zendure-HA-zenSDK (Michiel Hofker). Zie README.md voor licentie en wijzigingen.
 input_select:
   zendure_2400_ac_modus_selecteren:
     name: Zendure 2400 AC Modus Selecteren
@@ -7,6 +9,7 @@ input_select:
       - Handmatig
       - Nul op de meter
       - Dynamisch NOM
+      - Dynamisch NOM + Forecasting
       - Dynamisch NOM (Duur)
       - Dynamisch Handelen
       - Dynamisch Handelen + NOM

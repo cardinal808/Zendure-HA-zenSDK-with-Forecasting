@@ -1,6 +1,8 @@
+# Zendure zenSDK (Gielz) + Forecasting | set: publiek (zonder HVAC) | referentie: FC-20261027
+# Gebaseerd op Gielz1986/Zendure-HA-zenSDK (Michiel Hofker). Zie README.md voor licentie en wijzigingen.
 views:
   - type: sections
-    max_columns: 3
+    max_columns: 4
     title: Zendure
     path: zendure
     sections:
@@ -1395,6 +1397,168 @@ views:
         visibility:
           - condition: state
             entity: input_boolean.dynamisch_tonen_op_dashboard
+            state: 'on'
+      - type: grid
+        cards:
+          - type: heading
+            icon: ''
+            heading: Forecasting
+            heading_style: title
+            badges:
+              - type: entity
+                show_state: true
+                show_icon: true
+                entity: sensor.zendure_forecast_plan
+                color: '#01a180'
+                tap_action:
+                  action: more-info
+              - type: entity
+                show_state: true
+                show_icon: true
+                entity: sensor.forecast_netladen_vandaag
+                color: '#01a180'
+                name: Netladen
+                tap_action:
+                  action: more-info
+              - type: button
+                icon: mdi:calculator-variant
+                tap_action:
+                  action: perform-action
+                  perform_action: input_button.press
+                  target:
+                    entity_id: input_button.forecast_herberekenen
+                  data: {}
+                color: '#01a180'
+                text: Herberekenen
+          - type: markdown
+            content: >-
+              {% set p = 'sensor.zendure_forecast_plan' %} {% set a =
+              states[p].attributes %} {% if
+              states('input_select.zendure_2400_ac_modus_selecteren') !=
+              'Dynamisch NOM + Forecasting' %} <ha-alert alert-type="info">Modus
+              **Dynamisch NOM + Forecasting** is niet actief. Onderstaand plan
+              is een simulatie.</ha-alert> {% endif %} {% if
+              a.zon_resterend_vandaag_sensor_ok == false or
+              a.zon_morgen_sensor_ok == false %} <ha-alert
+              alert-type="warning">Een zon-forecast sensor is niet ingevuld of
+              niet beschikbaar. Die zon wordt als 0 kWh gerekend (er wordt dan
+              meer uit het net gepland).</ha-alert> {% endif %} **Status:** {{
+              states(p) }}  
+
+              **Scenario:** {{ a.scenario }}
+
+
+              ### Vandaag
+
+              - Batterij nu: **{{ a.batterij_nu_kwh }}** van {{
+              a.batterij_max_kwh }} kWh bruikbaar
+
+              - Overbruggen tot **{{ a.overbruggen_tot }}** ({{
+              a.overbruggen_uren }} uur)
+
+              - Verwacht batterijgebruik: **{{ a.verwacht_batterijgebruik_kwh }}
+              kWh**
+
+              - Verwachte zon naar batterij: **{{
+              a.verwachte_zon_naar_batterij_kwh }} kWh** (zon nog te verwachten:
+              {{ a.zon_resterend_vandaag_kwh }} kWh, {{ a.zelfverbruik_pct }}%
+              direct verbruikt)
+
+              - Laadmarge: {{ a.marge_pct }}% ({{ a.marge_kwh }} kWh)
+
+              - Laadvermogen in planning: {{ a.laadvermogen_gebruikt_kw }} kW{% if a.laadvermogen_gemeten_w %} (gemeten {{ (a.laadvermogen_gemeten_w / 1000) | round(2) }} kW){% endif %}, prijs nu {{ a.prijs_nu }}{% if a.in_dal %} (goedkoop dal){% endif %}
+
+              - **Nog uit het net laden: {{ a.netladen_vandaag_kwh }} kWh**{% if
+              a.geplande_slots | length > 0 %} in {% for s in a.geplande_slots
+              %}{{ s.start }}-{{ s.eind }} (€{{ '%.3f' | format(s.prijs) }}){{
+              ', ' if not loop.last }}{% endfor %}, geschatte kosten €{{ '%.2f'
+              | format(a.geschatte_kosten) }}{% elif a.netladen_vandaag_kwh |
+              float(0) >= 0.3 %} (geen gunstig laadmoment gevonden){% endif %}
+
+
+              ### Morgen
+
+              - Prijzen morgen bekend: {{ 'ja' if a.morgen_prijzen_bekend else
+              'nee (patroon van vandaag aangehouden)' }}
+
+              - Goedkoopste laadmoment start om {{ a.morgen_goedkoopste_start
+              }}, prijsverschil t.o.v. vandaag {{ a.spread_morgen_pct }}%
+
+              - Zon morgen: {{ a.zon_morgen_kwh }} kWh, direct verbruikt {{
+              a.morgen_zon_direct_kwh }} kWh
+
+              - Verwacht batterijgebruik: {{ a.morgen_batterijgebruik_kwh }}
+              kWh, zon naar batterij {{ a.morgen_zon_naar_batterij_kwh }} kWh
+
+              - Indicatie netladen morgen: **{{ a.morgen_netladen_indicatie_kwh
+              }} kWh**
+            text_only: true
+          - type: heading
+            icon: ''
+            heading: Forecast Instellingen
+            heading_style: title
+          - type: tile
+            entity: sensor.forecast_zon_resterend_vandaag
+            name: Zon resterend vandaag
+            vertical: false
+          - type: tile
+            entity: sensor.forecast_zon_morgen
+            name: Zon morgen
+            vertical: false
+          - type: tile
+            entity: sensor.forecast_zelfverbruik_zon
+            name: Zelfverbruik zon
+            vertical: false
+            state_content:
+              - state
+              - bron
+          - type: tile
+            entity: sensor.forecast_laadmarge
+            name: Laadmarge
+            vertical: false
+            state_content:
+              - state
+              - percentage
+          - type: tile
+            entity: sensor.forecast_gemiddeld_gebruik_per_dag
+            name: Gemiddeld gebruik per dag
+            vertical: false
+          - type: tile
+            entity: sensor.forecast_verwacht_batterijgebruik
+            name: Verwacht batterijgebruik
+            vertical: false
+          - type: tile
+            entity: sensor.forecast_verwachte_zon_naar_batterij
+            name: Zon naar batterij
+            vertical: false
+          - type: markdown
+            content: >-
+              {%- set a = states['sensor.zendure_forecast_plan'].attributes -%}
+              {%- set prod = states('sensor.forecast_zon_productie_7_dagen') | float(0) -%}
+              {%- set exp_zon = states('sensor.forecast_p1_export_uit_zon_7_dagen') | float(0) -%}
+              {%- set laden_zon = states('sensor.forecast_zendure_laden_uit_zon_7_dagen') | float(0) -%}
+              {%- set direct = [prod - exp_zon - laden_zon, 0] | max -%}
+              ### Verzamelde gegevens (afgelopen 7 dagen)
+
+              - Historie beschikbaar: **{{ a.historie_dagen }}** van 7 dagen
+
+              - Zonproductie: **{{ prod | round(1) }} kWh**, waarvan direct verbruikt **{{ direct | round(1) }} kWh** ({{ ((direct / prod * 100) | round(1)) if prod > 0 else '-' }}%), naar de accu **{{ laden_zon | round(1) }} kWh**, teruggeleverd **{{ exp_zon | round(1) }} kWh**
+
+              - Net: import {{ states('sensor.forecast_p1_import_7_dagen') | float(0) | round(1) }} kWh, export {{ states('sensor.forecast_p1_export_7_dagen') | float(0) | round(1) }} kWh
+
+              - Accu: geladen {{ states('sensor.forecast_zendure_laden_7_dagen') | float(0) | round(1) }} kWh, ontladen {{ states('sensor.forecast_zendure_ontladen_7_dagen') | float(0) | round(1) }} kWh
+
+              - Gemiddeld gebruik: **{{ a.gebruik_dag_kwh }} kWh per dag** ({{ a.gebruik_bron }})
+
+              - Direct zonverbruik: **{{ a.direct_verbruik_dag_kwh if a.direct_verbruik_dag_kwh is not none else '-' }} kWh per dag**; toegepast zelfverbruik vandaag {{ a.zelfverbruik_vandaag_pct }}%, morgen {{ a.zelfverbruik_morgen_pct }}% ({{ a.zelfverbruik_bron }})
+
+              - Rendement: laden {{ a.efficientie_laden_pct }}%, ontladen {{ a.efficientie_ontladen_pct }}%, samen {{ a.rendement_round_trip_pct }}%
+
+              - Laadvermogen: ingesteld {{ a.laadvermogen_ingesteld_kw }} kW, gemeten {{ ((a.laadvermogen_gemeten_w / 1000) | round(2)) if a.laadvermogen_gemeten_w else 'nog niet beschikbaar' }}{{ ' kW' if a.laadvermogen_gemeten_w else '' }}
+            text_only: true
+        visibility:
+          - condition: state
+            entity: input_boolean.forecast_tonen_op_dashboard
             state: 'on'
     cards: []
     icon: mdi:battery
@@ -2826,11 +2990,9 @@ views:
             entities:
               - entity: input_boolean.zendure_2400_ac_soc_bescherming_uitgeschakeld
                 name: SOC Bescherming Uitgeschakeld
-              - entity: >-
-                  input_number.zendure_2400_ac_minimaal_toegestaan_laadpercentage
+              - entity: input_number.zendure_2400_ac_minimaal_toegestaan_laadpercentage
                 name: Min. Laadpercentage
-              - entity: >-
-                  input_number.zendure_2400_ac_maximaal_toegestaan_laadpercentage
+              - entity: input_number.zendure_2400_ac_maximaal_toegestaan_laadpercentage
                 name: Max. Laadpercentage
           - type: heading
             icon: ''
@@ -2928,13 +3090,64 @@ views:
                 state: 'on'
           - type: heading
             icon: ''
+            heading: Configuratie (Forecasting)
+            heading_style: title
+            visibility:
+              - condition: state
+                entity: input_boolean.forecast_tonen_op_dashboard
+                state: 'on'
+          - type: markdown
+            content: >-
+              <ha-alert alert-type="info">Helptekst</ha-alert>Voor de modus
+              **Dynamisch NOM + Forecasting**. Vul de entity_id in van je
+              zon-forecast sensors (kWh, bv. Forecast.Solar of Solcast) en van
+              een totaalteller (kWh) van je zonnepanelen. Laat het zelfverbruik
+              op 0 staan om het automatisch uit de afgelopen 7 dagen te
+              berekenen. De laadmarge is een extra buffer als percentage van de
+              batterijcapaciteit.
+            text_only: true
+            visibility:
+              - condition: state
+                entity: input_boolean.help_tonen_op_dashboard
+                state: 'on'
+              - condition: state
+                entity: input_boolean.forecast_tonen_op_dashboard
+                state: 'on'
+          - type: entities
+            entities:
+              - entity: input_text.forecast_zon_resterend_vandaag_sensor
+                name: Zon resterend vandaag sensor
+              - entity: input_text.forecast_zon_morgen_sensor
+                name: Zon morgen sensor
+              - entity: input_text.forecast_zon_productie_sensor
+                name: Zonnepanelen productie sensor (totaal kWh)
+              - entity: input_number.forecast_zelfverbruik_overwrite
+                name: Zelfverbruik zon % (alleen invullen indien overwrite)
+              - entity: input_number.forecast_laad_marge
+                name: Batterij laadmarge %
+              - entity: input_number.forecast_gebruik_standaard
+                name: Standaard dagverbruik kWh (tot er historie is)
+              - entity: input_number.forecast_betrouwbaarheid
+                name: Betrouwbaarheid zonvoorspelling % (0 = 100%)
+              - entity: input_boolean.forecast_dal_ontladen_blokkeren
+                name: Niet ontladen in goedkoop dal (accu sparen)
+              - entity: sensor.forecast_gemeten_laadvermogen
+                name: Gemeten netlaadvermogen
+              - entity: binary_sensor.forecast_dal_ontladen_geblokkeerd
+                name: Ontladen nu vastgehouden (dal)
+            visibility:
+              - condition: state
+                entity: input_boolean.forecast_tonen_op_dashboard
+                state: 'on'
+          - type: heading
+            icon: ''
             heading_style: title
             heading: Configuratie (Dashboard)
           - type: markdown
             content: >-
               <ha-alert alert-type="info">Helptekst</ha-alert>Hier stel je in of
               je de Dynamische informatie wilt verbergen of tonen op het eerste
-              tabblad via **Dynamisch Tonen Op Dashboard⚙️**.
+              tabblad via **Dynamisch Tonen Op Dashboard⚙️**. Met **Forecasting Tonen Op Dashboard** toon of verberg je de Forecasting-sectie en de Forecasting-instellingen.
             text_only: true
             visibility:
               - condition: state
@@ -2945,6 +3158,8 @@ views:
               - entity: input_boolean.help_tonen_op_dashboard
               - entity: input_boolean.pv_tonen_op_dashboard
               - entity: input_boolean.dynamisch_tonen_op_dashboard
+              - entity: input_boolean.forecast_tonen_op_dashboard
+                name: Forecasting Tonen Op Dashboard
       - type: grid
         cards:
           - type: heading

@@ -1,6 +1,8 @@
+# Zendure zenSDK (Gielz) + Forecasting | set: public (without HVAC) | reference: FC-20261027
+# Based on Gielz1986/Zendure-HA-zenSDK (Michiel Hofker). See README.md for license and changes.
 views:
   - type: sections
-    max_columns: 3
+    max_columns: 4
     title: Zendure
     path: zendure
     sections:
@@ -1390,6 +1392,168 @@ views:
         visibility:
           - condition: state
             entity: input_boolean.dashboard_setting_show_dynamic
+            state: 'on'
+      - type: grid
+        cards:
+          - type: heading
+            icon: ''
+            heading: Forecasting
+            heading_style: title
+            badges:
+              - type: entity
+                show_state: true
+                show_icon: true
+                entity: sensor.zendure_forecast_plan
+                color: '#01a180'
+                tap_action:
+                  action: more-info
+              - type: entity
+                show_state: true
+                show_icon: true
+                entity: sensor.forecast_grid_charge_today
+                color: '#01a180'
+                name: Grid charge
+                tap_action:
+                  action: more-info
+              - type: button
+                icon: mdi:calculator-variant
+                tap_action:
+                  action: perform-action
+                  perform_action: input_button.press
+                  target:
+                    entity_id: input_button.forecast_recalculate
+                  data: {}
+                color: '#01a180'
+                text: Recalculate
+          - type: markdown
+            content: >-
+              {% set p = 'sensor.zendure_forecast_plan' %} {% set a =
+              states[p].attributes %} {% if
+              states('input_select.zendure_operation_mode') !=
+              'Dynamic Smart Matching + Forecasting' %} <ha-alert alert-type="info">Mode
+              **Dynamic Smart Matching + Forecasting** is not active. The plan below
+              is a simulation.</ha-alert> {% endif %} {% if
+              a.solar_remaining_today_sensor_ok == false or
+              a.solar_tomorrow_sensor_ok == false %} <ha-alert
+              alert-type="warning">A solar forecast sensor is not filled in or
+              not available. That solar is counted as 0 kWh (more grid charging
+              will be planned).</ha-alert> {% endif %} **Status:** {{
+              states(p) }}  
+
+              **Scenario:** {{ a.scenario }}
+
+
+              ### Today
+
+              - Battery now: **{{ a.battery_now_kwh }}** of {{
+              a.battery_max_kwh }} kWh usable
+
+              - Bridge until **{{ a.bridge_until }}** ({{
+              a.bridge_hours }} hours)
+
+              - Expected battery usage: **{{ a.expected_battery_usage_kwh }}
+              kWh**
+
+              - Expected solar to battery: **{{
+              a.expected_solar_to_battery_kwh }} kWh** (solar still expected:
+              {{ a.solar_remaining_today_kwh }} kWh, {{ a.self_consumption_pct }}%
+              used directly)
+
+              - Charge margin: {{ a.margin_pct }}% ({{ a.margin_kwh }} kWh)
+
+              - Charge power in plan: {{ a.charge_power_used_kw }} kW{% if a.charge_power_measured_w %} (measured {{ (a.charge_power_measured_w / 1000) | round(2) }} kW){% endif %}, price now {{ a.price_now }}{% if a.in_dip %} (cheap dip){% endif %}
+
+              - **Still to charge from the grid: {{ a.grid_charge_today_kwh }} kWh**{% if
+              a.planned_slots | length > 0 %} in {% for s in a.planned_slots
+              %}{{ s.start }}-{{ s.end }} (€{{ '%.3f' | format(s.price) }}){{
+              ', ' if not loop.last }}{% endfor %}, estimated cost €{{ '%.2f'
+              | format(a.estimated_cost) }}{% elif a.grid_charge_today_kwh |
+              float(0) >= 0.3 %} (no favorable charging moment found){% endif %}
+
+
+              ### Tomorrow
+
+              - Tomorrow's prices known: {{ 'yes' if a.tomorrow_prices_known else
+              "no (today's pattern assumed)" }}
+
+              - Cheapest charging moment starts at {{ a.tomorrow_cheapest_start
+              }}, price difference vs. today {{ a.spread_tomorrow_pct }}%
+
+              - Solar tomorrow: {{ a.solar_tomorrow_kwh }} kWh, used directly {{
+              a.tomorrow_solar_direct_kwh }} kWh
+
+              - Expected battery usage: {{ a.tomorrow_battery_usage_kwh }}
+              kWh, solar to battery {{ a.tomorrow_solar_to_battery_kwh }} kWh
+
+              - Estimated grid charge tomorrow: **{{ a.tomorrow_grid_charge_estimate_kwh
+              }} kWh**
+            text_only: true
+          - type: heading
+            icon: ''
+            heading: Forecast Settings
+            heading_style: title
+          - type: tile
+            entity: sensor.forecast_solar_remaining_today
+            name: Solar remaining today
+            vertical: false
+          - type: tile
+            entity: sensor.forecast_solar_tomorrow
+            name: Solar tomorrow
+            vertical: false
+          - type: tile
+            entity: sensor.forecast_solar_self_consumption
+            name: Solar self-consumption
+            vertical: false
+            state_content:
+              - state
+              - source
+          - type: tile
+            entity: sensor.forecast_charge_margin
+            name: Charge margin
+            vertical: false
+            state_content:
+              - state
+              - percentage
+          - type: tile
+            entity: sensor.forecast_average_usage_per_day
+            name: Average usage per day
+            vertical: false
+          - type: tile
+            entity: sensor.forecast_expected_battery_usage
+            name: Expected battery usage
+            vertical: false
+          - type: tile
+            entity: sensor.forecast_expected_solar_to_battery
+            name: Solar to battery
+            vertical: false
+          - type: markdown
+            content: >-
+              {%- set a = states['sensor.zendure_forecast_plan'].attributes -%}
+              {%- set prod = states('sensor.forecast_solar_production_7_days') | float(0) -%}
+              {%- set exp_solar = states('sensor.forecast_grid_export_from_solar_7_days') | float(0) -%}
+              {%- set charge_solar = states('sensor.forecast_zendure_charge_from_solar_7_days') | float(0) -%}
+              {%- set direct = [prod - exp_solar - charge_solar, 0] | max -%}
+              ### Collected data (last 7 days)
+
+              - History available: **{{ a.history_days }}** of 7 days
+
+              - Solar production: **{{ prod | round(1) }} kWh**, of which used directly **{{ direct | round(1) }} kWh** ({{ ((direct / prod * 100) | round(1)) if prod > 0 else '-' }}%), to the battery **{{ charge_solar | round(1) }} kWh**, exported **{{ exp_solar | round(1) }} kWh**
+
+              - Grid: import {{ states('sensor.forecast_grid_import_7_days') | float(0) | round(1) }} kWh, export {{ states('sensor.forecast_grid_export_7_days') | float(0) | round(1) }} kWh
+
+              - Battery: charged {{ states('sensor.forecast_zendure_charge_7_days') | float(0) | round(1) }} kWh, discharged {{ states('sensor.forecast_zendure_discharge_7_days') | float(0) | round(1) }} kWh
+
+              - Average usage: **{{ a.usage_day_kwh }} kWh per day** ({{ a.usage_source }})
+
+              - Direct solar usage: **{{ a.direct_usage_day_kwh if a.direct_usage_day_kwh is not none else '-' }} kWh per day**; applied self-consumption today {{ a.self_consumption_today_pct }}%, tomorrow {{ a.self_consumption_tomorrow_pct }}% ({{ a.self_consumption_source }})
+
+              - Efficiency: charging {{ a.efficiency_charge_pct }}%, discharging {{ a.efficiency_discharge_pct }}%, round trip {{ a.efficiency_round_trip_pct }}%
+
+              - Charge power: configured {{ a.charge_power_set_kw }} kW, measured {{ ((a.charge_power_measured_w / 1000) | round(2)) if a.charge_power_measured_w else 'not yet available' }}{{ ' kW' if a.charge_power_measured_w else '' }}
+            text_only: true
+        visibility:
+          - condition: state
+            entity: input_boolean.dashboard_setting_show_forecasting
             state: 'on'
     cards: []
     icon: mdi:battery
@@ -2919,13 +3083,64 @@ views:
                 state: 'on'
           - type: heading
             icon: ''
+            heading: Configuration (Forecasting)
+            heading_style: title
+            visibility:
+              - condition: state
+                entity: input_boolean.dashboard_setting_show_forecasting
+                state: 'on'
+          - type: markdown
+            content: >-
+              <ha-alert alert-type="info">Help text</ha-alert>For the mode
+              **Dynamic Smart Matching + Forecasting**. Enter the entity_id of your
+              solar forecast sensors (kWh, e.g. Forecast.Solar or Solcast) and of
+              a total counter (kWh) of your solar panels. Leave self-consumption
+              at 0 to calculate it automatically from the last 7 days. The
+              charge margin is an extra buffer as a percentage of the battery
+              capacity.
+            text_only: true
+            visibility:
+              - condition: state
+                entity: input_boolean.dashboard_setting_show_help
+                state: 'on'
+              - condition: state
+                entity: input_boolean.dashboard_setting_show_forecasting
+                state: 'on'
+          - type: entities
+            entities:
+              - entity: input_text.forecast_setting_solar_remaining_today_sensor
+                name: Solar remaining today sensor
+              - entity: input_text.forecast_setting_solar_tomorrow_sensor
+                name: Solar tomorrow sensor
+              - entity: input_text.forecast_setting_solar_production_sensor
+                name: Solar panels production sensor (total kWh)
+              - entity: input_number.forecast_setting_self_consumption_override
+                name: Solar self-consumption % (only fill in to override)
+              - entity: input_number.forecast_setting_charge_margin
+                name: Battery charge margin %
+              - entity: input_number.forecast_setting_default_daily_usage
+                name: Default daily usage kWh (until history exists)
+              - entity: input_number.forecast_setting_solar_reliability
+                name: Solar forecast reliability % (0 = 100%)
+              - entity: input_boolean.forecast_setting_hold_discharge_in_dip
+                name: Hold discharge in cheap dip (save the battery)
+              - entity: sensor.forecast_measured_charge_power
+                name: Measured grid charge power
+              - entity: binary_sensor.forecast_discharge_held_in_dip
+                name: Discharge held now (dip)
+            visibility:
+              - condition: state
+                entity: input_boolean.dashboard_setting_show_forecasting
+                state: 'on'
+          - type: heading
+            icon: ''
             heading_style: title
             heading: Configuration (Dashboard)
           - type: markdown
             content: >-
               <ha-alert alert-type="info">Help text</ha-alert>Here you can set
               whether you want to hide or show the dynamic information on the
-              first tab via **Show Dynamic On Dashboard⚙️**.
+              first tab via **Show Dynamic On Dashboard⚙️**. Use **Show Forecasting On Dashboard** to show or hide the Forecasting section and the Forecasting settings.
             text_only: true
             visibility:
               - condition: state
@@ -2936,6 +3151,8 @@ views:
               - entity: input_boolean.dashboard_setting_show_help
               - entity: input_boolean.dashboard_setting_show_pv
               - entity: input_boolean.dashboard_setting_show_dynamic
+              - entity: input_boolean.dashboard_setting_show_forecasting
+                name: Show Forecasting On Dashboard
       - type: grid
         cards:
           - type: heading
