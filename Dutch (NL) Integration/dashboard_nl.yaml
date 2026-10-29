@@ -1448,6 +1448,9 @@ views:
               **Scenario:** {{ a.scenario }}
 
 
+              **Plan:** {{ a.plan_uitleg }}
+
+
               ### Vandaag
 
               - Batterij nu: **{{ a.batterij_nu_kwh }}** van {{
@@ -1473,9 +1476,9 @@ views:
               %}{{ s.start }}-{{ s.eind }} (€{{ '%.3f' | format(s.prijs) }}){{
               ', ' if not loop.last }}{% endfor %}, geschatte kosten €{{ '%.2f'
               | format(a.geschatte_kosten) }}{% elif a.netladen_vandaag_kwh |
-              float(0) >= 0.3 %} (geen gunstig laadmoment gevonden){% endif %}
+              float(0) >= 0.3 %} (laden loont nu niet, zie Plan){% endif %}
 
-              {% if a.padcheck_gat_uren | float(0) > 0 %}- Pad-check: accu leeg rond **{{ (a.padcheck_accu_leeg_om or '')[11:] }}**, zon dekt het verbruik vanaf **{{ (a.padcheck_zon_dekt_vanaf or '')[11:] }}** ({{ a.padcheck_zon_bron }}). Gat {{ a.padcheck_gat_uren }} uur, {{ a.padcheck_tekort_kwh }} kWh inkoop, waarvan {{ a.padcheck_tekort_dure_slots_kwh }} kWh in dure slots{% if a.padcheck_gat_prijs | float(0) > 0 %} (gemiddeld €{{ '%.3f' | format(a.padcheck_gat_prijs | float(0)) }}){% endif %}{% if a.padcheck_extra_slots | int(0) > 0 %}: {{ a.padcheck_extra_slots }} extra laadslot(s) gepland{% endif %}{% endif %}
+              {% if a.padcheck_gat_uren | float(0) > 0 %}{% set vd = now().strftime('%Y-%m-%d') %}- Pad-check: accu leeg rond **{{ ('morgen ' if (a.padcheck_accu_leeg_om or '')[:10] != vd else '') ~ (a.padcheck_accu_leeg_om or '')[11:] }}**, gat tot **{{ ('morgen ' if (a.padcheck_gat_eind or '')[:10] != vd else '') ~ (a.padcheck_gat_eind or '')[11:] }}** (zon dekt het verbruik vanaf {{ ('morgen ' if (a.padcheck_zon_dekt_vanaf or '')[:10] != vd else '') ~ (a.padcheck_zon_dekt_vanaf or '')[11:] }}, {{ a.padcheck_zon_bron }}). Gat {{ a.padcheck_gat_uren }} uur, {{ a.padcheck_tekort_kwh }} kWh inkoop, waarvan {{ a.padcheck_tekort_dure_slots_kwh }} kWh in dure slots{% if a.padcheck_gat_prijs | float(0) > 0 %} (gemiddeld €{{ '%.3f' | format(a.padcheck_gat_prijs | float(0)) }}){% endif %}{% if a.padcheck_extra_slots | int(0) > 0 %}: {{ a.padcheck_extra_slots }} extra laadslot(s) gepland{% endif %}{% endif %}
 
 
               ### Morgen

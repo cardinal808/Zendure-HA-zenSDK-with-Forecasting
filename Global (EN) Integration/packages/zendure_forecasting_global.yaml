@@ -1099,6 +1099,26 @@ template:
               {%- set ns.l = ns.l + [{'start': x.s | timestamp_custom('%H:%M', true), 'end': x.e | timestamp_custom('%H:%M', true), 'price': x.v}] -%}
             {%- endfor -%}
             {{ ns.l }}
+          # --- Plain-language explanation of the plan (for the dashboard) ---
+          plan_explanation: >
+            {%- macro at(ts) -%}{{ ('tomorrow ' if (ts | timestamp_custom('%Y-%m-%d', true)) != (now_ts | timestamp_custom('%Y-%m-%d', true)) else '') ~ (ts | timestamp_custom('%H:%M', true)) }}{%- endmacro -%}
+            {%- set threshold = c_charge_stop_kwh if this.state == 'Charge' else c_charge_start_kwh -%}
+            {%- set empty = s_now <= 0.05 -%}
+            {%- if not prices_ok -%}No prices available, nothing is planned.
+            {%- elif grid_total_ac < threshold -%}No grid charging needed: battery and expected solar are enough until {{ at(t_end_ts) }}.
+            {%- elif chosen | length == 0 -%}
+              {%- if empty -%}The battery is empty. The house now takes power directly from the grid{% if gap_slots | length > 0 %}, until {{ at(t_gap_end_ts) }} at most €{{ '%.3f' | format(gap_slots | map(attribute='v') | max) }}{% endif %}. Before that there is no charge moment left that is cheaper than buying directly after {{ ((1 - eff_rt) * 100) | round(0) | int }}% charge and discharge loss.
+              {%- else -%}The battery supplies power until about {{ at(t_empty_ts) }}. Grid charging does not pay off now: no slot is cheaper after loss than the purchase it would replace.
+              {%- endif -%}
+              {%- if not tomorrow_known %} Tomorrow's prices arrive around 14:00, then the plan is recalculated.
+              {%- elif (t_cheap_tomorrow_ts | timestamp_custom('%Y-%m-%d', true)) != (now_ts | timestamp_custom('%Y-%m-%d', true)) %} After midnight it takes tomorrow's prices into account and plans charging for the morning (cheapest moment from {{ t_cheap_tomorrow_ts | timestamp_custom('%H:%M', true) }}).
+              {%- endif -%}
+            {%- else -%}
+              {%- set first = chosen | first -%}
+              {%- if slot_now -%}Charging from the grid now{% if price_now < 999 %} (€{{ '%.3f' | format(price_now) }}){% endif %}.
+              {%- else -%}Next charge moment: {{ at(first.s) }} (€{{ '%.3f' | format(first.v) }}).{%- endif %} In total {{ chosen | length }} charge slot(s), about {{ planned_ac | round(1) }} kWh for €{{ '%.2f' | format(cost) }}{% if extra_slots | length > 0 %}, of which {{ extra_slots | length }} for the expensive gap until {{ at(t_gap_end_ts) }} (average €{{ '%.3f' | format(p_gap_avg) }}){% endif %}.
+              {%- if empty and not slot_now %} Until then the house takes power directly from the grid.{% endif -%}
+            {%- endif -%}
           # --- Path check (does the battery last until energy comes in again?) ---
           pathcheck_battery_empty_at: "{{ (t_empty_ts | timestamp_custom('%Y-%m-%d %H:%M', true)) if t_empty_ts < now_ts + 172800 else none }}"
           pathcheck_solar_covers_from: "{{ t_cover_ts | timestamp_custom('%Y-%m-%d %H:%M', true) }}"

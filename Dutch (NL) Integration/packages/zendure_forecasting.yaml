@@ -1099,6 +1099,26 @@ template:
               {%- set ns.l = ns.l + [{'start': x.s | timestamp_custom('%H:%M', true), 'eind': x.e | timestamp_custom('%H:%M', true), 'prijs': x.v}] -%}
             {%- endfor -%}
             {{ ns.l }}
+          # --- Uitleg van het plan in gewone taal (voor het dashboard) ---
+          plan_uitleg: >
+            {%- macro tijd(ts) -%}{{ ('morgen ' if (ts | timestamp_custom('%Y-%m-%d', true)) != (nu_ts | timestamp_custom('%Y-%m-%d', true)) else '') ~ (ts | timestamp_custom('%H:%M', true)) }}{%- endmacro -%}
+            {%- set drempel = c_laden_stop_kwh if this.state == 'Laden' else c_laden_start_kwh -%}
+            {%- set leeg = s_nu <= 0.05 -%}
+            {%- if not prijzen_ok -%}Geen prijzen beschikbaar, er wordt niets gepland.
+            {%- elif netladen_ac < drempel -%}Geen netladen nodig: accu en verwachte zon zijn genoeg tot {{ tijd(t_end_ts) }}.
+            {%- elif gekozen | length == 0 -%}
+              {%- if leeg -%}De accu is leeg. Het huis neemt nu direct stroom uit het net{% if gap_kwartieren | length > 0 %}, tot {{ tijd(t_gap_eind_ts) }} voor maximaal €{{ '%.3f' | format(gap_kwartieren | map(attribute='v') | max) }}{% endif %}. Er is daarvoor geen laadmoment meer dat na {{ ((1 - eff_rt) * 100) | round(0) | int }}% laad- en ontlaadverlies goedkoper is dan direct inkopen.
+              {%- else -%}De accu levert tot ongeveer {{ tijd(t_leeg_ts) }}. Bijladen uit het net loont nu niet: geen enkel slot is na verlies goedkoper dan de inkoop die het zou vervangen.
+              {%- endif -%}
+              {%- if not morgen_bekend %} Rond 14:00 komen de prijzen van morgen, dan wordt opnieuw gepland.
+              {%- elif (t_cheap_morgen_ts | timestamp_custom('%Y-%m-%d', true)) != (nu_ts | timestamp_custom('%Y-%m-%d', true)) %} Na middernacht neemt hij de prijzen van morgen mee en plant hij het laden voor de ochtend (goedkoopste moment vanaf {{ t_cheap_morgen_ts | timestamp_custom('%H:%M', true) }}).
+              {%- endif -%}
+            {%- else -%}
+              {%- set eerste = gekozen | first -%}
+              {%- if slot_nu -%}Nu aan het laden uit het net{% if prijs_nu < 999 %} (€{{ '%.3f' | format(prijs_nu) }}){% endif %}.
+              {%- else -%}Volgende laadmoment: {{ tijd(eerste.s) }} (€{{ '%.3f' | format(eerste.v) }}).{%- endif %} In totaal {{ gekozen | length }} laadslot(s), samen ongeveer {{ gepland_ac | round(1) }} kWh voor €{{ '%.2f' | format(kosten) }}{% if extra_slots | length > 0 %}, waarvan {{ extra_slots | length }} voor het dure gat tot {{ tijd(t_gap_eind_ts) }} (gemiddeld €{{ '%.3f' | format(p_gap_avg) }}){% endif %}.
+              {%- if leeg and not slot_nu %} Tot dan neemt het huis direct stroom uit het net.{% endif -%}
+            {%- endif -%}
           # --- Pad-check (haalt de accu het moment dat er weer energie bijkomt?) ---
           padcheck_accu_leeg_om: "{{ (t_leeg_ts | timestamp_custom('%Y-%m-%d %H:%M', true)) if t_leeg_ts < nu_ts + 172800 else none }}"
           padcheck_zon_dekt_vanaf: "{{ t_zon_dek_ts | timestamp_custom('%Y-%m-%d %H:%M', true) }}"

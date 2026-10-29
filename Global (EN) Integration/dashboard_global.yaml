@@ -1443,6 +1443,9 @@ views:
               **Scenario:** {{ a.scenario }}
 
 
+              **Plan:** {{ a.plan_explanation }}
+
+
               ### Today
 
               - Battery now: **{{ a.battery_now_kwh }}** of {{
@@ -1468,9 +1471,9 @@ views:
               %}{{ s.start }}-{{ s.end }} (€{{ '%.3f' | format(s.price) }}){{
               ', ' if not loop.last }}{% endfor %}, estimated cost €{{ '%.2f'
               | format(a.estimated_cost) }}{% elif a.grid_charge_today_kwh |
-              float(0) >= 0.3 %} (no favorable charging moment found){% endif %}
+              float(0) >= 0.3 %} (charging does not pay off now, see Plan){% endif %}
 
-              {% if a.pathcheck_gap_hours | float(0) > 0 %}- Path check: battery empty around **{{ (a.pathcheck_battery_empty_at or '')[11:] }}**, solar covers usage from **{{ (a.pathcheck_solar_covers_from or '')[11:] }}** ({{ a.pathcheck_solar_source }}). Gap {{ a.pathcheck_gap_hours }} hours, {{ a.pathcheck_shortfall_kwh }} kWh bought from the grid, of which {{ a.pathcheck_shortfall_expensive_slots_kwh }} kWh in expensive slots{% if a.pathcheck_gap_price | float(0) > 0 %} (average €{{ '%.3f' | format(a.pathcheck_gap_price | float(0)) }}){% endif %}{% if a.pathcheck_extra_slots | int(0) > 0 %}: {{ a.pathcheck_extra_slots }} extra charge slot(s) planned{% endif %}{% endif %}
+              {% if a.pathcheck_gap_hours | float(0) > 0 %}{% set td = now().strftime('%Y-%m-%d') %}- Path check: battery empty around **{{ ('tomorrow ' if (a.pathcheck_battery_empty_at or '')[:10] != td else '') ~ (a.pathcheck_battery_empty_at or '')[11:] }}**, gap until **{{ ('tomorrow ' if (a.pathcheck_gap_end or '')[:10] != td else '') ~ (a.pathcheck_gap_end or '')[11:] }}** (solar covers usage from {{ ('tomorrow ' if (a.pathcheck_solar_covers_from or '')[:10] != td else '') ~ (a.pathcheck_solar_covers_from or '')[11:] }}, {{ a.pathcheck_solar_source }}). Gap {{ a.pathcheck_gap_hours }} hours, {{ a.pathcheck_shortfall_kwh }} kWh bought from the grid, of which {{ a.pathcheck_shortfall_expensive_slots_kwh }} kWh in expensive slots{% if a.pathcheck_gap_price | float(0) > 0 %} (average €{{ '%.3f' | format(a.pathcheck_gap_price | float(0)) }}){% endif %}{% if a.pathcheck_extra_slots | int(0) > 0 %}: {{ a.pathcheck_extra_slots }} extra charge slot(s) planned{% endif %}{% endif %}
 
 
               ### Tomorrow
