@@ -729,16 +729,19 @@ template:
           {%- endif -%}
         {%- endfor -%}
         {{ ns.l | sort(attribute='s') }}
+      t_zon_dek_detail: >
+        {%- set ns = namespace(t=0) -%}
+        {%- for p in zon_detail -%}
+          {%- if ns.t == 0 and p.pv >= l_uur -%}{%- set ns.t = [p.s, nu_ts] | max -%}{%- endif -%}
+        {%- endfor -%}
+        {{ ns.t }}
       zon_dek_bron: >
-        {%- if zon_detail | length > 0 -%}Detailvoorspelling
+        {%- if zon_detail | length > 0 and t_zon_dek_detail > 0 -%}Detailvoorspelling
+        {%- elif zon_detail | length > 0 -%}Detailvoorspelling: zon dekt het verbruik niet meer, tot einde overbrugging
         {%- elif is_state('sun.sun', 'above_horizon') or zon_forecast_volgende >= c_dek_min_kwh -%}Zonsopkomst + {{ (c_dek_offset_s / 3600) | round(1) }} uur
         {%- else -%}Geen (te weinig zon verwacht){%- endif -%}
       t_zon_dek_ts: >
-        {%- set ns = namespace(t=none) -%}
-        {%- for p in zon_detail -%}
-          {%- if ns.t is none and p.pv >= l_uur -%}{%- set ns.t = [p.s, nu_ts] | max -%}{%- endif -%}
-        {%- endfor -%}
-        {%- if zon_detail | length > 0 -%}{{ ns.t if ns.t is not none else t_end_ts }}
+        {%- if zon_detail | length > 0 -%}{{ t_zon_dek_detail if t_zon_dek_detail > 0 else t_end_ts }}
         {%- elif is_state('sun.sun', 'above_horizon') -%}{{ [volgende_zon_ts - 86400 + c_dek_offset_s, nu_ts] | max }}
         {%- elif zon_forecast_volgende >= c_dek_min_kwh -%}{{ volgende_zon_ts + c_dek_offset_s }}
         {%- else -%}{{ t_end_ts }}{%- endif -%}
@@ -792,21 +795,38 @@ template:
         {% for q in gap_waardevol %}{% set ns.som = ns.som + q.v * q.kwh %}{% set ns.kwh = ns.kwh + q.kwh %}{% endfor %}
         {% if ns.kwh > 0 %}{{ (ns.som / ns.kwh) | round(5) }}{% else %}0{% endif %}
       pad_actief: "{{ gap_uren >= c_pad_min_uren and gap_waardevol_ac >= c_pad_min_tekort_kwh and p_gap_avg > 0 }}"
-      # Netladen (AC) dat nodig is om de dure slots na laad- en ontlaadverlies te leveren, begrensd op de ruimte in de accu
-      pad_netladen_ac: "{{ ([gap_waardevol_ac / eff_rt, room / eff_in] | min) | round(3) if pad_actief and eff_rt > 0 and eff_in > 0 else 0 }}"
-      n_extra: >
-        {% if pad_netladen_ac > 0 and e_slot > 0 %}{{ (pad_netladen_ac / e_slot) | round(0, 'ceil') | int }}{% else %}0{% endif %}
-      # Extra slots: goedkoopste slots vóór het einde van het gat die (na verlies) goedkoper zijn dan de inkoop in de dure slots
-      extra_slots: >
-        {%- set ns = namespace(l=[]) -%}
-        {%- set p_waarde = p_gap_avg * eff_rt -%}
-        {%- for x in pad_kand | sort(attribute='v') -%}
-          {%- set sp = (p_waarde - x.v) / ([x.v | abs, c_prijs_noemer] | max) * 100 -%}
-          {%- if ns.l | length < n_extra and x.s < t_gap_eind_ts and sp >= spread_min and sp > 0 -%}
-            {%- set ns.l = ns.l + [x] -%}
-          {%- endif -%}
-        {%- endfor -%}
+      # Toewijzing: elk duur slot in het gat (duurste eerst) krijgt de goedkoopste laadslots
+      # die vóór dat dure slot eindigen. Een laadslot dat pas na de piek valt, helpt de piek niet.
+      # Een laadslot levert maximaal e_slot kWh (AC) en kan meerdere dure slots bedienen.
+      # Begrensd op de ruimte in de accu.
+      pad_toewijzing: >
+        {%- set ns = namespace(l=[], totaal=0) -%}
+        {%- set max_ac = (room / eff_in) if eff_in > 0 else 0 -%}
+        {%- if pad_actief and e_slot > 0 and eff_rt > 0 -%}
+          {%- set laad_kand = pad_kand | sort(attribute='v') -%}
+          {%- for q in gap_waardevol | sort(attribute='v', reverse=true) -%}
+            {%- set nq = namespace(nodig=q.kwh / eff_rt) -%}
+            {%- for x in laad_kand -%}
+              {%- if nq.nodig > 0.001 and ns.totaal < max_ac and x.e <= q.s and x.e > nu_ts -%}
+                {%- set sp = (q.v * eff_rt - x.v) / ([x.v | abs, c_prijs_noemer] | max) * 100 -%}
+                {%- if sp > 0 and sp >= spread_min -%}
+                  {%- set gebruikt = ns.l | selectattr('s', 'eq', x.s) | map(attribute='k') | sum -%}
+                  {%- set neem = [e_slot - gebruikt, nq.nodig, max_ac - ns.totaal] | min -%}
+                  {%- if neem > 0.001 -%}
+                    {%- set ns.l = ns.l + [{'s': x.s, 'k': neem | round(4)}] -%}
+                    {%- set ns.totaal = ns.totaal + neem -%}
+                    {%- set nq.nodig = nq.nodig - neem -%}
+                  {%- endif -%}
+                {%- endif -%}
+              {%- endif -%}
+            {%- endfor -%}
+          {%- endfor -%}
+        {%- endif -%}
         {{ ns.l }}
+      pad_netladen_ac: "{{ (pad_toewijzing | map(attribute='k') | sum) | round(3) }}"
+      extra_slots: >
+        {%- set ss = pad_toewijzing | map(attribute='s') | list -%}
+        {{ pad_kand | selectattr('s', 'in', ss) | list }}
 
       # ---- Totaal netladen en definitieve slots ------------------------------
       # Het gewone plan en de pad-check overlappen: het gat zit al in de totale energiebalans.

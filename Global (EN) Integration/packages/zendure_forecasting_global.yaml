@@ -729,16 +729,19 @@ template:
           {%- endif -%}
         {%- endfor -%}
         {{ ns.l | sort(attribute='s') }}
+      t_cover_detail: >
+        {%- set ns = namespace(t=0) -%}
+        {%- for p in solar_detail -%}
+          {%- if ns.t == 0 and p.pv >= l_hour -%}{%- set ns.t = [p.s, now_ts] | max -%}{%- endif -%}
+        {%- endfor -%}
+        {{ ns.t }}
       cover_source: >
-        {%- if solar_detail | length > 0 -%}Detailed forecast
+        {%- if solar_detail | length > 0 and t_cover_detail > 0 -%}Detailed forecast
+        {%- elif solar_detail | length > 0 -%}Detailed forecast: solar no longer covers usage, until end of bridge
         {%- elif is_state('sun.sun', 'above_horizon') or solar_forecast_next >= c_cover_min_kwh -%}Sunrise + {{ (c_cover_offset_s / 3600) | round(1) }} hours
         {%- else -%}None (too little solar expected){%- endif -%}
       t_cover_ts: >
-        {%- set ns = namespace(t=none) -%}
-        {%- for p in solar_detail -%}
-          {%- if ns.t is none and p.pv >= l_hour -%}{%- set ns.t = [p.s, now_ts] | max -%}{%- endif -%}
-        {%- endfor -%}
-        {%- if solar_detail | length > 0 -%}{{ ns.t if ns.t is not none else t_end_ts }}
+        {%- if solar_detail | length > 0 -%}{{ t_cover_detail if t_cover_detail > 0 else t_end_ts }}
         {%- elif is_state('sun.sun', 'above_horizon') -%}{{ [next_sun_ts - 86400 + c_cover_offset_s, now_ts] | max }}
         {%- elif solar_forecast_next >= c_cover_min_kwh -%}{{ next_sun_ts + c_cover_offset_s }}
         {%- else -%}{{ t_end_ts }}{%- endif -%}
@@ -792,21 +795,38 @@ template:
         {% for q in gap_valuable %}{% set ns.sum = ns.sum + q.v * q.kwh %}{% set ns.kwh = ns.kwh + q.kwh %}{% endfor %}
         {% if ns.kwh > 0 %}{{ (ns.sum / ns.kwh) | round(5) }}{% else %}0{% endif %}
       path_active: "{{ gap_hours >= c_path_min_hours and gap_valuable_ac >= c_path_min_shortfall_kwh and p_gap_avg > 0 }}"
-      # Grid charge (AC) needed to deliver the expensive slots after charge and discharge loss, capped by battery room
-      path_grid_ac: "{{ ([gap_valuable_ac / eff_rt, room / eff_in] | min) | round(3) if path_active and eff_rt > 0 and eff_in > 0 else 0 }}"
-      n_extra: >
-        {% if path_grid_ac > 0 and e_slot > 0 %}{{ (path_grid_ac / e_slot) | round(0, 'ceil') | int }}{% else %}0{% endif %}
-      # Extra slots: cheapest slots before the end of the gap that (after loss) are cheaper than buying in the expensive slots
-      extra_slots: >
-        {%- set ns = namespace(l=[]) -%}
-        {%- set p_value = p_gap_avg * eff_rt -%}
-        {%- for x in path_cand | sort(attribute='v') -%}
-          {%- set sp = (p_value - x.v) / ([x.v | abs, c_price_floor] | max) * 100 -%}
-          {%- if ns.l | length < n_extra and x.s < t_gap_end_ts and sp >= spread_min and sp > 0 -%}
-            {%- set ns.l = ns.l + [x] -%}
-          {%- endif -%}
-        {%- endfor -%}
+      # Allocation: each expensive slot in the gap (most expensive first) gets the cheapest charge
+      # slots that end before that expensive slot. A charge slot after the peak does not help the peak.
+      # A charge slot delivers at most e_slot kWh (AC) and can serve several expensive slots.
+      # Capped by the room in the battery.
+      path_allocation: >
+        {%- set ns = namespace(l=[], total=0) -%}
+        {%- set max_ac = (room / eff_in) if eff_in > 0 else 0 -%}
+        {%- if path_active and e_slot > 0 and eff_rt > 0 -%}
+          {%- set charge_cand = path_cand | sort(attribute='v') -%}
+          {%- for q in gap_valuable | sort(attribute='v', reverse=true) -%}
+            {%- set nq = namespace(need=q.kwh / eff_rt) -%}
+            {%- for x in charge_cand -%}
+              {%- if nq.need > 0.001 and ns.total < max_ac and x.e <= q.s and x.e > now_ts -%}
+                {%- set sp = (q.v * eff_rt - x.v) / ([x.v | abs, c_price_floor] | max) * 100 -%}
+                {%- if sp > 0 and sp >= spread_min -%}
+                  {%- set used = ns.l | selectattr('s', 'eq', x.s) | map(attribute='k') | sum -%}
+                  {%- set take = [e_slot - used, nq.need, max_ac - ns.total] | min -%}
+                  {%- if take > 0.001 -%}
+                    {%- set ns.l = ns.l + [{'s': x.s, 'k': take | round(4)}] -%}
+                    {%- set ns.total = ns.total + take -%}
+                    {%- set nq.need = nq.need - take -%}
+                  {%- endif -%}
+                {%- endif -%}
+              {%- endif -%}
+            {%- endfor -%}
+          {%- endfor -%}
+        {%- endif -%}
         {{ ns.l }}
+      path_grid_ac: "{{ (path_allocation | map(attribute='k') | sum) | round(3) }}"
+      extra_slots: >
+        {%- set ss = path_allocation | map(attribute='s') | list -%}
+        {{ path_cand | selectattr('s', 'in', ss) | list }}
 
       # ---- Total grid charge and final slots ---------------------------------
       # The regular plan and the path check overlap: the gap is already part of the total
