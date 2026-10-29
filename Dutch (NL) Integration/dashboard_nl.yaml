@@ -1680,7 +1680,7 @@ views:
                   yaxis:
                     - show: false
                   chart:
-                    height: 62px
+                    height: 80px
                     sparkline:
                       enabled: false
                   legend:
@@ -1703,8 +1703,8 @@ views:
                     borderColor: color-mix(in srgb, var(--divider-color) 40%, transparent)
                     strokeDashArray: 0
                     padding:
-                      top: -12
-                      bottom: -12
+                      top: -10
+                      bottom: -28
                       left: 6
                       right: 4
                   tooltip:
@@ -1775,7 +1775,7 @@ views:
                   yaxis:
                     - show: false
                   chart:
-                    height: 62px
+                    height: 80px
                     sparkline:
                       enabled: false
                   legend:
@@ -1798,8 +1798,8 @@ views:
                     borderColor: color-mix(in srgb, var(--divider-color) 40%, transparent)
                     strokeDashArray: 0
                     padding:
-                      top: -12
-                      bottom: -12
+                      top: -10
+                      bottom: -28
                       left: 6
                       right: 4
                   tooltip:
@@ -1882,7 +1882,7 @@ views:
                       max: 100
                       show: false
                   chart:
-                    height: 62px
+                    height: 80px
                     sparkline:
                       enabled: false
                   legend:
@@ -1905,8 +1905,8 @@ views:
                     borderColor: color-mix(in srgb, var(--divider-color) 40%, transparent)
                     strokeDashArray: 0
                     padding:
-                      top: -12
-                      bottom: -12
+                      top: -10
+                      bottom: -28
                       left: 6
                       right: 4
                   tooltip:
@@ -1987,7 +1987,7 @@ views:
                   yaxis:
                     - show: false
                   chart:
-                    height: 84px
+                    height: 100px
                     sparkline:
                       enabled: false
                   legend:
@@ -2010,7 +2010,7 @@ views:
                     borderColor: color-mix(in srgb, var(--divider-color) 40%, transparent)
                     strokeDashArray: 0
                     padding:
-                      top: -12
+                      top: -10
                       bottom: -4
                       left: 6
                       right: 4
