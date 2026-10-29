@@ -1556,8 +1556,92 @@ views:
 
               - Rendement: laden {{ a.efficientie_laden_pct }}%, ontladen {{ a.efficientie_ontladen_pct }}%, samen {{ a.rendement_round_trip_pct }}%
 
+              - Verbruik per uur: **{{ a.verbruik_per_uur_bron }}**, komende 24 uur {{ a.verbruik_komende_24u_kwh }} kWh. Profiel geleerd: {{ states('sensor.forecast_verbruiksprofiel') }} van 48 uren (werkdag + weekend){% if state_attr('sensor.forecast_verbruiksprofiel', 'laatste_uur') %}, laatste meting {{ state_attr('sensor.forecast_verbruiksprofiel', 'laatste_uur') }}: {{ state_attr('sensor.forecast_verbruiksprofiel', 'laatste_uur_kwh') }} kWh{% endif %}
+
               - Laadvermogen: ingesteld {{ a.laadvermogen_ingesteld_kw }} kW, gemeten {{ ((a.laadvermogen_gemeten_w / 1000) | round(2)) if a.laadvermogen_gemeten_w else 'nog niet beschikbaar' }}{{ ' kW' if a.laadvermogen_gemeten_w else '' }}
             text_only: true
+          - type: heading
+            icon: ''
+            heading: Verbruiksprofiel
+            heading_style: title
+          - type: custom:apexcharts-card
+            graph_span: 24h
+            span:
+              start: day
+            header:
+              show: true
+              title: ''
+            apex_config:
+              noData:
+                text: Het profiel wordt nog geleerd (elk heel uur een meting).
+              chart:
+                height: 160px
+              plotOptions:
+                bar:
+                  columnWidth: 80%
+              legend:
+                show: true
+                floating: true
+                horizontalAlign: left
+                offsetY: 17
+              tooltip:
+                x:
+                  format: HH:00
+                  show: true
+                'y':
+                  formatter: |
+                    EVAL: (val) => val === null ? '-' : `${val.toFixed(2)} kWh`
+              grid:
+                show: true
+                borderColor: color-mix(in srgb, var(--divider-color) 50%, transparent)
+                strokeDashArray: 0
+                padding:
+                  top: -10
+              xaxis:
+                labels:
+                  show: true
+                  format: HH
+                  style:
+                    colors: grey
+                axisTicks:
+                  show: false
+              yaxis:
+                - decimalsInFloat: 1
+                  min: 0
+                  labels:
+                    style:
+                      colors: >-
+                        color-mix(in srgb, var(--primary-text-color) 75%,
+                        transparent)
+            series:
+              - entity: sensor.forecast_verbruiksprofiel
+                name: Werkdag
+                type: column
+                color: '#01a180'
+                show:
+                  in_header: false
+                data_generator: |
+                  const d = entity.attributes.werkdag || [];
+                  const base = new Date(); base.setHours(0, 0, 0, 0);
+                  return d.map((v, i) => [base.getTime() + i * 3600000, v]);
+              - entity: sensor.forecast_verbruiksprofiel
+                name: Weekend
+                type: column
+                color: '#a2a2a3'
+                show:
+                  in_header: false
+                data_generator: |
+                  const d = entity.attributes.weekend || [];
+                  const base = new Date(); base.setHours(0, 0, 0, 0);
+                  return d.map((v, i) => [base.getTime() + i * 3600000, v]);
+          - type: markdown
+            content: >-
+              <ha-alert alert-type="info">Help</ha-alert>Gemiddeld verbruik per uur, geleerd uit je eigen meting. Wordt na ongeveer een week bruikbaar.
+            text_only: true
+            visibility:
+              - condition: state
+                entity: input_boolean.help_tonen_op_dashboard
+                state: 'on'
         visibility:
           - condition: state
             entity: input_boolean.forecast_tonen_op_dashboard

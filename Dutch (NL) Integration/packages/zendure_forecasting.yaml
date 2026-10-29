@@ -401,6 +401,118 @@ template:
         state: "{{ states('sensor.forecast_zendure_laden_uit_zon_totaal') | float(0) }}"
 
   # -------------------------------------------------------------------
+  # 3b. Verbruiksprofiel per uur (werkdag en weekend)
+  #     Elk heel uur: het huisverbruik van het afgelopen uur
+  #     (import - export + zon - accu laden + accu ontladen) wordt verwerkt in een
+  #     voortschrijdend gemiddelde voor dat uur van de dag, apart voor werkdag en weekend.
+  #     Feestdagen: is binary_sensor.workday_sensor (Workday-integratie) aanwezig,
+  #     dan bepaalt die of het een werkdag is. Anders geldt ma-vr als werkdag.
+  #     De waarden blijven bewaard na een herstart.
+  #     Let op: de entiteit moet sensor.forecast_verbruiksprofiel heten (leest zijn eigen vorige waarden).
+  # -------------------------------------------------------------------
+  - trigger:
+      - platform: time_pattern
+        minutes: 0
+        seconds: 5
+    variables:
+      c_alpha_min: 0.2                   # gewicht van een nieuwe meting zodra er genoeg metingen zijn
+      c_max_uur_kwh: 15                  # hoger uurverbruik geldt als meetfout
+      nu_ts: "{{ as_timestamp(now()) }}"
+      # Huidige tellerstanden (kWh); -1 = niet beschikbaar
+      t_imp: "{{ states('sensor.forecast_p1_import_totaal') | float(-1) }}"
+      t_exp: "{{ states('sensor.forecast_p1_export_totaal') | float(-1) }}"
+      t_laden: "{{ states('sensor.forecast_zendure_laden_totaal') | float(-1) }}"
+      t_ontl: "{{ states('sensor.forecast_zendure_ontladen_totaal') | float(-1) }}"
+      t_prod: >
+        {% set e = states('input_text.forecast_zon_productie_sensor') %}
+        {% if e | lower | regex_match('^sensor\\..+') and has_value(e) %}
+          {% set u = state_attr(e, 'unit_of_measurement') %}
+          {% set v = states(e) | float(-1) %}
+          {% if v < 0 %}-1{% elif u == 'Wh' %}{{ v / 1000 }}{% elif u == 'MWh' %}{{ v * 1000 }}{% else %}{{ v }}{% endif %}
+        {% else %}-1{% endif %}
+      vorige: "{{ state_attr('sensor.forecast_verbruiksprofiel', 'meting') }}"
+      # 's Nachts mag de omvormer offline zijn: dan geldt de vorige stand (geen productie)
+      prod_nu: >
+        {% if t_prod >= 0 %}{{ t_prod }}
+        {% elif vorige is mapping and not is_state('sun.sun', 'above_horizon') %}{{ vorige.prod }}
+        {% else %}-1{% endif %}
+      meting_ok: "{{ t_imp >= 0 and t_exp >= 0 and t_laden >= 0 and t_ontl >= 0 and prod_nu >= 0 }}"
+      dagtype_nu: >
+        {% if has_value('binary_sensor.workday_sensor') %}{{ 'werkdag' if is_state('binary_sensor.workday_sensor', 'on') else 'weekend' }}
+        {% else %}{{ 'werkdag' if now().weekday() < 5 else 'weekend' }}{% endif %}
+      # Verbruik van het afgelopen uur (alleen als de vorige meting ongeveer een uur oud is)
+      uur_kwh: >
+        {% if meting_ok and vorige is mapping and 3000 <= nu_ts - (vorige.ts | float(0)) <= 4200 %}
+          {% set d = (t_imp - vorige.imp) - (t_exp - vorige.exp) + (prod_nu - vorige.prod) - (t_laden - vorige.laden) + (t_ontl - vorige.ontl) %}
+          {{ (d | round(3)) if 0 <= d <= c_max_uur_kwh else -1 }}
+        {% else %}-1{% endif %}
+      uur_idx: "{{ ((vorige.ts | float(0)) | timestamp_custom('%H', true) | int) if vorige is mapping else -1 }}"
+      uur_type: "{{ (vorige.dagtype if vorige is mapping and vorige.dagtype is defined else 'werkdag') }}"
+    sensor:
+      - name: "Forecast Verbruiksprofiel"
+        unique_id: forecast_verbruiksprofiel
+        icon: mdi:chart-timeline-variant
+        unit_of_measurement: "uur"
+        state: >
+          {% set n1 = state_attr('sensor.forecast_verbruiksprofiel', 'n_werkdag') or [0] * 24 %}
+          {% set n2 = state_attr('sensor.forecast_verbruiksprofiel', 'n_weekend') or [0] * 24 %}
+          {% set ns = namespace(k=0) %}
+          {% for i in range(24) %}{% if n1[i] | int(0) >= 3 %}{% set ns.k = ns.k + 1 %}{% endif %}{% if n2[i] | int(0) >= 2 %}{% set ns.k = ns.k + 1 %}{% endif %}{% endfor %}
+          {{ ns.k }}
+        attributes:
+          # Gemiddeld verbruik (kWh) per uur van de dag, index 0 = 00:00-01:00
+          werkdag: >
+            {% set oud = state_attr('sensor.forecast_verbruiksprofiel', 'werkdag') or [none] * 24 %}
+            {% set n = state_attr('sensor.forecast_verbruiksprofiel', 'n_werkdag') or [0] * 24 %}
+            {% set ns = namespace(l=[]) %}
+            {% for i in range(24) %}
+              {% set w = oud[i] if oud | length == 24 else none %}
+              {% if uur_kwh >= 0 and uur_type == 'werkdag' and uur_idx == i %}
+                {% set a = [1 / ((n[i] | int(0)) + 1), c_alpha_min] | max %}
+                {% set w = uur_kwh if w is none else (w * (1 - a) + uur_kwh * a) %}
+                {% set w = w | round(3) %}
+              {% endif %}
+              {% set ns.l = ns.l + [w] %}
+            {% endfor %}
+            {{ ns.l }}
+          weekend: >
+            {% set oud = state_attr('sensor.forecast_verbruiksprofiel', 'weekend') or [none] * 24 %}
+            {% set n = state_attr('sensor.forecast_verbruiksprofiel', 'n_weekend') or [0] * 24 %}
+            {% set ns = namespace(l=[]) %}
+            {% for i in range(24) %}
+              {% set w = oud[i] if oud | length == 24 else none %}
+              {% if uur_kwh >= 0 and uur_type == 'weekend' and uur_idx == i %}
+                {% set a = [1 / ((n[i] | int(0)) + 1), c_alpha_min] | max %}
+                {% set w = uur_kwh if w is none else (w * (1 - a) + uur_kwh * a) %}
+                {% set w = w | round(3) %}
+              {% endif %}
+              {% set ns.l = ns.l + [w] %}
+            {% endfor %}
+            {{ ns.l }}
+          # Aantal metingen per uur
+          n_werkdag: >
+            {% set n = state_attr('sensor.forecast_verbruiksprofiel', 'n_werkdag') or [0] * 24 %}
+            {% set ns = namespace(l=[]) %}
+            {% for i in range(24) %}
+              {% set k = (n[i] | int(0)) if n | length == 24 else 0 %}
+              {% set ns.l = ns.l + [k + 1 if (uur_kwh >= 0 and uur_type == 'werkdag' and uur_idx == i) else k] %}
+            {% endfor %}
+            {{ ns.l }}
+          n_weekend: >
+            {% set n = state_attr('sensor.forecast_verbruiksprofiel', 'n_weekend') or [0] * 24 %}
+            {% set ns = namespace(l=[]) %}
+            {% for i in range(24) %}
+              {% set k = (n[i] | int(0)) if n | length == 24 else 0 %}
+              {% set ns.l = ns.l + [k + 1 if (uur_kwh >= 0 and uur_type == 'weekend' and uur_idx == i) else k] %}
+            {% endfor %}
+            {{ ns.l }}
+          laatste_uur_kwh: "{{ uur_kwh if uur_kwh >= 0 else none }}"
+          laatste_uur: "{{ ('%02d:00 (%s)' | format(uur_idx, uur_type)) if uur_idx >= 0 and uur_kwh >= 0 else none }}"
+          # Tellerstand van nu, voor de berekening over een uur
+          meting: >
+            {% if meting_ok %}{{ {'ts': nu_ts | round(0), 'imp': t_imp, 'exp': t_exp, 'prod': prod_nu, 'laden': t_laden, 'ontl': t_ontl, 'dagtype': dagtype_nu} }}{% else %}{{ none }}{% endif %}
+
+  # -------------------------------------------------------------------
   # 4. DE PLANNER
   #    Alle berekeningen staan in "variables" (eenmalig per berekening)
   #    en worden door de state en de attributes hergebruikt.
@@ -558,6 +670,40 @@ template:
       gebruik_bron: "{{ 'Berekend (7 dagen)' if gebruik_dag_berekend >= c_min_gebruik_kwh else 'Standaard (invoerveld, nog geen historie)' }}"
       l_uur: "{{ gebruik_dag / 24 }}"
 
+      # ---- Verbruiksprofiel per uur (werkdag / weekend) ----------------
+      # Per uur van de dag geldt het geleerde verbruik zodra er genoeg metingen zijn
+      # (werkdag 3, weekend 2), anders het daggemiddelde / 24.
+      prof_wd: "{{ state_attr('sensor.forecast_verbruiksprofiel', 'werkdag') or [] }}"
+      prof_we: "{{ state_attr('sensor.forecast_verbruiksprofiel', 'weekend') or [] }}"
+      prof_n_wd: "{{ state_attr('sensor.forecast_verbruiksprofiel', 'n_werkdag') or [] }}"
+      prof_n_we: "{{ state_attr('sensor.forecast_verbruiksprofiel', 'n_weekend') or [] }}"
+      vandaag_werkdag: >
+        {% if has_value('binary_sensor.workday_sensor') %}{{ is_state('binary_sensor.workday_sensor', 'on') }}
+        {% else %}{{ now().weekday() < 5 }}{% endif %}
+      # 52 uurblokken vanaf het huidige hele uur: {'s': start, 'kw': kWh per uur, 'p': uit profiel}
+      uur_last: >
+        {%- set ns = namespace(l=[]) -%}
+        {%- set h0 = (nu_ts // 3600) * 3600 -%}
+        {%- set vandaag = now().date() | string -%}
+        {%- for i in range(52) -%}
+          {%- set st = h0 + i * 3600 -%}
+          {%- set h = st | timestamp_custom('%H', true) | int -%}
+          {%- set dag = st | timestamp_custom('%Y-%m-%d', true) -%}
+          {%- set wd = vandaag_werkdag if dag == vandaag else (st | timestamp_custom('%w', true) | int) not in [0, 6] -%}
+          {%- set prof = prof_wd if wd else prof_we -%}
+          {%- set pn = prof_n_wd if wd else prof_n_we -%}
+          {%- set nmin = 3 if wd else 2 -%}
+          {%- set ok = prof | length == 24 and pn | length == 24 and prof[h] is not none and (pn[h] | int(0)) >= nmin -%}
+          {%- set ns.l = ns.l + [{'s': st, 'kw': ((prof[h] | float(l_uur)) if ok else l_uur) | round(4), 'p': ok}] -%}
+        {%- endfor -%}
+        {{ ns.l }}
+      uur_last_eind_ts: "{{ (nu_ts // 3600) * 3600 + 52 * 3600 }}"
+      profiel_aandeel: "{{ (uur_last[:24] | selectattr('p') | list | length / 24 * 100) | round(0) }}"
+      verbruik_bron_uur: >
+        {% if profiel_aandeel >= 100 %}Profiel per uur ({{ 'werkdag' if vandaag_werkdag else 'weekend' }})
+        {% elif profiel_aandeel > 0 %}Deels profiel ({{ profiel_aandeel | int }}% van de komende 24 uur), rest daggemiddelde
+        {% else %}Daggemiddelde (profiel wordt nog geleerd){% endif %}
+
       # ---- Marge ------------------------------------------------------
       marge_pct: "{{ states('input_number.forecast_laad_marge') | float(0) }}"
       marge_dc: "{{ (marge_pct / 100 * cap) | round(3) }}"
@@ -660,7 +806,14 @@ template:
       uren_bridge: "{{ ((t_end_ts - nu_ts) / 3600) | round(2) }}"
       # Zon van vandaag valt in de overbrugging, behalve als de overbrugging vóór zonsopkomst stopt
       zon_in_bridge: "{{ (not zon_dag_is_vandaag) or (t_end_ts > t_zon_ts) }}"
-      last_bridge: "{{ (l_uur * uren_bridge) | round(3) }}"
+      last_bridge: >
+        {%- set ns = namespace(k=0) -%}
+        {%- for u in uur_last -%}
+          {%- set a = [u.s, nu_ts] | max -%}{%- set b = [u.s + 3600, t_end_ts] | min -%}
+          {%- if b > a -%}{%- set ns.k = ns.k + u.kw * (b - a) / 3600 -%}{%- endif -%}
+        {%- endfor -%}
+        {%- if t_end_ts > uur_last_eind_ts -%}{%- set ns.k = ns.k + l_uur * (t_end_ts - uur_last_eind_ts) / 3600 -%}{%- endif -%}
+        {{ ns.k | round(3) }}
       direct_bridge: "{{ direct_rest_kwh if zon_in_bridge else 0 }}"
       # Wat de batterij (of het net) moet leveren tijdens de overbrugging
       need_bridge_ac: "{{ ([last_bridge - direct_bridge, 0] | max) | round(3) }}"
@@ -722,7 +875,8 @@ template:
                 {%- set ps = as_timestamp(p.period_start, 0) -%}
                 {%- if ps > nu_ts - c_detail_periode_s and ps < zon_ondergang_ts and ps not in ns.ts -%}
                   {%- set ns.ts = ns.ts + [ps] -%}
-                  {%- set ns.l = ns.l + [{'s': ps, 'pv': ((p.pv_estimate | float(0)) * betr) | round(3)}] -%}
+                  {%- set kw = (uur_last | selectattr('s', 'le', ps) | map(attribute='kw') | list | last) if (uur_last | selectattr('s', 'le', ps) | list | length) > 0 else l_uur -%}
+                  {%- set ns.l = ns.l + [{'s': ps, 'pv': ((p.pv_estimate | float(0)) * betr) | round(3), 'kw': kw}] -%}
                 {%- endif -%}
               {%- endif -%}
             {%- endfor -%}
@@ -732,7 +886,7 @@ template:
       t_zon_dek_detail: >
         {%- set ns = namespace(t=0) -%}
         {%- for p in zon_detail -%}
-          {%- if ns.t == 0 and p.pv >= l_uur -%}{%- set ns.t = [p.s, nu_ts] | max -%}{%- endif -%}
+          {%- if ns.t == 0 and p.pv >= p.kw -%}{%- set ns.t = [p.s, nu_ts] | max -%}{%- endif -%}
         {%- endfor -%}
         {{ ns.t }}
       zon_dek_bron: >
@@ -747,12 +901,28 @@ template:
         {%- else -%}{{ t_end_ts }}{%- endif -%}
 
       # Het gat: van "accu leeg" tot het eerste van: gewoon laadslot, zon-dekking, einde overbrugging
-      t_leeg_ts: "{{ (nu_ts + s_nu * eff_out / l_uur * 3600) if l_uur > 0 else (nu_ts + 172800) }}"
+      t_leeg_ts: >
+        {%- set ns = namespace(e=s_nu * eff_out, t=0) -%}
+        {%- for u in uur_last -%}
+          {%- if ns.t == 0 -%}
+            {%- set a = [u.s, nu_ts] | max -%}{%- set b = u.s + 3600 -%}
+            {%- set nodig = u.kw * (b - a) / 3600 -%}
+            {%- if nodig >= ns.e and u.kw > 0 -%}{%- set ns.t = a + ns.e / u.kw * 3600 -%}
+            {%- else -%}{%- set ns.e = ns.e - nodig -%}{%- endif -%}
+          {%- endif -%}
+        {%- endfor -%}
+        {{ ns.t if ns.t > 0 else (uur_last_eind_ts + (ns.e / l_uur * 3600 if l_uur > 0 else 172800)) }}
       t_eerste_slot_ts: "{{ (gekozen_basis | map(attribute='s') | min) if gekozen_basis | length > 0 else t_end_ts }}"
       t_gap_eind_ts: "{{ [t_eerste_slot_ts, t_zon_dek_ts, t_end_ts] | min }}"
       t_gap_start_ts: "{{ [t_leeg_ts, nu_ts] | max }}"
       gap_uren: "{{ ([t_gap_eind_ts - t_gap_start_ts, 0] | max / 3600) | round(2) }}"
-      gap_last: "{{ (l_uur * gap_uren) | round(3) }}"
+      gap_last: >
+        {%- set ns = namespace(k=0) -%}
+        {%- for u in uur_last -%}
+          {%- set a = [u.s, t_gap_start_ts] | max -%}{%- set b = [u.s + 3600, t_gap_eind_ts] | min -%}
+          {%- if b > a -%}{%- set ns.k = ns.k + u.kw * (b - a) / 3600 -%}{%- endif -%}
+        {%- endfor -%}
+        {{ ns.k | round(3) }}
       # Kandidaat-slots: de rest van vandaag, plus morgen als die prijzen echt bekend zijn
       pad_kand: "{{ kand + (morg if morgen_bekend else []) }}"
       # Per prijsslot in het gat: verbruik min de zon die daar al direct verbruikt wordt
@@ -767,9 +937,11 @@ template:
             {%- for p in zon_detail -%}
               {%- set pa = [p.s, a] | max -%}
               {%- set pb = [p.s + c_detail_periode_s, b] | min -%}
-              {%- if pb > pa -%}{%- set nz.k = nz.k + ([p.pv, l_uur] | min) * (pb - pa) / 3600 -%}{%- endif -%}
+              {%- if pb > pa -%}{%- set nz.k = nz.k + ([p.pv, p.kw] | min) * (pb - pa) / 3600 -%}{%- endif -%}
             {%- endfor -%}
-            {%- set ns.l = ns.l + [{'s': x.s, 'v': x.v, 'kwh': ([l_uur * (b - a) / 3600 - nz.k, 0] | max) | round(4)}] -%}
+            {%- set uu = uur_last | selectattr('s', 'le', a) | list -%}
+            {%- set kw = (uu | last).kw if uu | length > 0 else l_uur -%}
+            {%- set ns.l = ns.l + [{'s': x.s, 'v': x.v, 'kwh': ([kw * (b - a) / 3600 - nz.k, 0] | max) | round(4)}] -%}
           {%- endif -%}
         {%- endfor -%}
         {{ ns.l }}
@@ -962,6 +1134,8 @@ template:
           zelfverbruik_berekend_pct: "{{ zelfverbruik_berekend if zelfverbruik_berekend >= 0 else none }}"
           gebruik_dag_kwh: "{{ gebruik_dag }}"
           gebruik_bron: "{{ gebruik_bron }}"
+          verbruik_per_uur_bron: "{{ verbruik_bron_uur }}"
+          verbruik_komende_24u_kwh: "{{ (uur_last[:24] | map(attribute='kw') | sum) | round(2) }}"
           historie_dagen: "{{ hist_dagen }}"
           marge_pct: "{{ marge_pct }}"
           marge_kwh: "{{ marge_dc }}"

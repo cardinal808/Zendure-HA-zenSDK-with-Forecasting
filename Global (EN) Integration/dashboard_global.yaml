@@ -1551,8 +1551,92 @@ views:
 
               - Efficiency: charging {{ a.efficiency_charge_pct }}%, discharging {{ a.efficiency_discharge_pct }}%, round trip {{ a.efficiency_round_trip_pct }}%
 
+              - Usage per hour: **{{ a.usage_per_hour_source }}**, next 24 hours {{ a.usage_next_24h_kwh }} kWh. Profile learned: {{ states('sensor.forecast_usage_profile') }} of 48 hours (workday + weekend){% if state_attr('sensor.forecast_usage_profile', 'last_hour') %}, last measurement {{ state_attr('sensor.forecast_usage_profile', 'last_hour') }}: {{ state_attr('sensor.forecast_usage_profile', 'last_hour_kwh') }} kWh{% endif %}
+
               - Charge power: configured {{ a.charge_power_set_kw }} kW, measured {{ ((a.charge_power_measured_w / 1000) | round(2)) if a.charge_power_measured_w else 'not yet available' }}{{ ' kW' if a.charge_power_measured_w else '' }}
             text_only: true
+          - type: heading
+            icon: ''
+            heading: Usage Profile
+            heading_style: title
+          - type: custom:apexcharts-card
+            graph_span: 24h
+            span:
+              start: day
+            header:
+              show: true
+              title: ''
+            apex_config:
+              noData:
+                text: The profile is still being learned (one measurement every full hour).
+              chart:
+                height: 160px
+              plotOptions:
+                bar:
+                  columnWidth: 80%
+              legend:
+                show: true
+                floating: true
+                horizontalAlign: left
+                offsetY: 17
+              tooltip:
+                x:
+                  format: HH:00
+                  show: true
+                'y':
+                  formatter: |
+                    EVAL: (val) => val === null ? '-' : `${val.toFixed(2)} kWh`
+              grid:
+                show: true
+                borderColor: color-mix(in srgb, var(--divider-color) 50%, transparent)
+                strokeDashArray: 0
+                padding:
+                  top: -10
+              xaxis:
+                labels:
+                  show: true
+                  format: HH
+                  style:
+                    colors: grey
+                axisTicks:
+                  show: false
+              yaxis:
+                - decimalsInFloat: 1
+                  min: 0
+                  labels:
+                    style:
+                      colors: >-
+                        color-mix(in srgb, var(--primary-text-color) 75%,
+                        transparent)
+            series:
+              - entity: sensor.forecast_usage_profile
+                name: Workday
+                type: column
+                color: '#01a180'
+                show:
+                  in_header: false
+                data_generator: |
+                  const d = entity.attributes.workday || [];
+                  const base = new Date(); base.setHours(0, 0, 0, 0);
+                  return d.map((v, i) => [base.getTime() + i * 3600000, v]);
+              - entity: sensor.forecast_usage_profile
+                name: Weekend
+                type: column
+                color: '#a2a2a3'
+                show:
+                  in_header: false
+                data_generator: |
+                  const d = entity.attributes.weekend || [];
+                  const base = new Date(); base.setHours(0, 0, 0, 0);
+                  return d.map((v, i) => [base.getTime() + i * 3600000, v]);
+          - type: markdown
+            content: >-
+              <ha-alert alert-type="info">Help</ha-alert>Average usage per hour, learned from your own measurements. Becomes useful after about a week.
+            text_only: true
+            visibility:
+              - condition: state
+                entity: input_boolean.dashboard_setting_show_help
+                state: 'on'
         visibility:
           - condition: state
             entity: input_boolean.dashboard_setting_show_forecasting

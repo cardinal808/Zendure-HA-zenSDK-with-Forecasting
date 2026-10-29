@@ -401,6 +401,118 @@ template:
         state: "{{ states('sensor.forecast_zendure_charge_from_solar_total') | float(0) }}"
 
   # -------------------------------------------------------------------
+  # 3b. Usage profile per hour (workday and weekend)
+  #     Every full hour: the house usage of the past hour
+  #     (import - export + solar - battery charge + battery discharge) is folded into a
+  #     moving average for that hour of the day, separately for workdays and weekends.
+  #     Holidays: if binary_sensor.workday_sensor (Workday integration) exists, it decides
+  #     whether it is a workday. Otherwise Mon-Fri counts as a workday.
+  #     The values are kept after a restart.
+  #     Note: the entity must be named sensor.forecast_usage_profile (it reads its own previous values).
+  # -------------------------------------------------------------------
+  - trigger:
+      - platform: time_pattern
+        minutes: 0
+        seconds: 5
+    variables:
+      c_alpha_min: 0.2                   # weight of a new measurement once there are enough measurements
+      c_max_hour_kwh: 15                 # higher hourly usage counts as a measurement error
+      now_ts: "{{ as_timestamp(now()) }}"
+      # Current counter values (kWh); -1 = not available
+      t_imp: "{{ states('sensor.forecast_grid_import_total') | float(-1) }}"
+      t_exp: "{{ states('sensor.forecast_grid_export_total') | float(-1) }}"
+      t_charge: "{{ states('sensor.forecast_zendure_charge_total') | float(-1) }}"
+      t_disch: "{{ states('sensor.forecast_zendure_discharge_total') | float(-1) }}"
+      t_prod: >
+        {% set e = states('input_text.forecast_setting_solar_production_sensor') %}
+        {% if e | lower | regex_match('^sensor\\..+') and has_value(e) %}
+          {% set u = state_attr(e, 'unit_of_measurement') %}
+          {% set v = states(e) | float(-1) %}
+          {% if v < 0 %}-1{% elif u == 'Wh' %}{{ v / 1000 }}{% elif u == 'MWh' %}{{ v * 1000 }}{% else %}{{ v }}{% endif %}
+        {% else %}-1{% endif %}
+      prev: "{{ state_attr('sensor.forecast_usage_profile', 'measurement') }}"
+      # At night the inverter may be offline: then the previous value applies (no production)
+      prod_now: >
+        {% if t_prod >= 0 %}{{ t_prod }}
+        {% elif prev is mapping and not is_state('sun.sun', 'above_horizon') %}{{ prev.prod }}
+        {% else %}-1{% endif %}
+      measurement_ok: "{{ t_imp >= 0 and t_exp >= 0 and t_charge >= 0 and t_disch >= 0 and prod_now >= 0 }}"
+      daytype_now: >
+        {% if has_value('binary_sensor.workday_sensor') %}{{ 'workday' if is_state('binary_sensor.workday_sensor', 'on') else 'weekend' }}
+        {% else %}{{ 'workday' if now().weekday() < 5 else 'weekend' }}{% endif %}
+      # Usage of the past hour (only if the previous measurement is about one hour old)
+      hour_kwh: >
+        {% if measurement_ok and prev is mapping and 3000 <= now_ts - (prev.ts | float(0)) <= 4200 %}
+          {% set d = (t_imp - prev.imp) - (t_exp - prev.exp) + (prod_now - prev.prod) - (t_charge - prev.charge) + (t_disch - prev.disch) %}
+          {{ (d | round(3)) if 0 <= d <= c_max_hour_kwh else -1 }}
+        {% else %}-1{% endif %}
+      hour_idx: "{{ ((prev.ts | float(0)) | timestamp_custom('%H', true) | int) if prev is mapping else -1 }}"
+      hour_type: "{{ (prev.daytype if prev is mapping and prev.daytype is defined else 'workday') }}"
+    sensor:
+      - name: "Forecast Usage Profile"
+        unique_id: forecast_usage_profile
+        icon: mdi:chart-timeline-variant
+        unit_of_measurement: "h"
+        state: >
+          {% set n1 = state_attr('sensor.forecast_usage_profile', 'n_workday') or [0] * 24 %}
+          {% set n2 = state_attr('sensor.forecast_usage_profile', 'n_weekend') or [0] * 24 %}
+          {% set ns = namespace(k=0) %}
+          {% for i in range(24) %}{% if n1[i] | int(0) >= 3 %}{% set ns.k = ns.k + 1 %}{% endif %}{% if n2[i] | int(0) >= 2 %}{% set ns.k = ns.k + 1 %}{% endif %}{% endfor %}
+          {{ ns.k }}
+        attributes:
+          # Average usage (kWh) per hour of the day, index 0 = 00:00-01:00
+          workday: >
+            {% set old = state_attr('sensor.forecast_usage_profile', 'workday') or [none] * 24 %}
+            {% set n = state_attr('sensor.forecast_usage_profile', 'n_workday') or [0] * 24 %}
+            {% set ns = namespace(l=[]) %}
+            {% for i in range(24) %}
+              {% set w = old[i] if old | length == 24 else none %}
+              {% if hour_kwh >= 0 and hour_type == 'workday' and hour_idx == i %}
+                {% set a = [1 / ((n[i] | int(0)) + 1), c_alpha_min] | max %}
+                {% set w = hour_kwh if w is none else (w * (1 - a) + hour_kwh * a) %}
+                {% set w = w | round(3) %}
+              {% endif %}
+              {% set ns.l = ns.l + [w] %}
+            {% endfor %}
+            {{ ns.l }}
+          weekend: >
+            {% set old = state_attr('sensor.forecast_usage_profile', 'weekend') or [none] * 24 %}
+            {% set n = state_attr('sensor.forecast_usage_profile', 'n_weekend') or [0] * 24 %}
+            {% set ns = namespace(l=[]) %}
+            {% for i in range(24) %}
+              {% set w = old[i] if old | length == 24 else none %}
+              {% if hour_kwh >= 0 and hour_type == 'weekend' and hour_idx == i %}
+                {% set a = [1 / ((n[i] | int(0)) + 1), c_alpha_min] | max %}
+                {% set w = hour_kwh if w is none else (w * (1 - a) + hour_kwh * a) %}
+                {% set w = w | round(3) %}
+              {% endif %}
+              {% set ns.l = ns.l + [w] %}
+            {% endfor %}
+            {{ ns.l }}
+          # Number of measurements per hour
+          n_workday: >
+            {% set n = state_attr('sensor.forecast_usage_profile', 'n_workday') or [0] * 24 %}
+            {% set ns = namespace(l=[]) %}
+            {% for i in range(24) %}
+              {% set k = (n[i] | int(0)) if n | length == 24 else 0 %}
+              {% set ns.l = ns.l + [k + 1 if (hour_kwh >= 0 and hour_type == 'workday' and hour_idx == i) else k] %}
+            {% endfor %}
+            {{ ns.l }}
+          n_weekend: >
+            {% set n = state_attr('sensor.forecast_usage_profile', 'n_weekend') or [0] * 24 %}
+            {% set ns = namespace(l=[]) %}
+            {% for i in range(24) %}
+              {% set k = (n[i] | int(0)) if n | length == 24 else 0 %}
+              {% set ns.l = ns.l + [k + 1 if (hour_kwh >= 0 and hour_type == 'weekend' and hour_idx == i) else k] %}
+            {% endfor %}
+            {{ ns.l }}
+          last_hour_kwh: "{{ hour_kwh if hour_kwh >= 0 else none }}"
+          last_hour: "{{ ('%02d:00 (%s)' | format(hour_idx, hour_type)) if hour_idx >= 0 and hour_kwh >= 0 else none }}"
+          # Counter values now, for the calculation an hour from now
+          measurement: >
+            {% if measurement_ok %}{{ {'ts': now_ts | round(0), 'imp': t_imp, 'exp': t_exp, 'prod': prod_now, 'charge': t_charge, 'disch': t_disch, 'daytype': daytype_now} }}{% else %}{{ none }}{% endif %}
+
+  # -------------------------------------------------------------------
   # 4. THE PLANNER
   #    All calculations are in "variables" (once per calculation)
   #    and are reused by the state and the attributes.
@@ -558,6 +670,40 @@ template:
       usage_source: "{{ 'Calculated (7 days)' if usage_day_calculated >= c_min_usage_kwh else 'Default (input field, no history yet)' }}"
       l_hour: "{{ usage_day / 24 }}"
 
+      # ---- Usage profile per hour (workday / weekend) -----------------
+      # Per hour of the day the learned usage applies once there are enough measurements
+      # (workday 3, weekend 2), otherwise the day average / 24.
+      prof_wd: "{{ state_attr('sensor.forecast_usage_profile', 'workday') or [] }}"
+      prof_we: "{{ state_attr('sensor.forecast_usage_profile', 'weekend') or [] }}"
+      prof_n_wd: "{{ state_attr('sensor.forecast_usage_profile', 'n_workday') or [] }}"
+      prof_n_we: "{{ state_attr('sensor.forecast_usage_profile', 'n_weekend') or [] }}"
+      today_workday: >
+        {% if has_value('binary_sensor.workday_sensor') %}{{ is_state('binary_sensor.workday_sensor', 'on') }}
+        {% else %}{{ now().weekday() < 5 }}{% endif %}
+      # 52 hour blocks from the current full hour: {'s': start, 'kw': kWh per hour, 'p': from profile}
+      hour_load: >
+        {%- set ns = namespace(l=[]) -%}
+        {%- set h0 = (now_ts // 3600) * 3600 -%}
+        {%- set today = now().date() | string -%}
+        {%- for i in range(52) -%}
+          {%- set st = h0 + i * 3600 -%}
+          {%- set h = st | timestamp_custom('%H', true) | int -%}
+          {%- set day = st | timestamp_custom('%Y-%m-%d', true) -%}
+          {%- set wd = today_workday if day == today else (st | timestamp_custom('%w', true) | int) not in [0, 6] -%}
+          {%- set prof = prof_wd if wd else prof_we -%}
+          {%- set pn = prof_n_wd if wd else prof_n_we -%}
+          {%- set nmin = 3 if wd else 2 -%}
+          {%- set ok = prof | length == 24 and pn | length == 24 and prof[h] is not none and (pn[h] | int(0)) >= nmin -%}
+          {%- set ns.l = ns.l + [{'s': st, 'kw': ((prof[h] | float(l_hour)) if ok else l_hour) | round(4), 'p': ok}] -%}
+        {%- endfor -%}
+        {{ ns.l }}
+      hour_load_end_ts: "{{ (now_ts // 3600) * 3600 + 52 * 3600 }}"
+      profile_share: "{{ (hour_load[:24] | selectattr('p') | list | length / 24 * 100) | round(0) }}"
+      usage_source_hour: >
+        {% if profile_share >= 100 %}Profile per hour ({{ 'workday' if today_workday else 'weekend' }})
+        {% elif profile_share > 0 %}Partly profile ({{ profile_share | int }}% of the next 24 hours), rest day average
+        {% else %}Day average (profile still being learned){% endif %}
+
       # ---- Margin -----------------------------------------------------
       margin_pct: "{{ states('input_number.forecast_setting_charge_margin') | float(0) }}"
       margin_dc: "{{ (margin_pct / 100 * cap) | round(3) }}"
@@ -660,7 +806,14 @@ template:
       hours_bridge: "{{ ((t_end_ts - now_ts) / 3600) | round(2) }}"
       # Today's sun falls within the bridge, unless the bridge ends before sunrise
       sun_in_bridge: "{{ (not sun_day_is_today) or (t_end_ts > t_sun_ts) }}"
-      load_bridge: "{{ (l_hour * hours_bridge) | round(3) }}"
+      load_bridge: >
+        {%- set ns = namespace(k=0) -%}
+        {%- for u in hour_load -%}
+          {%- set a = [u.s, now_ts] | max -%}{%- set b = [u.s + 3600, t_end_ts] | min -%}
+          {%- if b > a -%}{%- set ns.k = ns.k + u.kw * (b - a) / 3600 -%}{%- endif -%}
+        {%- endfor -%}
+        {%- if t_end_ts > hour_load_end_ts -%}{%- set ns.k = ns.k + l_hour * (t_end_ts - hour_load_end_ts) / 3600 -%}{%- endif -%}
+        {{ ns.k | round(3) }}
       direct_bridge: "{{ direct_rest_kwh if sun_in_bridge else 0 }}"
       # What the battery (or the grid) has to deliver during the bridge
       need_bridge_ac: "{{ ([load_bridge - direct_bridge, 0] | max) | round(3) }}"
@@ -722,7 +875,8 @@ template:
                 {%- set ps = as_timestamp(p.period_start, 0) -%}
                 {%- if ps > now_ts - c_detail_period_s and ps < sunset_ts and ps not in ns.ts -%}
                   {%- set ns.ts = ns.ts + [ps] -%}
-                  {%- set ns.l = ns.l + [{'s': ps, 'pv': ((p.pv_estimate | float(0)) * reliab) | round(3)}] -%}
+                  {%- set kw = (hour_load | selectattr('s', 'le', ps) | map(attribute='kw') | list | last) if (hour_load | selectattr('s', 'le', ps) | list | length) > 0 else l_hour -%}
+                  {%- set ns.l = ns.l + [{'s': ps, 'pv': ((p.pv_estimate | float(0)) * reliab) | round(3), 'kw': kw}] -%}
                 {%- endif -%}
               {%- endif -%}
             {%- endfor -%}
@@ -732,7 +886,7 @@ template:
       t_cover_detail: >
         {%- set ns = namespace(t=0) -%}
         {%- for p in solar_detail -%}
-          {%- if ns.t == 0 and p.pv >= l_hour -%}{%- set ns.t = [p.s, now_ts] | max -%}{%- endif -%}
+          {%- if ns.t == 0 and p.pv >= p.kw -%}{%- set ns.t = [p.s, now_ts] | max -%}{%- endif -%}
         {%- endfor -%}
         {{ ns.t }}
       cover_source: >
@@ -747,12 +901,28 @@ template:
         {%- else -%}{{ t_end_ts }}{%- endif -%}
 
       # The gap: from "battery empty" to the first of: regular charge slot, solar coverage, end of bridge
-      t_empty_ts: "{{ (now_ts + s_now * eff_out / l_hour * 3600) if l_hour > 0 else (now_ts + 172800) }}"
+      t_empty_ts: >
+        {%- set ns = namespace(e=s_now * eff_out, t=0) -%}
+        {%- for u in hour_load -%}
+          {%- if ns.t == 0 -%}
+            {%- set a = [u.s, now_ts] | max -%}{%- set b = u.s + 3600 -%}
+            {%- set need = u.kw * (b - a) / 3600 -%}
+            {%- if need >= ns.e and u.kw > 0 -%}{%- set ns.t = a + ns.e / u.kw * 3600 -%}
+            {%- else -%}{%- set ns.e = ns.e - need -%}{%- endif -%}
+          {%- endif -%}
+        {%- endfor -%}
+        {{ ns.t if ns.t > 0 else (hour_load_end_ts + (ns.e / l_hour * 3600 if l_hour > 0 else 172800)) }}
       t_first_slot_ts: "{{ (chosen_base | map(attribute='s') | min) if chosen_base | length > 0 else t_end_ts }}"
       t_gap_end_ts: "{{ [t_first_slot_ts, t_cover_ts, t_end_ts] | min }}"
       t_gap_start_ts: "{{ [t_empty_ts, now_ts] | max }}"
       gap_hours: "{{ ([t_gap_end_ts - t_gap_start_ts, 0] | max / 3600) | round(2) }}"
-      gap_load: "{{ (l_hour * gap_hours) | round(3) }}"
+      gap_load: >
+        {%- set ns = namespace(k=0) -%}
+        {%- for u in hour_load -%}
+          {%- set a = [u.s, t_gap_start_ts] | max -%}{%- set b = [u.s + 3600, t_gap_end_ts] | min -%}
+          {%- if b > a -%}{%- set ns.k = ns.k + u.kw * (b - a) / 3600 -%}{%- endif -%}
+        {%- endfor -%}
+        {{ ns.k | round(3) }}
       # Candidate slots: the rest of today, plus tomorrow once those prices are actually known
       path_cand: "{{ cand + (tmrw if tomorrow_known else []) }}"
       # Per price slot in the gap: usage minus the solar that is already used directly there
@@ -767,9 +937,11 @@ template:
             {%- for p in solar_detail -%}
               {%- set pa = [p.s, a] | max -%}
               {%- set pb = [p.s + c_detail_period_s, b] | min -%}
-              {%- if pb > pa -%}{%- set nz.k = nz.k + ([p.pv, l_hour] | min) * (pb - pa) / 3600 -%}{%- endif -%}
+              {%- if pb > pa -%}{%- set nz.k = nz.k + ([p.pv, p.kw] | min) * (pb - pa) / 3600 -%}{%- endif -%}
             {%- endfor -%}
-            {%- set ns.l = ns.l + [{'s': x.s, 'v': x.v, 'kwh': ([l_hour * (b - a) / 3600 - nz.k, 0] | max) | round(4)}] -%}
+            {%- set uu = hour_load | selectattr('s', 'le', a) | list -%}
+            {%- set kw = (uu | last).kw if uu | length > 0 else l_hour -%}
+            {%- set ns.l = ns.l + [{'s': x.s, 'v': x.v, 'kwh': ([kw * (b - a) / 3600 - nz.k, 0] | max) | round(4)}] -%}
           {%- endif -%}
         {%- endfor -%}
         {{ ns.l }}
@@ -962,6 +1134,8 @@ template:
           self_consumption_calculated_pct: "{{ self_consumption_calculated if self_consumption_calculated >= 0 else none }}"
           usage_day_kwh: "{{ usage_day }}"
           usage_source: "{{ usage_source }}"
+          usage_per_hour_source: "{{ usage_source_hour }}"
+          usage_next_24h_kwh: "{{ (hour_load[:24] | map(attribute='kw') | sum) | round(2) }}"
           history_days: "{{ hist_days }}"
           margin_pct: "{{ margin_pct }}"
           margin_kwh: "{{ margin_dc }}"
