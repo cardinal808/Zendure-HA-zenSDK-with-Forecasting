@@ -39,15 +39,6 @@ input_text:
     mode: text
 
 input_number:
-  forecast_zelfverbruik_overwrite:
-    name: Forecast Zelfverbruik Zon (alleen invullen indien overwrite)
-    icon: mdi:home-lightning-bolt
-    min: 0
-    max: 100
-    step: 1
-    mode: box
-    unit_of_measurement: "%"
-
   forecast_laad_marge:
     name: Forecast Batterij Laadmarge
     icon: mdi:battery-plus-variant
@@ -56,15 +47,6 @@ input_number:
     step: 1
     mode: box
     unit_of_measurement: "%"
-
-  forecast_gebruik_standaard:
-    name: Forecast Standaard Dagverbruik (tot er historie is)
-    icon: mdi:home-lightning-bolt-outline
-    min: 0
-    max: 50
-    step: 0.5
-    mode: box
-    unit_of_measurement: "kWh"
 
   forecast_betrouwbaarheid:
     name: Forecast Betrouwbaarheid Zonvoorspelling
@@ -532,10 +514,8 @@ template:
           - input_text.forecast_zon_resterend_vandaag_sensor
           - input_text.forecast_zon_morgen_sensor
           - input_text.forecast_zon_productie_sensor
-          - input_number.forecast_zelfverbruik_overwrite
           - input_number.forecast_laad_marge
           - input_number.forecast_betrouwbaarheid
-          - input_number.forecast_gebruik_standaard
           - input_boolean.forecast_dal_ontladen_blokkeren
           - sensor.forecast_gemeten_laadvermogen
           - input_number.dynamisch_minimale_spread
@@ -547,9 +527,11 @@ template:
           - sensor.zendure_2400_ac_maximale_laadpercentage
     variables:
       # ---- Instellingen (vaste waarden, hier aan te passen) ------------
-      c_zelfverbruik_standaard_pct: 30   # zelfverbruik zolang er nog geen historie is
-      c_min_productie_kwh: 2             # minimale zonproductie in 7 dagen voor een berekening
-      c_min_gebruik_kwh: 1               # lager berekend dagverbruik wordt genegeerd
+      c_zelfverbruik_standaard_pct: 30   # startwaarde zelfverbruik tot de eerste zonproductie gemeten is
+      c_gebruik_start_kwh: 8             # startwaarde dagverbruik, alleen in de eerste uren na installatie
+      c_min_hist_dagen: 0.08             # historie vanaf ongeveer 2 uur wordt al gebruikt (dag 1)
+      c_min_productie_kwh: 0.3           # minimale gemeten zonproductie voor een zelfverbruik-berekening
+      c_min_gebruik_kwh: 0.2             # lager berekend dagverbruik wordt genegeerd
       c_zon_offset_s: 7200               # zon geldt als "voldoende" 2 uur na zonsopkomst
       c_min_overbrugging_s: 1800         # overbrugging is minstens 30 minuten
       c_laden_start_kwh: 0.3             # vanaf dit netladen (kWh) begint een laadronde
@@ -634,40 +616,36 @@ template:
       # Direct verbruikte zon in 7 dagen = productie - teruglevering uit zon - laden uit zon
       direct_7_kwh: "{{ [prod7 - exp_zon7 - laden_zon7, 0] | max }}"
       # Zelfverbruik zon (%) = direct verbruikte zon / productie
+      # Wordt vanaf de eerste gemeten zonproductie berekend (dag 1), met de historie die er is.
       zelfverbruik_berekend: >
-        {% if prod7 >= c_min_productie_kwh %}
+        {% if prod7 >= c_min_productie_kwh and hist_dagen >= c_min_hist_dagen %}
           {{ ([direct_7_kwh / prod7 * 100, 100] | min) | round(1) }}
         {% else %}-1{% endif %}
-      zelfverbruik_overwrite: "{{ states('input_number.forecast_zelfverbruik_overwrite') | float(0) }}"
-      zelfverbruik_pct: >
-        {% if zelfverbruik_overwrite > 0 %}{{ zelfverbruik_overwrite }}
-        {% elif zelfverbruik_berekend >= 0 %}{{ zelfverbruik_berekend }}
-        {% else %}{{ c_zelfverbruik_standaard_pct }}{% endif %}
-      zelfverbruik_bron: >
-        {% if zelfverbruik_overwrite > 0 %}Overwrite
-        {% elif zelfverbruik_berekend >= 0 %}Berekend (7 dagen, kWh per dag)
-        {% else %}Standaard (nog geen historie){% endif %}
+      zelfverbruik_pct: "{{ zelfverbruik_berekend if zelfverbruik_berekend >= 0 else c_zelfverbruik_standaard_pct }}"
       direct: "{{ zelfverbruik_pct / 100 }}"
-      # Direct zonneverbruik in kWh per dag (7-daags gemiddelde). Dit is vrijwel constant,
-      # dus op een sombere dag is het percentage hoog en op een zonnige dag laag.
+      # Direct zonneverbruik in kWh per dag (gemiddelde over de beschikbare historie, max. 7 dagen).
+      # Dit is vrijwel constant, dus op een sombere dag is het percentage hoog en op een zonnige dag laag.
+      # Pas vanaf 1 dag historie: een deel van een dag omrekenen naar een hele dag geeft een scheef beeld.
       direct_dag_kwh: >
-        {% if prod7 >= c_min_productie_kwh and hist_dagen >= 0.5 %}
+        {% if prod7 >= c_min_productie_kwh and hist_dagen >= 1 %}
           {{ (direct_7_kwh / hist_dagen) | round(2) }}
         {% else %}-1{% endif %}
-      # kWh-model alleen als er historie is en er geen overwrite is ingevuld
-      direct_model_kwh: "{{ zelfverbruik_overwrite <= 0 and direct_dag_kwh >= 0 }}"
+      direct_model_kwh: "{{ direct_dag_kwh >= 0 }}"
+      zelfverbruik_bron: >
+        {% if direct_model_kwh %}Berekend (kWh per dag, {{ [hist_dagen, 7] | min | round(1) }} van 7 dagen)
+        {% elif zelfverbruik_berekend >= 0 %}Berekend (% van de productie, dag 1)
+        {% else %}Startwaarde {{ c_zelfverbruik_standaard_pct }}% (nog geen zonproductie gemeten){% endif %}
 
       # Gemiddeld gebruik per dag = import - export + productie - laden + ontladen
+      # Wordt vanaf ongeveer 2 uur historie berekend en omgerekend naar een dag; wordt elke dag nauwkeuriger.
       gebruik_dag_berekend: >
-        {% if hist_dagen >= 0.5 and (imp7 + prod7) > 0 %}
+        {% if hist_dagen >= c_min_hist_dagen and (imp7 + prod7) > 0 %}
           {{ (([imp7 - exp7 + prod7 - laden7 + ontladen7, 0] | max) / hist_dagen) | round(2) }}
         {% else %}-1{% endif %}
-      # Standaard dagverbruik (invoerveld); 0 = interne fallback van 8 kWh
-      gebruik_standaard: >
-        {% set g = states('input_number.forecast_gebruik_standaard') | float(0) %}
-        {{ g if g > 0 else 8 }}
-      gebruik_dag: "{{ gebruik_dag_berekend if gebruik_dag_berekend >= c_min_gebruik_kwh else gebruik_standaard }}"
-      gebruik_bron: "{{ 'Berekend (7 dagen)' if gebruik_dag_berekend >= c_min_gebruik_kwh else 'Standaard (invoerveld, nog geen historie)' }}"
+      gebruik_dag: "{{ gebruik_dag_berekend if gebruik_dag_berekend >= c_min_gebruik_kwh else c_gebruik_start_kwh }}"
+      gebruik_bron: >
+        {% if gebruik_dag_berekend >= c_min_gebruik_kwh %}Berekend ({{ [hist_dagen, 7] | min | round(1) }} van 7 dagen{{ ', dag 1' if hist_dagen < 1 else '' }})
+        {% else %}Startwaarde {{ c_gebruik_start_kwh }} kWh (eerste uren, historie wordt opgebouwd){% endif %}
       l_uur: "{{ gebruik_dag / 24 }}"
 
       # ---- Verbruiksprofiel per uur (werkdag / weekend) ----------------

@@ -17,8 +17,8 @@ The battery charges at the cheapest moments, but **only as much as is actually n
 - **Scenario A** (tomorrow cheaper or equal, or prices not yet known): charges enough to bridge until tomorrow's cheap moment or until there is enough sun, plus an adjustable margin.
 - **Scenario B** (tomorrow more expensive): charges as full as possible, as long as the price now is lower than tomorrow's charging moment.
 - Takes expected solar (today and tomorrow) into account, with a reliability percentage.
-- **Solar self-consumption** is calculated from the last 7 days in kWh per day (on a dull day the percentage is higher than on a sunny one), with a manual override.
-- **Average daily usage** comes from 7 days of history (import, export, production, battery in/out), with an adjustable starting value.
+- **Solar self-consumption** is calculated automatically from day 1: on the first day as a percentage of production, after that in kWh per day over up to 7 days (on a dull day the percentage is higher than on a sunny one). No input field needed.
+- **Average daily usage** comes from your own history (import, export, production, battery in/out): calculated from about 2 hours after installation and more accurate every day, up to 7 days. No input field needed.
 - **Efficiency filter:** a charge slot must be cheaper than the value of the stored energy after round-trip loss, and in scenario A below the day average.
 - **Path check:** calculates when the battery runs empty and when energy comes in again: the first charge slot or the moment solar covers usage (from the Solcast detailed forecast, otherwise sunrise + 3 hours). If there is a gap, extra charge slots are planned before it, even when nothing else needs to be charged. Only the expensive slots in the gap count: a charge slot must lie before the expensive slot it replaces and be cheaper after round-trip loss.
 - **Usage profile per hour**, separately for workdays and weekends: every full hour your actual house usage is measured and folded into a moving average per hour of the day (`sensor.forecast_usage_profile`). The planner uses it per quarter for the path check, the moment the battery runs empty, solar coverage and the bridge. Until an hour has enough measurements (workday 3, weekend 2), the day average applies. Holidays follow `binary_sensor.workday_sensor` (Workday integration) if it exists.
@@ -45,7 +45,7 @@ First install the original integration as described below (packages file, automa
 1. Put `zendure_forecasting_global.yaml` (Global) or `zendure_forecasting.yaml` (NL) in the same `packages` folder as the Gielz package, and replace the Gielz package with the version from this fork.
 2. Replace the automation and the dashboard with the versions from this fork (or merge the changes into your own version).
 3. Restart Home Assistant.
-4. On the Configuration tab, under **Configuration (Forecasting)**, enter: the sensor for solar remaining today, solar tomorrow (kWh, e.g. Forecast.Solar or Solcast) and a total counter of your solar panels (kWh). Optionally set the default daily usage and the charge margin.
+4. On the Configuration tab, under **Configuration (Forecasting)**, enter: the sensor for solar remaining today, solar tomorrow (kWh, e.g. Forecast.Solar or Solcast) and a total counter of your solar panels (kWh). Optionally set the charge margin.
 5. Select the mode **Dynamic Smart Matching + Forecasting**.
 
 **Requires:** the Gielz package, Nord Pool (as already set up in Gielz), a P1/home energy meter, a solar forecast integration and apexcharts-card for the Gielz dashboard. The planner becomes more accurate after about a week of history.

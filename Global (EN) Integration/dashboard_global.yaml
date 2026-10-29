@@ -3604,8 +3604,9 @@ views:
               <ha-alert alert-type="info">Help text</ha-alert>For the mode
               **Dynamic Smart Matching + Forecasting**. Enter the entity_id of your
               solar forecast sensors (kWh, e.g. Forecast.Solar or Solcast) and of
-              a total counter (kWh) of your solar panels. Leave self-consumption
-              at 0 to calculate it automatically from the last 7 days. The
+              a total counter (kWh) of your solar panels. Solar self-consumption
+              and daily usage are calculated automatically from day 1 from your own
+              measurements and get more accurate every day (up to 7 days). The
               charge margin is an extra buffer as a percentage of the battery
               capacity.
             text_only: true
@@ -3624,18 +3625,12 @@ views:
                 name: Solar tomorrow sensor
               - entity: input_text.forecast_setting_solar_production_sensor
                 name: Solar panels production sensor (total kWh)
-              - entity: input_number.forecast_setting_self_consumption_override
-                name: Solar self-consumption % (only fill in to override)
               - entity: input_number.forecast_setting_charge_margin
                 name: Battery charge margin %
-              - entity: input_number.forecast_setting_default_daily_usage
-                name: Default daily usage kWh (until history exists)
               - entity: input_number.forecast_setting_solar_reliability
                 name: Solar forecast reliability % (0 = 100%)
               - entity: input_boolean.forecast_setting_hold_discharge_in_dip
                 name: Hold discharge in cheap dip (save the battery)
-              - entity: sensor.forecast_measured_charge_power
-                name: Measured grid charge power
               - entity: binary_sensor.forecast_discharge_held_in_dip
                 name: Discharge held now (dip)
             visibility:

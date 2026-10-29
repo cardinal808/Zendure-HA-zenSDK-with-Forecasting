@@ -3611,9 +3611,9 @@ views:
               <ha-alert alert-type="info">Helptekst</ha-alert>Voor de modus
               **Dynamisch NOM + Forecasting**. Vul de entity_id in van je
               zon-forecast sensors (kWh, bv. Forecast.Solar of Solcast) en van
-              een totaalteller (kWh) van je zonnepanelen. Laat het zelfverbruik
-              op 0 staan om het automatisch uit de afgelopen 7 dagen te
-              berekenen. De laadmarge is een extra buffer als percentage van de
+              een totaalteller (kWh) van je zonnepanelen. Zelfverbruik zon en
+              dagverbruik worden vanaf dag 1 automatisch berekend uit je eigen
+              metingen en worden elke dag nauwkeuriger (tot 7 dagen). De laadmarge is een extra buffer als percentage van de
               batterijcapaciteit.
             text_only: true
             visibility:
@@ -3631,18 +3631,12 @@ views:
                 name: Zon morgen sensor
               - entity: input_text.forecast_zon_productie_sensor
                 name: Zonnepanelen productie sensor (totaal kWh)
-              - entity: input_number.forecast_zelfverbruik_overwrite
-                name: Zelfverbruik zon % (alleen invullen indien overwrite)
               - entity: input_number.forecast_laad_marge
                 name: Batterij laadmarge %
-              - entity: input_number.forecast_gebruik_standaard
-                name: Standaard dagverbruik kWh (tot er historie is)
               - entity: input_number.forecast_betrouwbaarheid
                 name: Betrouwbaarheid zonvoorspelling % (0 = 100%)
               - entity: input_boolean.forecast_dal_ontladen_blokkeren
                 name: Niet ontladen in goedkoop dal (accu sparen)
-              - entity: sensor.forecast_gemeten_laadvermogen
-                name: Gemeten netlaadvermogen
               - entity: binary_sensor.forecast_dal_ontladen_geblokkeerd
                 name: Ontladen nu vastgehouden (dal)
             visibility:

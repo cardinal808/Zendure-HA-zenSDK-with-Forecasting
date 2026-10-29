@@ -39,15 +39,6 @@ input_text:
     mode: text
 
 input_number:
-  forecast_setting_self_consumption_override:
-    name: Forecast Solar Self-Consumption (only fill in to override)
-    icon: mdi:home-lightning-bolt
-    min: 0
-    max: 100
-    step: 1
-    mode: box
-    unit_of_measurement: "%"
-
   forecast_setting_charge_margin:
     name: Forecast Battery Charge Margin
     icon: mdi:battery-plus-variant
@@ -56,15 +47,6 @@ input_number:
     step: 1
     mode: box
     unit_of_measurement: "%"
-
-  forecast_setting_default_daily_usage:
-    name: Forecast Default Daily Usage (until history exists)
-    icon: mdi:home-lightning-bolt-outline
-    min: 0
-    max: 50
-    step: 0.5
-    mode: box
-    unit_of_measurement: "kWh"
 
   forecast_setting_solar_reliability:
     name: Forecast Solar Forecast Reliability
@@ -532,10 +514,8 @@ template:
           - input_text.forecast_setting_solar_remaining_today_sensor
           - input_text.forecast_setting_solar_tomorrow_sensor
           - input_text.forecast_setting_solar_production_sensor
-          - input_number.forecast_setting_self_consumption_override
           - input_number.forecast_setting_charge_margin
           - input_number.forecast_setting_solar_reliability
-          - input_number.forecast_setting_default_daily_usage
           - input_boolean.forecast_setting_hold_discharge_in_dip
           - sensor.forecast_measured_charge_power
           - input_number.dynamic_setting_minimal_spread
@@ -547,9 +527,11 @@ template:
           - sensor.zendure_maximum_state_of_charge
     variables:
       # ---- Settings (fixed values, adjust here) ----------------------
-      c_self_consumption_default_pct: 30   # self-consumption while there is no history yet
-      c_min_production_kwh: 2             # minimum solar production in 7 days for a calculation
-      c_min_usage_kwh: 1               # lower calculated daily usage is ignored
+      c_self_consumption_default_pct: 30   # starting value for self-consumption until the first solar production is measured
+      c_usage_start_kwh: 8               # starting value for daily usage, only in the first hours after installation
+      c_min_hist_days: 0.08              # history from about 2 hours is already used (day 1)
+      c_min_production_kwh: 0.3          # minimum measured solar production for a self-consumption calculation
+      c_min_usage_kwh: 0.2               # lower calculated daily usage is ignored
       c_sun_offset_s: 7200               # solar counts as "sufficient" 2 hours after sunrise
       c_min_bridge_s: 1800         # bridging is at least 30 minutes
       c_charge_start_kwh: 0.3             # a charging round starts from this grid charge (kWh)
@@ -634,40 +616,36 @@ template:
       # Directly used solar in 7 days = production - export from solar - charging from solar
       direct_7_kwh: "{{ [prod7 - exp_solar7 - charge_solar7, 0] | max }}"
       # Solar self-consumption (%) = directly used solar / production
+      # Calculated from the first measured solar production (day 1), with the history available.
       self_consumption_calculated: >
-        {% if prod7 >= c_min_production_kwh %}
+        {% if prod7 >= c_min_production_kwh and hist_days >= c_min_hist_days %}
           {{ ([direct_7_kwh / prod7 * 100, 100] | min) | round(1) }}
         {% else %}-1{% endif %}
-      self_consumption_override: "{{ states('input_number.forecast_setting_self_consumption_override') | float(0) }}"
-      self_consumption_pct: >
-        {% if self_consumption_override > 0 %}{{ self_consumption_override }}
-        {% elif self_consumption_calculated >= 0 %}{{ self_consumption_calculated }}
-        {% else %}{{ c_self_consumption_default_pct }}{% endif %}
-      self_consumption_source: >
-        {% if self_consumption_override > 0 %}Overwrite
-        {% elif self_consumption_calculated >= 0 %}Calculated (7 days, kWh per day)
-        {% else %}Default (no history yet){% endif %}
+      self_consumption_pct: "{{ self_consumption_calculated if self_consumption_calculated >= 0 else c_self_consumption_default_pct }}"
       direct: "{{ self_consumption_pct / 100 }}"
-      # Direct solar usage in kWh per day (7-day average). This is fairly constant,
-      # so on a dull day the percentage is high and on a sunny day it is low.
+      # Direct solar usage in kWh per day (average over the available history, max. 7 days).
+      # This is fairly constant, so on a dull day the percentage is high and on a sunny day it is low.
+      # Only from 1 day of history: scaling part of a day to a whole day gives a skewed picture.
       direct_day_kwh: >
-        {% if prod7 >= c_min_production_kwh and hist_days >= 0.5 %}
+        {% if prod7 >= c_min_production_kwh and hist_days >= 1 %}
           {{ (direct_7_kwh / hist_days) | round(2) }}
         {% else %}-1{% endif %}
-      # kWh model only when there is history and no override is filled in
-      direct_model_kwh: "{{ self_consumption_override <= 0 and direct_day_kwh >= 0 }}"
+      direct_model_kwh: "{{ direct_day_kwh >= 0 }}"
+      self_consumption_source: >
+        {% if direct_model_kwh %}Calculated (kWh per day, {{ [hist_days, 7] | min | round(1) }} of 7 days)
+        {% elif self_consumption_calculated >= 0 %}Calculated (% of production, day 1)
+        {% else %}Starting value {{ c_self_consumption_default_pct }}% (no solar production measured yet){% endif %}
 
       # Average usage per day = import - export + production - charging + discharging
+      # Calculated from about 2 hours of history and scaled to a day; gets more accurate every day.
       usage_day_calculated: >
-        {% if hist_days >= 0.5 and (imp7 + prod7) > 0 %}
+        {% if hist_days >= c_min_hist_days and (imp7 + prod7) > 0 %}
           {{ (([imp7 - exp7 + prod7 - charge7 + discharge7, 0] | max) / hist_days) | round(2) }}
         {% else %}-1{% endif %}
-      # Default daily usage (input field); 0 = internal fallback of 8 kWh
-      usage_default: >
-        {% set g = states('input_number.forecast_setting_default_daily_usage') | float(0) %}
-        {{ g if g > 0 else 8 }}
-      usage_day: "{{ usage_day_calculated if usage_day_calculated >= c_min_usage_kwh else usage_default }}"
-      usage_source: "{{ 'Calculated (7 days)' if usage_day_calculated >= c_min_usage_kwh else 'Default (input field, no history yet)' }}"
+      usage_day: "{{ usage_day_calculated if usage_day_calculated >= c_min_usage_kwh else c_usage_start_kwh }}"
+      usage_source: >
+        {% if usage_day_calculated >= c_min_usage_kwh %}Calculated ({{ [hist_days, 7] | min | round(1) }} of 7 days{{ ', day 1' if hist_days < 1 else '' }})
+        {% else %}Starting value {{ c_usage_start_kwh }} kWh (first hours, history is being built){% endif %}
       l_hour: "{{ usage_day / 24 }}"
 
       # ---- Usage profile per hour (workday / weekend) -----------------

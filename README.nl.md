@@ -16,8 +16,8 @@ De accu laadt op de goedkoopste momenten, maar **alleen zoveel als nodig is**, r
 - **Scenario A** (morgen goedkoper of gelijk, of prijzen nog onbekend): laadt genoeg om te overbruggen tot het goedkope moment van morgen of tot er voldoende zon is, plus een instelbare marge.
 - **Scenario B** (morgen duurder): laadt zo vol mogelijk, mits de prijs nu lager is dan het laadmoment van morgen.
 - Houdt rekening met zon die je nog verwacht (vandaag en morgen), met een betrouwbaarheidspercentage.
-- **Zelfverbruik zon** wordt berekend uit de afgelopen 7 dagen in kWh per dag (op een sombere dag is het percentage hoger dan op een zonnige), met een handmatige overwrite.
-- **Gemiddeld dagverbruik** komt uit 7 dagen historie (import, export, productie, accu in/uit), met een instelbare startwaarde.
+- **Zelfverbruik zon** wordt vanaf dag 1 automatisch berekend: de eerste dag als percentage van de productie, daarna in kWh per dag over maximaal 7 dagen (op een sombere dag is het percentage hoger dan op een zonnige). Geen invoerveld nodig.
+- **Gemiddeld dagverbruik** komt uit je eigen historie (import, export, productie, accu in/uit): vanaf ongeveer 2 uur na installatie al berekend en elke dag nauwkeuriger, tot 7 dagen. Geen invoerveld nodig.
 - **Rendementsfilter:** een laadslot moet goedkoper zijn dan de waarde van de opgeslagen energie na round-trip-verlies, en in scenario A onder het daggemiddelde.
 - **Pad-check:** berekent wanneer de accu leeg raakt en wanneer er weer energie bijkomt: het eerste laadslot of het moment dat de zon het verbruik dekt (uit de Solcast-detailvoorspelling, anders zonsopkomst + 3 uur). Valt daar een gat, dan worden extra laadslots ervoor gepland, ook als er verder niets geladen hoeft te worden. Alleen de dure slots in het gat tellen mee: een laadslot moet vóór het dure slot liggen dat het vervangt, en na round-trip-verlies goedkoper zijn.
 - **Verbruiksprofiel per uur**, apart voor werkdag en weekend: elk heel uur wordt je werkelijke huisverbruik gemeten en verwerkt in een voortschrijdend gemiddelde per uur van de dag (`sensor.forecast_verbruiksprofiel`). De planner gebruikt dat per kwartier voor de pad-check, het moment dat de accu leeg is, de zon-dekking en de overbrugging. Zolang een uur nog niet genoeg metingen heeft (werkdag 3, weekend 2), geldt het daggemiddelde. Feestdagen volgen `binary_sensor.workday_sensor` (Workday-integratie) als die bestaat.
@@ -44,7 +44,7 @@ Installeer eerst de oorspronkelijke integratie zoals hieronder beschreven (packa
 1. Zet `zendure_forecasting.yaml` (NL) of `zendure_forecasting_global.yaml` (Global) in dezelfde `packages`-map als het Gielz-pakket, en vervang het Gielz-pakket door de versie uit deze fork.
 2. Vervang de automation en het dashboard door de versies uit deze fork (of voeg de wijzigingen samen met je eigen versie).
 3. Herstart Home Assistant.
-4. Vul in tab Configuratie bij **Configuratie (Forecasting)** in: de sensor voor zon resterend vandaag, zon morgen (kWh, bijv. Forecast.Solar of Solcast) en een totaalteller van je zonnepanelen (kWh). Zet eventueel het standaard dagverbruik en de laadmarge.
+4. Vul in tab Configuratie bij **Configuratie (Forecasting)** in: de sensor voor zon resterend vandaag, zon morgen (kWh, bijv. Forecast.Solar of Solcast) en een totaalteller van je zonnepanelen (kWh). Zet eventueel de laadmarge.
 5. Kies de modus **Dynamisch NOM + Forecasting**.
 
 **Vereist:** het Gielz-pakket, Nord Pool (zoals al ingesteld in Gielz), een P1-meter, een zon-forecast integratie en apexcharts-card voor het Gielz-dashboard. De planner wordt na ongeveer een week historie nauwkeuriger.
