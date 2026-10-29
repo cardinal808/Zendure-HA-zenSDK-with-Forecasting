@@ -3631,8 +3631,6 @@ views:
                 name: Solar forecast reliability % (0 = 100%)
               - entity: input_boolean.forecast_setting_hold_discharge_in_dip
                 name: Hold discharge in cheap dip (save the battery)
-              - entity: binary_sensor.forecast_discharge_held_in_dip
-                name: Discharge held now (dip)
             visibility:
               - condition: state
                 entity: input_boolean.dashboard_setting_show_forecasting

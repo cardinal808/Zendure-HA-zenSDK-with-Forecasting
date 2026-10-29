@@ -3637,8 +3637,6 @@ views:
                 name: Betrouwbaarheid zonvoorspelling % (0 = 100%)
               - entity: input_boolean.forecast_dal_ontladen_blokkeren
                 name: Niet ontladen in goedkoop dal (accu sparen)
-              - entity: binary_sensor.forecast_dal_ontladen_geblokkeerd
-                name: Ontladen nu vastgehouden (dal)
             visibility:
               - condition: state
                 entity: input_boolean.forecast_tonen_op_dashboard
