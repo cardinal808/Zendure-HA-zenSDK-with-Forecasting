@@ -1658,428 +1658,351 @@ views:
             heading_style: title
           - type: markdown
             content: >-
-              <ha-alert alert-type="info">Helptekst</ha-alert>Voorspelling per prijsslot voor de komende 36 uur, opnieuw berekend elke minuut. Prijzen in grijs zijn nog onbekend (patroon van vandaag). Het laden van morgen is indicatief. De airco-blokkade en de dal-blokkade zitten niet in deze voorspelling. Zon alleen met een Solcast-detailvoorspelling.
+              <ha-alert alert-type="info">Helptekst</ha-alert>Voorspelling per prijsslot voor de komende 36 uur. Prijs: groen goedkoop, oranje midden, rood duur, blauw = gepland laden, grijs = nog onbekend. Het laden van morgen is indicatief; de airco- en dal-blokkade zitten niet in deze voorspelling. Zon alleen met een Solcast-detailvoorspelling.
             text_only: true
             visibility:
               - condition: state
                 entity: input_boolean.help_tonen_op_dashboard
                 state: 'on'
-          - type: custom:apexcharts-card
-            graph_span: 36h
-            span:
-              start: hour
-            now:
-              show: true
-              color: var(--primary-text-color)
-            update_interval: 5min
-            header:
-              show: true
-              title: 'Prijs (€/kWh)'
-              show_states: false
-            apex_config:
-              chart:
-                height: 95px
-              legend:
-                show: false
-              plotOptions:
-                bar:
-                  columnWidth: 100%
-              dataLabels:
-                enabled: false
-              grid:
-                show: true
-                borderColor: color-mix(in srgb, var(--divider-color) 50%, transparent)
-                strokeDashArray: 0
-                padding:
-                  top: -15
-                  bottom: -10
-              tooltip:
-                x:
-                  format: ddd HH:mm
-              xaxis:
-                labels:
-                  show: false
-                  datetimeUTC: false
-                  format: HH:mm
-                  style:
-                    colors: grey
-                axisTicks:
-                  show: false
-                axisBorder:
-                  color: color-mix(in srgb, var(--divider-color) 50%, transparent)
-              yaxis:
-                - tickAmount: 2
-                  decimalsInFloat: 2
-                  labels:
-                    minWidth: 40
-                    maxWidth: 40
-                    style:
-                      colors: >-
-                        color-mix(in srgb, var(--primary-text-color) 75%,
-                        transparent)
-            series:
-              - entity: sensor.zendure_forecast_grafiek
-                name: Prijs
-                type: column
-                color: '#01a180'
-                float_precision: 3
-                show:
-                  in_header: false
-                data_generator: |
-                  const d = entity.attributes.tijdlijn;
-                  if (!d || !d.t) return [];
-                  
-                  const s = [...d.prijs].sort((a, b) => a - b);
-                  const lo = s[Math.floor(s.length / 3)], hi = s[Math.floor(s.length * 2 / 3)];
-                  return d.t.map((t, i) => {
-                    const v = d.prijs[i];
-                    let c = v <= lo ? '#01a180' : (v >= hi ? '#c53b2c' : '#e0a030');
-                    if (!d.bekend[i]) c = 'rgba(162,162,163,0.6)';
-                    return { x: t * 1000, y: v, fillColor: c };
-                  });
-          - type: custom:apexcharts-card
-            graph_span: 36h
-            span:
-              start: hour
-            now:
-              show: true
-              color: var(--primary-text-color)
-            update_interval: 5min
-            header:
-              show: true
-              title: 'Zon (kW)'
-              show_states: false
-            apex_config:
-              chart:
-                height: 95px
-              legend:
-                show: false
-              plotOptions:
-                bar:
-                  columnWidth: 100%
-              dataLabels:
-                enabled: false
-              grid:
-                show: true
-                borderColor: color-mix(in srgb, var(--divider-color) 50%, transparent)
-                strokeDashArray: 0
-                padding:
-                  top: -15
-                  bottom: -10
-              tooltip:
-                x:
-                  format: ddd HH:mm
-              xaxis:
-                labels:
-                  show: false
-                  datetimeUTC: false
-                  format: HH:mm
-                  style:
-                    colors: grey
-                axisTicks:
-                  show: false
-                axisBorder:
-                  color: color-mix(in srgb, var(--divider-color) 50%, transparent)
-              yaxis:
-                - tickAmount: 2
-                  decimalsInFloat: 1
-                  labels:
-                    minWidth: 40
-                    maxWidth: 40
-                    style:
-                      colors: >-
-                        color-mix(in srgb, var(--primary-text-color) 75%,
-                        transparent)
-            series:
-              - entity: sensor.zendure_forecast_grafiek
-                name: Zon
-                type: area
-                color: '#f2c037'
-                opacity: 0.5
-                stroke_width: 1
-                curve: stepline
-                float_precision: 2
-                show:
-                  in_header: false
-                data_generator: |
-                  const d = entity.attributes.tijdlijn;
-                  if (!d || !d.t) return [];
-                  return d.t.map((t, i) => [t * 1000, d.zon_kw[i]]);
-          - type: custom:apexcharts-card
-            graph_span: 36h
-            span:
-              start: hour
-            now:
-              show: true
-              color: var(--primary-text-color)
-            update_interval: 5min
-            header:
-              show: true
-              title: 'Accu (kW): groen = laden uit net, geel = laden uit zon, oranje = ontladen'
-              show_states: false
-            apex_config:
-              chart:
-                height: 95px
-              legend:
-                show: false
-              plotOptions:
-                bar:
-                  columnWidth: 100%
-              dataLabels:
-                enabled: false
-              grid:
-                show: true
-                borderColor: color-mix(in srgb, var(--divider-color) 50%, transparent)
-                strokeDashArray: 0
-                padding:
-                  top: -15
-                  bottom: -10
-              tooltip:
-                x:
-                  format: ddd HH:mm
-              xaxis:
-                labels:
-                  show: false
-                  datetimeUTC: false
-                  format: HH:mm
-                  style:
-                    colors: grey
-                axisTicks:
-                  show: false
-                axisBorder:
-                  color: color-mix(in srgb, var(--divider-color) 50%, transparent)
-              yaxis:
-                - tickAmount: 2
-                  decimalsInFloat: 1
-                  labels:
-                    minWidth: 40
-                    maxWidth: 40
-                    style:
-                      colors: >-
-                        color-mix(in srgb, var(--primary-text-color) 75%,
-                        transparent)
-            series:
-              - entity: sensor.zendure_forecast_grafiek
-                name: Accu
-                type: column
-                color: '#01a180'
-                float_precision: 2
-                show:
-                  in_header: false
-                data_generator: |
-                  const d = entity.attributes.tijdlijn;
-                  if (!d || !d.t) return [];
-                  
-                  return d.t.map((t, i) => {
-                    const v = d.accu_kw[i];
-                    const c = v < 0 ? '#e8743b' : (d.laden[i] ? '#01a180' : '#f2c037');
-                    return { x: t * 1000, y: v, fillColor: c };
-                  });
-          - type: custom:apexcharts-card
-            graph_span: 36h
-            span:
-              start: hour
-            now:
-              show: true
-              color: var(--primary-text-color)
-            update_interval: 5min
-            header:
-              show: true
-              title: 'Laadpercentage (%)'
-              show_states: false
-            apex_config:
-              chart:
-                height: 95px
-              legend:
-                show: false
-              plotOptions:
-                bar:
-                  columnWidth: 100%
-              dataLabels:
-                enabled: false
-              grid:
-                show: true
-                borderColor: color-mix(in srgb, var(--divider-color) 50%, transparent)
-                strokeDashArray: 0
-                padding:
-                  top: -15
-                  bottom: -10
-              tooltip:
-                x:
-                  format: ddd HH:mm
-              xaxis:
-                labels:
-                  show: false
-                  datetimeUTC: false
-                  format: HH:mm
-                  style:
-                    colors: grey
-                axisTicks:
-                  show: false
-                axisBorder:
-                  color: color-mix(in srgb, var(--divider-color) 50%, transparent)
-              yaxis:
-                - tickAmount: 2
-                  decimalsInFloat: 0
-                  labels:
-                    minWidth: 40
-                    maxWidth: 40
-                    style:
-                      colors: >-
-                        color-mix(in srgb, var(--primary-text-color) 75%,
-                        transparent)
-            series:
-              - entity: sensor.zendure_forecast_grafiek
-                name: Laadpercentage
-                type: area
-                color: '#01a180'
-                opacity: 0.25
-                stroke_width: 2
-                curve: straight
-                float_precision: 0
-                show:
-                  in_header: false
-                data_generator: |
-                  const d = entity.attributes.tijdlijn;
-                  if (!d || !d.t) return [];
-                  
-                  const len = (d.t.length > 1 ? d.t[1] - d.t[0] : 900) * 1000;
-                  const now = Date.now();
-                  return [[now, d.soc_nu_pct]].concat(d.t.map((t, i) => [t * 1000 + len, d.soc_pct[i]]));
-          - type: custom:apexcharts-card
-            graph_span: 36h
-            span:
-              start: hour
-            now:
-              show: true
-              color: var(--primary-text-color)
-            update_interval: 5min
-            header:
-              show: true
-              title: 'Net (kW): paars = import, grijs = export'
-              show_states: false
-            apex_config:
-              chart:
-                height: 95px
-              legend:
-                show: false
-              plotOptions:
-                bar:
-                  columnWidth: 100%
-              dataLabels:
-                enabled: false
-              grid:
-                show: true
-                borderColor: color-mix(in srgb, var(--divider-color) 50%, transparent)
-                strokeDashArray: 0
-                padding:
-                  top: -15
-                  bottom: -10
-              tooltip:
-                x:
-                  format: ddd HH:mm
-              xaxis:
-                labels:
-                  show: false
-                  datetimeUTC: false
-                  format: HH:mm
-                  style:
-                    colors: grey
-                axisTicks:
-                  show: false
-                axisBorder:
-                  color: color-mix(in srgb, var(--divider-color) 50%, transparent)
-              yaxis:
-                - tickAmount: 2
-                  decimalsInFloat: 1
-                  labels:
-                    minWidth: 40
-                    maxWidth: 40
-                    style:
-                      colors: >-
-                        color-mix(in srgb, var(--primary-text-color) 75%,
-                        transparent)
-            series:
-              - entity: sensor.zendure_forecast_grafiek
-                name: Net
-                type: column
-                color: '#8e7cc3'
-                float_precision: 2
-                show:
-                  in_header: false
-                data_generator: |
-                  const d = entity.attributes.tijdlijn;
-                  if (!d || !d.t) return [];
-                  
-                  return d.t.map((t, i) => {
-                    const v = d.net_kw[i];
-                    return { x: t * 1000, y: v, fillColor: v >= 0 ? '#8e7cc3' : '#a2a2a3' };
-                  });
-          - type: custom:apexcharts-card
-            graph_span: 36h
-            span:
-              start: hour
-            now:
-              show: true
-              color: var(--primary-text-color)
-            update_interval: 5min
-            header:
-              show: true
-              title: 'Verbruik huis (kW)'
-              show_states: false
-            apex_config:
-              chart:
-                height: 115px
-              legend:
-                show: false
-              plotOptions:
-                bar:
-                  columnWidth: 100%
-              dataLabels:
-                enabled: false
-              grid:
-                show: true
-                borderColor: color-mix(in srgb, var(--divider-color) 50%, transparent)
-                strokeDashArray: 0
-                padding:
-                  top: -15
-                  bottom: 0
-              tooltip:
-                x:
-                  format: ddd HH:mm
-              xaxis:
-                labels:
+          - type: vertical-stack
+            cards:
+              - type: custom:apexcharts-card
+                graph_span: 36h
+                span:
+                  start: hour
+                now:
                   show: true
-                  datetimeUTC: false
-                  format: HH:mm
-                  style:
-                    colors: grey
-                axisTicks:
+                  color: var(--primary-text-color)
+                update_interval: 5min
+                header:
                   show: false
-                axisBorder:
-                  color: color-mix(in srgb, var(--divider-color) 50%, transparent)
-              yaxis:
-                - tickAmount: 2
-                  decimalsInFloat: 1
-                  labels:
-                    minWidth: 40
-                    maxWidth: 40
-                    style:
-                      colors: >-
-                        color-mix(in srgb, var(--primary-text-color) 75%,
-                        transparent)
-            series:
-              - entity: sensor.zendure_forecast_grafiek
-                name: Verbruik
-                type: column
-                color: '#4fb3bf'
-                float_precision: 2
-                show:
-                  in_header: false
-                data_generator: |
-                  const d = entity.attributes.tijdlijn;
-                  if (!d || !d.t) return [];
-                  return d.t.map((t, i) => [t * 1000, d.verbruik_kw[i]]);
+                yaxis:
+                  - id: a
+                    decimals: 2
+                    show: false
+                apex_config:
+                  chart:
+                    height: 62px
+                    sparkline:
+                      enabled: false
+                  legend:
+                    show: false
+                  plotOptions:
+                    bar:
+                      columnWidth: 100%
+                  dataLabels:
+                    enabled: false
+                  annotations:
+                    texts:
+                      - x: 4
+                        'y': 11
+                        text: 'Prijs €/kWh'
+                        fontSize: 10px
+                        foreColor: grey
+                        textAnchor: start
+                  grid:
+                    show: true
+                    borderColor: color-mix(in srgb, var(--divider-color) 40%, transparent)
+                    strokeDashArray: 0
+                    padding:
+                      top: -12
+                      bottom: -12
+                      left: 6
+                      right: 4
+                  tooltip:
+                    x:
+                      format: ddd HH:mm
+                  xaxis:
+                    labels:
+                      show: false
+                      datetimeUTC: false
+                      format: HH:mm
+                      style:
+                        fontSize: 10px
+                        colors: grey
+                    axisTicks:
+                      show: false
+                    axisBorder:
+                      show: false
+                series:
+                  - entity: sensor.zendure_forecast_grafiek
+                    name: Prijs
+                    type: column
+                    color: '#01a180'
+                    yaxis_id: a
+                    float_precision: 3
+                    show:
+                      in_header: false
+                    data_generator: |
+                      const d = entity.attributes.tijdlijn;
+                      if (!d || !d.t) return [];
+                      const s = [...d.prijs].sort((a, b) => a - b);
+                      const lo = s[Math.floor(s.length / 3)], hi = s[Math.floor(s.length * 2 / 3)];
+                      return d.t.map((t, i) => {
+                        const v = d.prijs[i];
+                        let c = v <= lo ? '#01a180' : (v >= hi ? '#c53b2c' : '#e0a030');
+                        if (!d.bekend[i]) c = 'rgba(162,162,163,0.6)';
+                        if (d.laden[i]) c = '#2e7dd7';
+                        return { x: t * 1000, y: v, fillColor: c };
+                      });
+              - type: custom:apexcharts-card
+                graph_span: 36h
+                span:
+                  start: hour
+                now:
+                  show: true
+                  color: var(--primary-text-color)
+                update_interval: 5min
+                header:
+                  show: false
+                yaxis:
+                  - id: a
+                    decimals: 2
+                    show: false
+                apex_config:
+                  chart:
+                    height: 62px
+                    sparkline:
+                      enabled: false
+                  legend:
+                    show: false
+                  plotOptions:
+                    bar:
+                      columnWidth: 100%
+                  dataLabels:
+                    enabled: false
+                  annotations:
+                    texts:
+                      - x: 4
+                        'y': 11
+                        text: 'Zon (geel) en verbruik (lijn), kW'
+                        fontSize: 10px
+                        foreColor: grey
+                        textAnchor: start
+                  grid:
+                    show: true
+                    borderColor: color-mix(in srgb, var(--divider-color) 40%, transparent)
+                    strokeDashArray: 0
+                    padding:
+                      top: -12
+                      bottom: -12
+                      left: 6
+                      right: 4
+                  tooltip:
+                    x:
+                      format: ddd HH:mm
+                  xaxis:
+                    labels:
+                      show: false
+                      datetimeUTC: false
+                      format: HH:mm
+                      style:
+                        fontSize: 10px
+                        colors: grey
+                    axisTicks:
+                      show: false
+                    axisBorder:
+                      show: false
+                series:
+                  - entity: sensor.zendure_forecast_grafiek
+                    name: Zon
+                    type: column
+                    color: '#f2c037'
+                    yaxis_id: a
+                    opacity: 0.7
+                    float_precision: 2
+                    show:
+                      in_header: false
+                    data_generator: |
+                      const d = entity.attributes.tijdlijn;
+                      if (!d || !d.t) return [];
+                      return d.t.map((t, i) => ({ x: t * 1000, y: d.zon_kw[i] }));
+                  - entity: sensor.zendure_forecast_grafiek
+                    name: Verbruik
+                    type: line
+                    color: '#4fb3bf'
+                    yaxis_id: a
+                    stroke_width: 1.5
+                    curve: stepline
+                    float_precision: 2
+                    show:
+                      in_header: false
+                    data_generator: |
+                      const d = entity.attributes.tijdlijn;
+                      if (!d || !d.t) return [];
+                      return d.t.map((t, i) => ({ x: t * 1000, y: d.verbruik_kw[i] }));
+              - type: custom:apexcharts-card
+                graph_span: 36h
+                span:
+                  start: hour
+                now:
+                  show: true
+                  color: var(--primary-text-color)
+                update_interval: 5min
+                header:
+                  show: false
+                yaxis:
+                  - id: a
+                    decimals: 2
+                    show: false
+                  - id: pct
+                    min: 0
+                    max: 100
+                    opposite: true
+                    show: false
+                apex_config:
+                  chart:
+                    height: 62px
+                    sparkline:
+                      enabled: false
+                  legend:
+                    show: false
+                  plotOptions:
+                    bar:
+                      columnWidth: 100%
+                  dataLabels:
+                    enabled: false
+                  annotations:
+                    texts:
+                      - x: 4
+                        'y': 11
+                        text: 'Accu kW en laadpercentage'
+                        fontSize: 10px
+                        foreColor: grey
+                        textAnchor: start
+                  grid:
+                    show: true
+                    borderColor: color-mix(in srgb, var(--divider-color) 40%, transparent)
+                    strokeDashArray: 0
+                    padding:
+                      top: -12
+                      bottom: -12
+                      left: 6
+                      right: 4
+                  tooltip:
+                    x:
+                      format: ddd HH:mm
+                  xaxis:
+                    labels:
+                      show: false
+                      datetimeUTC: false
+                      format: HH:mm
+                      style:
+                        fontSize: 10px
+                        colors: grey
+                    axisTicks:
+                      show: false
+                    axisBorder:
+                      show: false
+                series:
+                  - entity: sensor.zendure_forecast_grafiek
+                    name: Accu
+                    type: column
+                    color: '#01a180'
+                    yaxis_id: a
+                    float_precision: 2
+                    show:
+                      in_header: false
+                    data_generator: |
+                      const d = entity.attributes.tijdlijn;
+                      if (!d || !d.t) return [];
+                      return d.t.map((t, i) => {
+                        const v = d.accu_kw[i];
+                        const c = v < 0 ? '#e8743b' : (d.laden[i] ? '#2e7dd7' : '#f2c037');
+                        return { x: t * 1000, y: v, fillColor: c };
+                      });
+                  - entity: sensor.zendure_forecast_grafiek
+                    name: Laadpercentage
+                    type: line
+                    color: '#e1e1e1'
+                    yaxis_id: pct
+                    stroke_width: 1.5
+                    curve: straight
+                    float_precision: 0
+                    show:
+                      in_header: false
+                    data_generator: |
+                      const d = entity.attributes.tijdlijn;
+                      if (!d || !d.t) return [];
+                      const len = (d.t.length > 1 ? d.t[1] - d.t[0] : 900) * 1000;
+                      return [{ x: Date.now(), y: d.soc_nu_pct }].concat(d.t.map((t, i) => ({ x: t * 1000 + len, y: d.soc_pct[i] })));
+              - type: custom:apexcharts-card
+                graph_span: 36h
+                span:
+                  start: hour
+                now:
+                  show: true
+                  color: var(--primary-text-color)
+                update_interval: 5min
+                header:
+                  show: false
+                yaxis:
+                  - id: a
+                    decimals: 2
+                    show: false
+                apex_config:
+                  chart:
+                    height: 84px
+                    sparkline:
+                      enabled: false
+                  legend:
+                    show: false
+                  plotOptions:
+                    bar:
+                      columnWidth: 100%
+                  dataLabels:
+                    enabled: false
+                  annotations:
+                    texts:
+                      - x: 4
+                        'y': 11
+                        text: 'Net kW'
+                        fontSize: 10px
+                        foreColor: grey
+                        textAnchor: start
+                  grid:
+                    show: true
+                    borderColor: color-mix(in srgb, var(--divider-color) 40%, transparent)
+                    strokeDashArray: 0
+                    padding:
+                      top: -12
+                      bottom: -4
+                      left: 6
+                      right: 4
+                  tooltip:
+                    x:
+                      format: ddd HH:mm
+                  xaxis:
+                    labels:
+                      show: true
+                      datetimeUTC: false
+                      format: HH:mm
+                      style:
+                        fontSize: 10px
+                        colors: grey
+                    axisTicks:
+                      show: false
+                    axisBorder:
+                      show: false
+                series:
+                  - entity: sensor.zendure_forecast_grafiek
+                    name: Net
+                    type: column
+                    color: '#8e7cc3'
+                    yaxis_id: a
+                    float_precision: 2
+                    show:
+                      in_header: false
+                    data_generator: |
+                      const d = entity.attributes.tijdlijn;
+                      if (!d || !d.t) return [];
+                      return d.t.map((t, i) => {
+                        const v = d.net_kw[i];
+                        return { x: t * 1000, y: v, fillColor: v >= 0 ? '#8e7cc3' : '#a2a2a3' };
+                      });
+          - type: markdown
+            text_only: true
+            content: <small>blauw = laden uit net · geel = zon · oranje = ontladen · witte lijn = laadpercentage (0-100%) · paars = import, grijs = export</small>
         visibility:
           - condition: state
             entity: input_boolean.forecast_tonen_op_dashboard
