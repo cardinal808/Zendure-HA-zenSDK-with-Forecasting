@@ -686,17 +686,25 @@ template:
       s_max: "{{ ([soc_max - soc_min, 0] | max / 100 * cap) | round(3) }}"
       s_nu: "{{ ([[soc, soc_max] | min - soc_min, 0] | max / 100 * cap) | round(3) }}"
       room: "{{ ([soc_max - soc, 0] | max / 100 * cap) | round(3) }}"
-      # Efficiëntie (zelfde regels als de bestaande sensoren Beschikbare/Benodigde Energie)
-      # Rendement uit het gemeten 24-uurs gemiddelde (>= 70%), anders uit het totale RTE
-      eff_rte_basis: "{{ (states('sensor.zendure_2400_ac_rte_totaal') | float(0) / 100) ** 0.5 * 100 }}"
+      # Rendement: uit RTE totaal (alle kWh eruit / alle kWh erin, gewogen naar energie),
+      # gelijk verdeeld over laden en ontladen (wortel). De 24-uurs momentmetingen van de
+      # efficiëntie zijn ongewogen en tellen elke stop als 0%, waardoor ze te laag uitvallen;
+      # die worden alleen gebruikt als RTE totaal (nog) niet bruikbaar is.
+      rte_totaal: "{{ states('sensor.zendure_2400_ac_rte_totaal') | float(0) }}"
+      rte_ok: "{{ 60 <= rte_totaal <= 100 }}"
+      eff_rte_basis: "{{ ((rte_totaal / 100) ** 0.5 * 100) if rte_ok else 0 }}"
       eff_in: >
         {% set m = states('sensor.zendure_2400_ac_efficientie_import_24u_gemiddelde') | float(0) %}
-        {% set e = m if m >= 70 else eff_rte_basis %}
+        {% set e = eff_rte_basis if rte_ok else m %}
         {{ (e if 50 <= e <= 100 else 92) / 100 }}
       eff_out: >
         {% set m = states('sensor.zendure_2400_ac_efficientie_export_24u_gemiddelde') | float(0) %}
-        {% set e = m if m >= 70 else eff_rte_basis %}
+        {% set e = eff_rte_basis if rte_ok else m %}
         {{ (e if 50 <= e <= 100 else 92) / 100 }}
+      rendement_bron: >
+        {% if rte_ok %}RTE totaal ({{ rte_totaal | round(1) }}%), gelijk verdeeld over laden en ontladen
+        {% elif states('sensor.zendure_2400_ac_efficientie_import_24u_gemiddelde') | float(0) >= 50 %}24-uurs gemiddelde momentmetingen (RTE totaal nog niet bruikbaar)
+        {% else %}Standaardwaarde 92% per richting{% endif %}
       eff_rt: "{{ (eff_in * eff_out) | round(4) }}"
 
       # ---- Zonne-energie (kWh) ----------------------------------------
@@ -1331,6 +1339,7 @@ template:
           marge_pct: "{{ marge_pct }}"
           marge_kwh: "{{ marge_dc }}"
           efficientie_laden_pct: "{{ (eff_in * 100) | round(1) }}"
+          rendement_bron: "{{ rendement_bron }}"
           efficientie_ontladen_pct: "{{ (eff_out * 100) | round(1) }}"
           # --- Morgen ---
           morgen_zon_direct_kwh: "{{ morgen_direct }}"

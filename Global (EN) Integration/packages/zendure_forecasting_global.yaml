@@ -686,17 +686,25 @@ template:
       s_max: "{{ ([soc_max - soc_min, 0] | max / 100 * cap) | round(3) }}"
       s_now: "{{ ([[soc, soc_max] | min - soc_min, 0] | max / 100 * cap) | round(3) }}"
       room: "{{ ([soc_max - soc, 0] | max / 100 * cap) | round(3) }}"
-      # Efficiency (same rules as the existing Available/Required Energy sensors)
-      # Efficiency from the measured 24h average (>= 70%), otherwise from the total RTE
-      eff_rte_base: "{{ (states('sensor.zendure_rte_total') | float(0) / 100) ** 0.5 * 100 }}"
+      # Efficiency: from the total RTE (all kWh out / all kWh in, energy-weighted), split
+      # equally over charging and discharging (square root). The 24-hour point measurements
+      # of efficiency are unweighted and count every stop as 0%, which makes them too low;
+      # they are only used when the total RTE is not (yet) usable.
+      rte_total: "{{ states('sensor.zendure_rte_total') | float(0) }}"
+      rte_ok: "{{ 60 <= rte_total <= 100 }}"
+      eff_rte_base: "{{ ((rte_total / 100) ** 0.5 * 100) if rte_ok else 0 }}"
       eff_in: >
         {% set m = states('sensor.zendure_import_efficiency_24h') | float(0) %}
-        {% set e = m if m >= 70 else eff_rte_base %}
+        {% set e = eff_rte_base if rte_ok else m %}
         {{ (e if 50 <= e <= 100 else 92) / 100 }}
       eff_out: >
         {% set m = states('sensor.zendure_export_efficiency_24h') | float(0) %}
-        {% set e = m if m >= 70 else eff_rte_base %}
+        {% set e = eff_rte_base if rte_ok else m %}
         {{ (e if 50 <= e <= 100 else 92) / 100 }}
+      efficiency_source: >
+        {% if rte_ok %}Total RTE ({{ rte_total | round(1) }}%), split equally over charging and discharging
+        {% elif states('sensor.zendure_import_efficiency_24h') | float(0) >= 50 %}24-hour average of point measurements (total RTE not usable yet)
+        {% else %}Default value 92% per direction{% endif %}
       eff_rt: "{{ (eff_in * eff_out) | round(4) }}"
 
       # ---- Solar energy (kWh) -----------------------------------------
@@ -1329,6 +1337,7 @@ template:
           margin_pct: "{{ margin_pct }}"
           margin_kwh: "{{ margin_dc }}"
           efficiency_charge_pct: "{{ (eff_in * 100) | round(1) }}"
+          efficiency_source: "{{ efficiency_source }}"
           efficiency_discharge_pct: "{{ (eff_out * 100) | round(1) }}"
           # --- Tomorrow ---
           tomorrow_solar_direct_kwh: "{{ tomorrow_direct }}"

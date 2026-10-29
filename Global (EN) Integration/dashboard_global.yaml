@@ -1552,7 +1552,7 @@ views:
 
               - Direct solar usage: **{{ a.direct_usage_day_kwh if a.direct_usage_day_kwh is not none else '-' }} kWh per day**; applied self-consumption today {{ a.self_consumption_today_pct }}%, tomorrow {{ a.self_consumption_tomorrow_pct }}% ({{ a.self_consumption_source }})
 
-              - Efficiency: charging {{ a.efficiency_charge_pct }}%, discharging {{ a.efficiency_discharge_pct }}%, round trip {{ a.efficiency_round_trip_pct }}%
+              - Efficiency: charging {{ a.efficiency_charge_pct }}%, discharging {{ a.efficiency_discharge_pct }}%, round trip {{ a.efficiency_round_trip_pct }}% ({{ a.efficiency_source }})
 
               - Usage per hour: **{{ a.usage_per_hour_source }}**, next 24 hours {{ a.usage_next_24h_kwh }} kWh. Profile learned: {{ states('sensor.forecast_usage_profile') }} of 48 hours (workday + weekend){% if state_attr('sensor.forecast_usage_profile', 'last_hour') %}, last measurement {{ state_attr('sensor.forecast_usage_profile', 'last_hour') }}: {{ state_attr('sensor.forecast_usage_profile', 'last_hour_kwh') }} kWh{% endif %}
 

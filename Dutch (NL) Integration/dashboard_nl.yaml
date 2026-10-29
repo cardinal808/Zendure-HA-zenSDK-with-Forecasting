@@ -1557,7 +1557,7 @@ views:
 
               - Direct zonverbruik: **{{ a.direct_verbruik_dag_kwh if a.direct_verbruik_dag_kwh is not none else '-' }} kWh per dag**; toegepast zelfverbruik vandaag {{ a.zelfverbruik_vandaag_pct }}%, morgen {{ a.zelfverbruik_morgen_pct }}% ({{ a.zelfverbruik_bron }})
 
-              - Rendement: laden {{ a.efficientie_laden_pct }}%, ontladen {{ a.efficientie_ontladen_pct }}%, samen {{ a.rendement_round_trip_pct }}%
+              - Rendement: laden {{ a.efficientie_laden_pct }}%, ontladen {{ a.efficientie_ontladen_pct }}%, samen {{ a.rendement_round_trip_pct }}% ({{ a.rendement_bron }})
 
               - Verbruik per uur: **{{ a.verbruik_per_uur_bron }}**, komende 24 uur {{ a.verbruik_komende_24u_kwh }} kWh. Profiel geleerd: {{ states('sensor.forecast_verbruiksprofiel') }} van 48 uren (werkdag + weekend){% if state_attr('sensor.forecast_verbruiksprofiel', 'laatste_uur') %}, laatste meting {{ state_attr('sensor.forecast_verbruiksprofiel', 'laatste_uur') }}: {{ state_attr('sensor.forecast_verbruiksprofiel', 'laatste_uur_kwh') }} kWh{% endif %}
 
