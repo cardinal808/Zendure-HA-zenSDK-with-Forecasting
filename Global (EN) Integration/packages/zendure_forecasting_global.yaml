@@ -1048,6 +1048,76 @@ template:
           {%- set ns.l = ns.l + [x.s] -%}
         {%- endfor -%}
         {{ ns.l }}
+
+      # ---- Timeline (forecast per price slot, for the dashboard chart) ----
+      # Simulates per slot: usage (profile), solar (detailed forecast), grid charging in the
+      # planned slots (today) and tomorrow's indicative charge slots, and otherwise
+      # zero-on-the-meter: shortfall from the battery, surplus into the battery.
+      # Indicative: the cheap-dip hold is not included here.
+      tl_slots: "{{ (cand + tmrw) | sort(attribute='s') | selectattr('e', 'gt', now_ts) | list }}"
+      tl_end_ts: "{{ (tl_slots | map(attribute='e') | max) if tl_slots | length > 0 else now_ts }}"
+      tl_solar: >
+        {%- set e1 = states('input_text.forecast_setting_solar_remaining_today_sensor') | trim -%}
+        {%- set e2 = states('input_text.forecast_setting_solar_tomorrow_sensor') | trim -%}
+        {%- set ns = namespace(l=[], ts=[], ids=[]) -%}
+        {%- for e in [e1, e1 | replace('_remaining_today', '_today'), e2] -%}
+          {%- if e | lower | regex_match('^sensor\\..+') and e not in ns.ids -%}
+            {%- set ns.ids = ns.ids + [e] -%}
+            {%- set d = state_attr(e, 'detailedForecast') or state_attr(e, 'detailed_forecast') or [] -%}
+            {%- for q in d -%}
+              {%- if q is mapping and q.period_start is defined -%}
+                {%- set ps = as_timestamp(q.period_start, 0) -%}
+                {%- if ps > now_ts - c_detail_period_s and ps < tl_end_ts and ps not in ns.ts -%}
+                  {%- set ns.ts = ns.ts + [ps] -%}
+                  {%- set ns.l = ns.l + [{'s': ps, 'pv': ((q.pv_estimate | float(0)) * reliab) | round(3)}] -%}
+                {%- endif -%}
+              {%- endif -%}
+            {%- endfor -%}
+          {%- endif -%}
+        {%- endfor -%}
+        {{ ns.l | sort(attribute='s') }}
+      tl_charge_s: "{{ (chosen | map(attribute='s') | list) + tomorrow_charge_slots }}"
+      p_disch_kw: "{{ [states('input_number.zendure_setting_max_discharge_power') | float(2400), 100] | max / 1000 }}"
+      timeline: >
+        {%- set ns = namespace(soc=s_now, t=[], p=[], kn=[], ch=[], pv=[], load=[], bat=[], soc_l=[], grid=[]) -%}
+        {%- set known_until = end_today_ts + (day_length if tomorrow_known else 0) -%}
+        {%- for x in tl_slots -%}
+          {%- set a = [x.s, now_ts] | max -%}
+          {%- set dur = (x.e - a) / 3600 -%}
+          {%- if dur > 0 -%}
+            {%- set uu = hour_load | selectattr('s', 'le', a) | list -%}
+            {%- set load = ((uu | last).kw if uu | length > 0 else l_hour) * dur -%}
+            {%- set nz = namespace(k=0) -%}
+            {%- for q in tl_solar | selectattr('s', 'gt', a - c_detail_period_s) | selectattr('s', 'lt', x.e) -%}
+              {%- set ov = [q.s + c_detail_period_s, x.e] | min - [q.s, a] | max -%}
+              {%- if ov > 0 -%}{%- set nz.k = nz.k + q.pv * ov / 3600 -%}{%- endif -%}
+            {%- endfor -%}
+            {%- set pv = nz.k -%}
+            {%- set room_ac = ([s_max - ns.soc, 0] | max) / eff_in -%}
+            {%- set charging = x.s in tl_charge_s -%}
+            {%- if charging -%}
+              {%- set bat = [p_max_kw * dur, room_ac] | min -%}
+            {%- elif load >= pv -%}
+              {%- set bat = 0 - ([load - pv, ns.soc * eff_out, p_disch_kw * dur] | min) -%}
+            {%- else -%}
+              {%- set bat = [pv - load, room_ac, p_set_kw * dur] | min -%}
+            {%- endif -%}
+            {%- set grid = load - pv + bat -%}
+            {%- set ns.soc = ns.soc + (bat * eff_in if bat > 0 else bat / eff_out) -%}
+            {%- set ns.soc = [[ns.soc, 0] | max, s_max] | min -%}
+            {%- set ns.t = ns.t + [x.s | int] -%}
+            {%- set ns.p = ns.p + [x.v | round(4)] -%}
+            {%- set ns.kn = ns.kn + [1 if x.s < known_until else 0] -%}
+            {%- set ns.ch = ns.ch + [1 if charging else 0] -%}
+            {%- set ns.pv = ns.pv + [(pv / dur) | round(2)] -%}
+            {%- set ns.load = ns.load + [(load / dur) | round(2)] -%}
+            {%- set ns.bat = ns.bat + [(bat / dur) | round(2)] -%}
+            {%- set ns.soc_l = ns.soc_l + [((soc_min + ns.soc / cap * 100) if cap > 0 else 0) | round(1)] -%}
+            {%- set ns.grid = ns.grid + [(grid / dur) | round(2)] -%}
+          {%- endif -%}
+        {%- endfor -%}
+        {{ {'t': ns.t, 'price': ns.p, 'known': ns.kn, 'charge': ns.ch, 'solar_kw': ns.pv, 'usage_kw': ns.load,
+            'battery_kw': ns.bat, 'soc_pct': ns.soc_l, 'grid_kw': ns.grid, 'soc_now_pct': soc} }}
     sensor:
       - name: "Zendure Forecast Plan"
         unique_id: zendure_forecast_plan
@@ -1177,6 +1247,10 @@ template:
         icon: mdi:chart-bar
         state: "{{ prices_today | length }}"
         attributes:
+          # Forecast per price slot: t (start, unix), price, known (0 = today's pattern),
+          # charge (1 = planned grid charge), solar_kw, usage_kw, battery_kw (+ charge / - discharge),
+          # soc_pct (state of charge at the end of the slot), grid_kw (+ import / - export)
+          timeline: "{{ timeline }}"
           # Same structure as sensor.dynamic_lowest_price_period (raw_today / raw_tomorrow)
           raw_today: >
             {%- set chosen_s = chosen | map(attribute='s') | list -%}

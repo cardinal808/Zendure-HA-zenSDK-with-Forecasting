@@ -1644,6 +1644,441 @@ views:
           - condition: state
             entity: input_boolean.dashboard_setting_show_forecasting
             state: 'on'
+      - type: grid
+        column_span: 2
+        cards:
+          - type: heading
+            icon: ''
+            heading: Plan Timeline
+            heading_style: title
+          - type: markdown
+            content: >-
+              <ha-alert alert-type="info">Help</ha-alert>Forecast per price slot for the next 36 hours, recalculated every minute. Grey prices are not known yet (today's pattern). Tomorrow's charging is indicative. The cheap-dip hold is not part of this forecast. Solar only with a Solcast detailed forecast.
+            text_only: true
+            visibility:
+              - condition: state
+                entity: input_boolean.dashboard_setting_show_help
+                state: 'on'
+          - type: custom:apexcharts-card
+            graph_span: 36h
+            span:
+              start: hour
+            now:
+              show: true
+              color: var(--primary-text-color)
+            update_interval: 5min
+            header:
+              show: true
+              title: 'Price (€/kWh)'
+              show_states: false
+            apex_config:
+              chart:
+                height: 95px
+              legend:
+                show: false
+              plotOptions:
+                bar:
+                  columnWidth: 100%
+              dataLabels:
+                enabled: false
+              grid:
+                show: true
+                borderColor: color-mix(in srgb, var(--divider-color) 50%, transparent)
+                strokeDashArray: 0
+                padding:
+                  top: -15
+                  bottom: -10
+              tooltip:
+                x:
+                  format: ddd HH:mm
+              xaxis:
+                labels:
+                  show: false
+                  datetimeUTC: false
+                  format: HH:mm
+                  style:
+                    colors: grey
+                axisTicks:
+                  show: false
+                axisBorder:
+                  color: color-mix(in srgb, var(--divider-color) 50%, transparent)
+              yaxis:
+                - tickAmount: 2
+                  decimalsInFloat: 2
+                  labels:
+                    minWidth: 40
+                    maxWidth: 40
+                    style:
+                      colors: >-
+                        color-mix(in srgb, var(--primary-text-color) 75%,
+                        transparent)
+            series:
+              - entity: sensor.zendure_forecast_chart
+                name: Price
+                type: column
+                color: '#01a180'
+                float_precision: 3
+                show:
+                  in_header: false
+                data_generator: |
+                  const d = entity.attributes.timeline;
+                  if (!d || !d.t) return [];
+                  
+                  const s = [...d.price].sort((a, b) => a - b);
+                  const lo = s[Math.floor(s.length / 3)], hi = s[Math.floor(s.length * 2 / 3)];
+                  return d.t.map((t, i) => {
+                    const v = d.price[i];
+                    let c = v <= lo ? '#01a180' : (v >= hi ? '#c53b2c' : '#e0a030');
+                    if (!d.known[i]) c = 'rgba(162,162,163,0.6)';
+                    return { x: t * 1000, y: v, fillColor: c };
+                  });
+          - type: custom:apexcharts-card
+            graph_span: 36h
+            span:
+              start: hour
+            now:
+              show: true
+              color: var(--primary-text-color)
+            update_interval: 5min
+            header:
+              show: true
+              title: 'Solar (kW)'
+              show_states: false
+            apex_config:
+              chart:
+                height: 95px
+              legend:
+                show: false
+              plotOptions:
+                bar:
+                  columnWidth: 100%
+              dataLabels:
+                enabled: false
+              grid:
+                show: true
+                borderColor: color-mix(in srgb, var(--divider-color) 50%, transparent)
+                strokeDashArray: 0
+                padding:
+                  top: -15
+                  bottom: -10
+              tooltip:
+                x:
+                  format: ddd HH:mm
+              xaxis:
+                labels:
+                  show: false
+                  datetimeUTC: false
+                  format: HH:mm
+                  style:
+                    colors: grey
+                axisTicks:
+                  show: false
+                axisBorder:
+                  color: color-mix(in srgb, var(--divider-color) 50%, transparent)
+              yaxis:
+                - tickAmount: 2
+                  decimalsInFloat: 1
+                  labels:
+                    minWidth: 40
+                    maxWidth: 40
+                    style:
+                      colors: >-
+                        color-mix(in srgb, var(--primary-text-color) 75%,
+                        transparent)
+            series:
+              - entity: sensor.zendure_forecast_chart
+                name: Solar
+                type: area
+                color: '#f2c037'
+                opacity: 0.5
+                stroke_width: 1
+                curve: stepline
+                float_precision: 2
+                show:
+                  in_header: false
+                data_generator: |
+                  const d = entity.attributes.timeline;
+                  if (!d || !d.t) return [];
+                  return d.t.map((t, i) => [t * 1000, d.solar_kw[i]]);
+          - type: custom:apexcharts-card
+            graph_span: 36h
+            span:
+              start: hour
+            now:
+              show: true
+              color: var(--primary-text-color)
+            update_interval: 5min
+            header:
+              show: true
+              title: 'Battery (kW): green = grid charge, yellow = solar charge, orange = discharge'
+              show_states: false
+            apex_config:
+              chart:
+                height: 95px
+              legend:
+                show: false
+              plotOptions:
+                bar:
+                  columnWidth: 100%
+              dataLabels:
+                enabled: false
+              grid:
+                show: true
+                borderColor: color-mix(in srgb, var(--divider-color) 50%, transparent)
+                strokeDashArray: 0
+                padding:
+                  top: -15
+                  bottom: -10
+              tooltip:
+                x:
+                  format: ddd HH:mm
+              xaxis:
+                labels:
+                  show: false
+                  datetimeUTC: false
+                  format: HH:mm
+                  style:
+                    colors: grey
+                axisTicks:
+                  show: false
+                axisBorder:
+                  color: color-mix(in srgb, var(--divider-color) 50%, transparent)
+              yaxis:
+                - tickAmount: 2
+                  decimalsInFloat: 1
+                  labels:
+                    minWidth: 40
+                    maxWidth: 40
+                    style:
+                      colors: >-
+                        color-mix(in srgb, var(--primary-text-color) 75%,
+                        transparent)
+            series:
+              - entity: sensor.zendure_forecast_chart
+                name: Battery
+                type: column
+                color: '#01a180'
+                float_precision: 2
+                show:
+                  in_header: false
+                data_generator: |
+                  const d = entity.attributes.timeline;
+                  if (!d || !d.t) return [];
+                  
+                  return d.t.map((t, i) => {
+                    const v = d.battery_kw[i];
+                    const c = v < 0 ? '#e8743b' : (d.charge[i] ? '#01a180' : '#f2c037');
+                    return { x: t * 1000, y: v, fillColor: c };
+                  });
+          - type: custom:apexcharts-card
+            graph_span: 36h
+            span:
+              start: hour
+            now:
+              show: true
+              color: var(--primary-text-color)
+            update_interval: 5min
+            header:
+              show: true
+              title: 'State of charge (%)'
+              show_states: false
+            apex_config:
+              chart:
+                height: 95px
+              legend:
+                show: false
+              plotOptions:
+                bar:
+                  columnWidth: 100%
+              dataLabels:
+                enabled: false
+              grid:
+                show: true
+                borderColor: color-mix(in srgb, var(--divider-color) 50%, transparent)
+                strokeDashArray: 0
+                padding:
+                  top: -15
+                  bottom: -10
+              tooltip:
+                x:
+                  format: ddd HH:mm
+              xaxis:
+                labels:
+                  show: false
+                  datetimeUTC: false
+                  format: HH:mm
+                  style:
+                    colors: grey
+                axisTicks:
+                  show: false
+                axisBorder:
+                  color: color-mix(in srgb, var(--divider-color) 50%, transparent)
+              yaxis:
+                - tickAmount: 2
+                  decimalsInFloat: 0
+                  labels:
+                    minWidth: 40
+                    maxWidth: 40
+                    style:
+                      colors: >-
+                        color-mix(in srgb, var(--primary-text-color) 75%,
+                        transparent)
+            series:
+              - entity: sensor.zendure_forecast_chart
+                name: State of charge
+                type: area
+                color: '#01a180'
+                opacity: 0.25
+                stroke_width: 2
+                curve: straight
+                float_precision: 0
+                show:
+                  in_header: false
+                data_generator: |
+                  const d = entity.attributes.timeline;
+                  if (!d || !d.t) return [];
+                  
+                  const len = (d.t.length > 1 ? d.t[1] - d.t[0] : 900) * 1000;
+                  const now = Date.now();
+                  return [[now, d.soc_now_pct]].concat(d.t.map((t, i) => [t * 1000 + len, d.soc_pct[i]]));
+          - type: custom:apexcharts-card
+            graph_span: 36h
+            span:
+              start: hour
+            now:
+              show: true
+              color: var(--primary-text-color)
+            update_interval: 5min
+            header:
+              show: true
+              title: 'Grid (kW): purple = import, grey = export'
+              show_states: false
+            apex_config:
+              chart:
+                height: 95px
+              legend:
+                show: false
+              plotOptions:
+                bar:
+                  columnWidth: 100%
+              dataLabels:
+                enabled: false
+              grid:
+                show: true
+                borderColor: color-mix(in srgb, var(--divider-color) 50%, transparent)
+                strokeDashArray: 0
+                padding:
+                  top: -15
+                  bottom: -10
+              tooltip:
+                x:
+                  format: ddd HH:mm
+              xaxis:
+                labels:
+                  show: false
+                  datetimeUTC: false
+                  format: HH:mm
+                  style:
+                    colors: grey
+                axisTicks:
+                  show: false
+                axisBorder:
+                  color: color-mix(in srgb, var(--divider-color) 50%, transparent)
+              yaxis:
+                - tickAmount: 2
+                  decimalsInFloat: 1
+                  labels:
+                    minWidth: 40
+                    maxWidth: 40
+                    style:
+                      colors: >-
+                        color-mix(in srgb, var(--primary-text-color) 75%,
+                        transparent)
+            series:
+              - entity: sensor.zendure_forecast_chart
+                name: Grid
+                type: column
+                color: '#8e7cc3'
+                float_precision: 2
+                show:
+                  in_header: false
+                data_generator: |
+                  const d = entity.attributes.timeline;
+                  if (!d || !d.t) return [];
+                  
+                  return d.t.map((t, i) => {
+                    const v = d.grid_kw[i];
+                    return { x: t * 1000, y: v, fillColor: v >= 0 ? '#8e7cc3' : '#a2a2a3' };
+                  });
+          - type: custom:apexcharts-card
+            graph_span: 36h
+            span:
+              start: hour
+            now:
+              show: true
+              color: var(--primary-text-color)
+            update_interval: 5min
+            header:
+              show: true
+              title: 'House usage (kW)'
+              show_states: false
+            apex_config:
+              chart:
+                height: 115px
+              legend:
+                show: false
+              plotOptions:
+                bar:
+                  columnWidth: 100%
+              dataLabels:
+                enabled: false
+              grid:
+                show: true
+                borderColor: color-mix(in srgb, var(--divider-color) 50%, transparent)
+                strokeDashArray: 0
+                padding:
+                  top: -15
+                  bottom: 0
+              tooltip:
+                x:
+                  format: ddd HH:mm
+              xaxis:
+                labels:
+                  show: true
+                  datetimeUTC: false
+                  format: HH:mm
+                  style:
+                    colors: grey
+                axisTicks:
+                  show: false
+                axisBorder:
+                  color: color-mix(in srgb, var(--divider-color) 50%, transparent)
+              yaxis:
+                - tickAmount: 2
+                  decimalsInFloat: 1
+                  labels:
+                    minWidth: 40
+                    maxWidth: 40
+                    style:
+                      colors: >-
+                        color-mix(in srgb, var(--primary-text-color) 75%,
+                        transparent)
+            series:
+              - entity: sensor.zendure_forecast_chart
+                name: Usage
+                type: column
+                color: '#4fb3bf'
+                float_precision: 2
+                show:
+                  in_header: false
+                data_generator: |
+                  const d = entity.attributes.timeline;
+                  if (!d || !d.t) return [];
+                  return d.t.map((t, i) => [t * 1000, d.usage_kw[i]]);
+        visibility:
+          - condition: state
+            entity: input_boolean.dashboard_setting_show_forecasting
+            state: 'on'
     cards: []
     icon: mdi:battery
     dense_section_placement: false

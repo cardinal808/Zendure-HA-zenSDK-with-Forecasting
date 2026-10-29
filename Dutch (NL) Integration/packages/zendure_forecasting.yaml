@@ -1048,6 +1048,78 @@ template:
           {%- set ns.l = ns.l + [x.s] -%}
         {%- endfor -%}
         {{ ns.l }}
+
+      # ---- Tijdlijn (voorspelling per prijsslot, voor de dashboardgrafiek) ----
+      # Simuleert per slot: verbruik (profiel), zon (detailvoorspelling), laden uit het net
+      # in de geplande slots (vandaag) en de indicatieve laadslots van morgen, en verder
+      # nul-op-de-meter: tekort uit de accu, overschot in de accu. Indicatief: HVAC en
+      # dal-blokkade worden hier niet meegenomen.
+      tl_slots: "{{ (kand + morg) | sort(attribute='s') | selectattr('e', 'gt', nu_ts) | list }}"
+      tl_eind_ts: "{{ (tl_slots | map(attribute='e') | max) if tl_slots | length > 0 else nu_ts }}"
+      tl_zon: >
+        {%- set e1 = states('input_text.forecast_zon_resterend_vandaag_sensor') | trim -%}
+        {%- set e2 = states('input_text.forecast_zon_morgen_sensor') | trim -%}
+        {%- set ns = namespace(l=[], ts=[], ids=[]) -%}
+        {%- for e in [e1, e1 | replace('_remaining_today', '_today'), e2] -%}
+          {%- if e | lower | regex_match('^sensor\\..+') and e not in ns.ids -%}
+            {%- set ns.ids = ns.ids + [e] -%}
+            {%- set d = state_attr(e, 'detailedForecast') or state_attr(e, 'detailed_forecast') or [] -%}
+            {%- for q in d -%}
+              {%- if q is mapping and q.period_start is defined -%}
+                {%- set ps = as_timestamp(q.period_start, 0) -%}
+                {%- if ps > nu_ts - c_detail_periode_s and ps < tl_eind_ts and ps not in ns.ts -%}
+                  {%- set ns.ts = ns.ts + [ps] -%}
+                  {%- set ns.l = ns.l + [{'s': ps, 'pv': ((q.pv_estimate | float(0)) * betr) | round(3)}] -%}
+                {%- endif -%}
+              {%- endif -%}
+            {%- endfor -%}
+          {%- endif -%}
+        {%- endfor -%}
+        {{ ns.l | sort(attribute='s') }}
+      tl_laad_s: "{{ (gekozen | map(attribute='s') | list) + morgen_laadslots }}"
+      p_ontl_kw: "{{ [states('input_number.zendure_2400_ac_max_ontlaadvermogen') | float(2400), 100] | max / 1000 }}"
+      tijdlijn: >
+        {%- set ns = namespace(soc=s_nu, t=[], p=[], bek=[], laad=[], pv=[], last=[], accu=[], soc_l=[], net=[]) -%}
+        {%- set bekend_tot = eind_vandaag_ts + (dag_lengte if morgen_bekend else 0) -%}
+        {%- for x in tl_slots -%}
+          {%- set a = [x.s, nu_ts] | max -%}
+          {%- set dur = (x.e - a) / 3600 -%}
+          {%- if dur > 0 -%}
+            {%- set uu = uur_last | selectattr('s', 'le', a) | list -%}
+            {%- set last = ((uu | last).kw if uu | length > 0 else l_uur) * dur -%}
+            {%- set nz = namespace(k=0) -%}
+            {%- for q in tl_zon | selectattr('s', 'gt', a - c_detail_periode_s) | selectattr('s', 'lt', x.e) -%}
+              {%- set ov = [q.s + c_detail_periode_s, x.e] | min - [q.s, a] | max -%}
+              {%- if ov > 0 -%}{%- set nz.k = nz.k + q.pv * ov / 3600 -%}{%- endif -%}
+            {%- endfor -%}
+            {%- set pv = nz.k -%}
+            {%- set ruimte_ac = ([s_max - ns.soc, 0] | max) / eff_in -%}
+            {%- set laden = x.s in tl_laad_s -%}
+            {%- if laden -%}
+              {%- set accu = [p_max_kw * dur, ruimte_ac] | min -%}
+              {%- set net = last - pv + accu -%}
+            {%- elif last >= pv -%}
+              {%- set accu = 0 - ([last - pv, ns.soc * eff_out, p_ontl_kw * dur] | min) -%}
+              {%- set net = last - pv + accu -%}
+            {%- else -%}
+              {%- set accu = [pv - last, ruimte_ac, p_set_kw * dur] | min -%}
+              {%- set net = last - pv + accu -%}
+            {%- endif -%}
+            {%- set ns.soc = ns.soc + (accu * eff_in if accu > 0 else accu / eff_out) -%}
+            {%- set ns.soc = [[ns.soc, 0] | max, s_max] | min -%}
+            {%- set ns.t = ns.t + [x.s | int] -%}
+            {%- set ns.p = ns.p + [x.v | round(4)] -%}
+            {%- set ns.bek = ns.bek + [1 if x.s < bekend_tot else 0] -%}
+            {%- set ns.laad = ns.laad + [1 if laden else 0] -%}
+            {%- set ns.pv = ns.pv + [(pv / dur) | round(2)] -%}
+            {%- set ns.last = ns.last + [(last / dur) | round(2)] -%}
+            {%- set ns.accu = ns.accu + [(accu / dur) | round(2)] -%}
+            {%- set ns.soc_l = ns.soc_l + [((soc_min + ns.soc / cap * 100) if cap > 0 else 0) | round(1)] -%}
+            {%- set ns.net = ns.net + [(net / dur) | round(2)] -%}
+          {%- endif -%}
+        {%- endfor -%}
+        {{ {'t': ns.t, 'prijs': ns.p, 'bekend': ns.bek, 'laden': ns.laad, 'zon_kw': ns.pv, 'verbruik_kw': ns.last,
+            'accu_kw': ns.accu, 'soc_pct': ns.soc_l, 'net_kw': ns.net, 'soc_nu_pct': soc} }}
     sensor:
       - name: "Zendure Forecast Plan"
         unique_id: zendure_forecast_plan
@@ -1177,6 +1249,10 @@ template:
         icon: mdi:chart-bar
         state: "{{ raw_vandaag | length }}"
         attributes:
+          # Voorspelling per prijsslot: t (start, unix), prijs, bekend (0 = patroon van vandaag),
+          # laden (1 = gepland netladen), zon_kw, verbruik_kw, accu_kw (+ laden / - ontladen),
+          # soc_pct (laadpercentage aan het eind van het slot), net_kw (+ import / - export)
+          tijdlijn: "{{ tijdlijn }}"
           # Zelfde opbouw als sensor.dynamisch_goedkoopste_periode (raw_today / raw_tomorrow)
           raw_today: >
             {%- set gekozen_s = gekozen | map(attribute='s') | list -%}
