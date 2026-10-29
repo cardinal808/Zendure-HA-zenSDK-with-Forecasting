@@ -1671,11 +1671,9 @@ views:
                 update_interval: 5min
                 header:
                   show: false
-                yaxis:
-                  - id: a
-                    decimals: 2
-                    show: false
                 apex_config:
+                  yaxis:
+                    - show: false
                   chart:
                     height: 62px
                     sparkline:
@@ -1724,7 +1722,6 @@ views:
                     name: Price
                     type: column
                     color: '#01a180'
-                    yaxis_id: a
                     float_precision: 3
                     show:
                       in_header: false
@@ -1750,11 +1747,9 @@ views:
                 update_interval: 5min
                 header:
                   show: false
-                yaxis:
-                  - id: a
-                    decimals: 2
-                    show: false
                 apex_config:
+                  yaxis:
+                    - show: false
                   chart:
                     height: 62px
                     sparkline:
@@ -1803,7 +1798,6 @@ views:
                     name: Solar
                     type: column
                     color: '#f2c037'
-                    yaxis_id: a
                     opacity: 0.7
                     float_precision: 2
                     show:
@@ -1816,7 +1810,6 @@ views:
                     name: Usage
                     type: line
                     color: '#4fb3bf'
-                    yaxis_id: a
                     stroke_width: 1.5
                     curve: stepline
                     float_precision: 2
@@ -1836,16 +1829,15 @@ views:
                 update_interval: 5min
                 header:
                   show: false
-                yaxis:
-                  - id: a
-                    decimals: 2
-                    show: false
-                  - id: pct
-                    min: 0
-                    max: 100
-                    opposite: true
-                    show: false
                 apex_config:
+                  yaxis:
+                    - seriesName: Battery
+                      show: false
+                    - seriesName: State of charge
+                      opposite: true
+                      min: 0
+                      max: 100
+                      show: false
                   chart:
                     height: 62px
                     sparkline:
@@ -1894,7 +1886,6 @@ views:
                     name: Battery
                     type: column
                     color: '#01a180'
-                    yaxis_id: a
                     float_precision: 2
                     show:
                       in_header: false
@@ -1910,7 +1901,6 @@ views:
                     name: State of charge
                     type: line
                     color: '#e1e1e1'
-                    yaxis_id: pct
                     stroke_width: 1.5
                     curve: straight
                     float_precision: 0
@@ -1919,8 +1909,8 @@ views:
                     data_generator: |
                       const d = entity.attributes.timeline;
                       if (!d || !d.t) return [];
-                      const len = (d.t.length > 1 ? d.t[1] - d.t[0] : 900) * 1000;
-                      return [{ x: Date.now(), y: d.soc_now_pct }].concat(d.t.map((t, i) => ({ x: t * 1000 + len, y: d.soc_pct[i] })));
+                      // laadpercentage aan het begin van elk slot (zelfde tijdstippen als de kolommen)
+                      return d.t.map((t, i) => ({ x: t * 1000, y: i === 0 ? d.soc_now_pct : d.soc_pct[i - 1] }));
               - type: custom:apexcharts-card
                 graph_span: 36h
                 span:
@@ -1931,11 +1921,9 @@ views:
                 update_interval: 5min
                 header:
                   show: false
-                yaxis:
-                  - id: a
-                    decimals: 2
-                    show: false
                 apex_config:
+                  yaxis:
+                    - show: false
                   chart:
                     height: 84px
                     sparkline:
@@ -1984,7 +1972,6 @@ views:
                     name: Grid
                     type: column
                     color: '#8e7cc3'
-                    yaxis_id: a
                     float_precision: 2
                     show:
                       in_header: false
