@@ -20,7 +20,7 @@ The battery charges at the cheapest moments, but **only as much as is actually n
 - **Solar self-consumption** is calculated from the last 7 days in kWh per day (on a dull day the percentage is higher than on a sunny one), with a manual override.
 - **Average daily usage** comes from 7 days of history (import, export, production, battery in/out), with an adjustable starting value.
 - **Efficiency filter:** a charge slot must be cheaper than the value of the stored energy after round-trip loss, and in scenario A below the day average.
-- **Path check:** if the battery won't last until the first charge slot, extra cheaper slots are planned earlier.
+- **Path check:** calculates when the battery runs empty and when energy comes in again: the first charge slot or the moment solar covers usage (from the Solcast detailed forecast, otherwise sunrise + 3 hours). If there is a gap, extra charge slots are planned before it, even when nothing else needs to be charged. Only the expensive slots in the gap count: a slot must be cheaper after round-trip loss than the grid purchase it replaces.
 - **Measured charge power** is used to determine the number of slots.
 - Optional: **hold discharging in a cheap dip** (save the battery).
 - Dashboard: a Forecasting section on the Zendure tab (plan for today and tomorrow, tiles, collected 7-day data, recalculate button) and a Configuration (Forecasting) block with all input fields. Both can be shown or hidden with **Show Forecasting On Dashboard**.

@@ -10,7 +10,7 @@
 #   2. Vermogenssensoren + integratiesensoren (kWh-tellers)
 #   3. Statistieken: 7 dagen (zelfverbruik zon, gemiddeld gebruik) en gemeten laadvermogen
 #   4. De planner: sensor.zendure_forecast_plan (+ sensor.zendure_forecast_grafiek)
-#      met o.a. scenario A/B, pad-check, efficiencyfilter en goedkoop-dal-blokkade
+#      met o.a. scenario A/B, pad-check (tot zon-dekking), efficiencyfilter en goedkoop-dal-blokkade
 #
 # Vaste waarden (drempels, terugvalwaarden) staan bovenaan de planner onder
 # "Instellingen (vaste waarden)" met het voorvoegsel c_.
@@ -446,6 +446,9 @@ template:
       c_prijs_noemer: 0.02               # ondergrens in prijsvergelijkingen (EUR/kWh)
       c_pad_min_uren: 0.25               # pad-check pas bij een gat van minstens 15 minuten
       c_pad_min_tekort_kwh: 0.2          # en een tekort van minstens 0,2 kWh
+      c_detail_periode_s: 1800           # lengte van een periode in de detailvoorspelling (Solcast: 30 min)
+      c_dek_offset_s: 10800              # zonder detailvoorspelling: zon dekt het verbruik 3 uur na zonsopkomst
+      c_dek_min_kwh: 2                   # en alleen als er die dag minstens zoveel zon verwacht wordt
 
       # ---- Tijd -------------------------------------------------------
       nu_ts: "{{ as_timestamp(now()) }}"
@@ -641,11 +644,6 @@ template:
           {% set rise = volgende_zon_ts - 86400 %}
           {{ ([[(sets - nu_ts) / ([sets - rise, 3600] | max), 0] | max, 1] | min) | round(3) }}
         {% else %}1{% endif %}
-      # Resterende zonuren vandaag (0 als de zon onder of nog niet op is)
-      zon_uren_rest: >
-        {% if is_state('sun.sun', 'above_horizon') %}
-          {{ ([(as_timestamp(state_attr('sun.sun', 'next_setting'), nu_ts) - nu_ts) / 3600, 0] | max) | round(2) }}
-        {% else %}0{% endif %}
       direct_rest_kwh: >
         {% if direct_model_kwh %}{{ ([zon_rest, direct_dag_kwh * dag_fractie] | min) | round(3) }}
         {% else %}{{ (zon_rest * direct) | round(3) }}{% endif %}
@@ -698,42 +696,129 @@ template:
           {%- endif -%}
         {%- endfor -%}
         {{ ns.l | sort(attribute='s') }}
-      # ---- Pad-check: haalt de accu het eerste laadslot? ----------------------
-      # Zo niet, dan koopt het huis in het gat tot dat slot in. Plan dan een aantal
-      # slots eerder (voor het gat), maar alleen als die goedkoper zijn dan de inkoop in het gat.
-      t_laad_ts: >
-        {% if gekozen_basis | length > 0 %}{{ [gekozen_basis | map(attribute='s') | min, nu_ts] | max }}{% else %}{{ nu_ts }}{% endif %}
-      gap_uren: "{{ ((t_laad_ts - nu_ts) / 3600) | round(2) }}"
-      gap_zon_deel: "{{ ([gap_uren / zon_uren_rest, 1] | min) if zon_uren_rest > 0 else 0 }}"
+      # ---- Pad-check: haalt de accu het moment dat er weer energie bijkomt? ----
+      # Een totale energiebalans zegt niets over het moment: de accu kan 's ochtends
+      # leeg zijn terwijl de zon het verbruik pas uren later dekt. Dan koopt het huis
+      # in dat gat in, vaak tegen de ochtendpiek. De pad-check rekent dat gat uit en
+      # plant extra laadslots ervoor, maar alleen als die (na round-trip-verlies)
+      # goedkoper zijn dan de inkoop in het gat. Hij werkt ook als er nog geen enkel
+      # gewoon laadslot gepland is, en gebruikt ook de prijzen van morgen zodra die bekend zijn.
+
+      # Zon-dekking: vanaf wanneer dekt de zon het verbruik?
+      # Uit de detailvoorspelling (Solcast: attribuut detailedForecast, kW per half uur)
+      # van de ingevulde sensoren en van de "_today"-variant van de resterend-vandaag-sensor.
+      # Alleen de eerstvolgende zondag telt (tot de volgende zonsondergang).
+      zon_ondergang_ts: "{{ as_timestamp(state_attr('sun.sun', 'next_setting'), nu_ts + 43200) }}"
+      zon_detail: >
+        {%- set e1 = states('input_text.forecast_zon_resterend_vandaag_sensor') | trim -%}
+        {%- set e2 = states('input_text.forecast_zon_morgen_sensor') | trim -%}
+        {%- set ns = namespace(l=[], ts=[], ids=[]) -%}
+        {%- for e in [e1, e1 | replace('_remaining_today', '_today'), e2] -%}
+          {%- if e | lower | regex_match('^sensor\\..+') and e not in ns.ids -%}
+            {%- set ns.ids = ns.ids + [e] -%}
+            {%- set d = state_attr(e, 'detailedForecast') or state_attr(e, 'detailed_forecast') or [] -%}
+            {%- for p in d -%}
+              {%- if p is mapping and p.period_start is defined -%}
+                {%- set ps = as_timestamp(p.period_start, 0) -%}
+                {%- if ps > nu_ts - c_detail_periode_s and ps < zon_ondergang_ts and ps not in ns.ts -%}
+                  {%- set ns.ts = ns.ts + [ps] -%}
+                  {%- set ns.l = ns.l + [{'s': ps, 'pv': ((p.pv_estimate | float(0)) * betr) | round(3)}] -%}
+                {%- endif -%}
+              {%- endif -%}
+            {%- endfor -%}
+          {%- endif -%}
+        {%- endfor -%}
+        {{ ns.l | sort(attribute='s') }}
+      zon_dek_bron: >
+        {%- if zon_detail | length > 0 -%}Detailvoorspelling
+        {%- elif is_state('sun.sun', 'above_horizon') or zon_forecast_volgende >= c_dek_min_kwh -%}Zonsopkomst + {{ (c_dek_offset_s / 3600) | round(1) }} uur
+        {%- else -%}Geen (te weinig zon verwacht){%- endif -%}
+      t_zon_dek_ts: >
+        {%- set ns = namespace(t=none) -%}
+        {%- for p in zon_detail -%}
+          {%- if ns.t is none and p.pv >= l_uur -%}{%- set ns.t = [p.s, nu_ts] | max -%}{%- endif -%}
+        {%- endfor -%}
+        {%- if zon_detail | length > 0 -%}{{ ns.t if ns.t is not none else t_end_ts }}
+        {%- elif is_state('sun.sun', 'above_horizon') -%}{{ [volgende_zon_ts - 86400 + c_dek_offset_s, nu_ts] | max }}
+        {%- elif zon_forecast_volgende >= c_dek_min_kwh -%}{{ volgende_zon_ts + c_dek_offset_s }}
+        {%- else -%}{{ t_end_ts }}{%- endif -%}
+
+      # Het gat: van "accu leeg" tot het eerste van: gewoon laadslot, zon-dekking, einde overbrugging
+      t_leeg_ts: "{{ (nu_ts + s_nu * eff_out / l_uur * 3600) if l_uur > 0 else (nu_ts + 172800) }}"
+      t_eerste_slot_ts: "{{ (gekozen_basis | map(attribute='s') | min) if gekozen_basis | length > 0 else t_end_ts }}"
+      t_gap_eind_ts: "{{ [t_eerste_slot_ts, t_zon_dek_ts, t_end_ts] | min }}"
+      t_gap_start_ts: "{{ [t_leeg_ts, nu_ts] | max }}"
+      gap_uren: "{{ ([t_gap_eind_ts - t_gap_start_ts, 0] | max / 3600) | round(2) }}"
       gap_last: "{{ (l_uur * gap_uren) | round(3) }}"
-      gap_direct: "{{ ([gap_last, direct_rest_kwh * gap_zon_deel] | min) | round(3) }}"
-      gap_beschikbaar: "{{ ((s_nu + zon_overschot_ac * gap_zon_deel * eff_in) * eff_out) | round(3) }}"
-      gap_tekort_ac: "{{ ([gap_last - gap_direct - gap_beschikbaar, 0] | max) | round(3) }}"
+      # Kandidaat-slots: de rest van vandaag, plus morgen als die prijzen echt bekend zijn
+      pad_kand: "{{ kand + (morg if morgen_bekend else []) }}"
+      # Per prijsslot in het gat: verbruik min de zon die daar al direct verbruikt wordt
+      # (zon alleen bekend met detailvoorspelling)
+      gap_kwartieren: >
+        {%- set ns = namespace(l=[]) -%}
+        {%- for x in pad_kand -%}
+          {%- set a = [x.s, t_gap_start_ts] | max -%}
+          {%- set b = [x.e, t_gap_eind_ts] | min -%}
+          {%- if b > a -%}
+            {%- set nz = namespace(k=0) -%}
+            {%- for p in zon_detail -%}
+              {%- set pa = [p.s, a] | max -%}
+              {%- set pb = [p.s + c_detail_periode_s, b] | min -%}
+              {%- if pb > pa -%}{%- set nz.k = nz.k + ([p.pv, l_uur] | min) * (pb - pa) / 3600 -%}{%- endif -%}
+            {%- endfor -%}
+            {%- set ns.l = ns.l + [{'s': x.s, 'v': x.v, 'kwh': ([l_uur * (b - a) / 3600 - nz.k, 0] | max) | round(4)}] -%}
+          {%- endif -%}
+        {%- endfor -%}
+        {{ ns.l }}
+      gap_tekort_ac: "{{ (gap_kwartieren | map(attribute='kwh') | sum) | round(3) }}"
+      gap_zon_direct: "{{ ([gap_last - gap_tekort_ac, 0] | max) | round(3) }}"
+      # Goedkoopste laadmoment dat het gat nog kan helpen
+      p_laad_min: >
+        {% set v = pad_kand | selectattr('s', 'lt', t_gap_eind_ts) | map(attribute='v') | list %}
+        {% if v | length > 0 %}{{ v | min }}{% else %}0{% endif %}
+      # Alleen de slots in het gat die duurder zijn dan dat laadmoment na round-trip-verlies tellen mee:
+      # inkopen in een goedkoop deel van het gat is goedkoper dan eerst opslaan.
+      gap_waardevol: >
+        {%- set ns = namespace(l=[]) -%}
+        {%- for q in gap_kwartieren -%}
+          {%- set sp = (q.v * eff_rt - p_laad_min) / ([p_laad_min | abs, c_prijs_noemer] | max) * 100 -%}
+          {%- if q.kwh > 0 and sp > 0 and sp >= spread_min -%}{%- set ns.l = ns.l + [q] -%}{%- endif -%}
+        {%- endfor -%}
+        {{ ns.l }}
+      gap_waardevol_ac: "{{ (gap_waardevol | map(attribute='kwh') | sum) | round(3) }}"
+      # Gewogen gemiddelde inkoopprijs in die dure slots
       p_gap_avg: >
-        {% set ns = namespace(som=0, n=0) %}
-        {% for x in kand %}{% if x.s < t_laad_ts %}{% set ns.som = ns.som + x.v %}{% set ns.n = ns.n + 1 %}{% endif %}{% endfor %}
-        {% if ns.n > 0 %}{{ (ns.som / ns.n) | round(5) }}{% else %}0{% endif %}
-      pad_actief: "{{ gekozen_basis | length > 0 and gap_uren >= c_pad_min_uren and gap_tekort_ac >= c_pad_min_tekort_kwh }}"
+        {% set ns = namespace(som=0, kwh=0) %}
+        {% for q in gap_waardevol %}{% set ns.som = ns.som + q.v * q.kwh %}{% set ns.kwh = ns.kwh + q.kwh %}{% endfor %}
+        {% if ns.kwh > 0 %}{{ (ns.som / ns.kwh) | round(5) }}{% else %}0{% endif %}
+      pad_actief: "{{ gap_uren >= c_pad_min_uren and gap_waardevol_ac >= c_pad_min_tekort_kwh and p_gap_avg > 0 }}"
+      # Netladen (AC) dat nodig is om de dure slots na laad- en ontlaadverlies te leveren, begrensd op de ruimte in de accu
+      pad_netladen_ac: "{{ ([gap_waardevol_ac / eff_rt, room / eff_in] | min) | round(3) if pad_actief and eff_rt > 0 and eff_in > 0 else 0 }}"
       n_extra: >
-        {% if pad_actief and e_slot > 0 %}
-          {{ [(gap_tekort_ac / eff_out / eff_in / e_slot) | round(0, 'ceil') | int, n_slots] | min }}
-        {% else %}0{% endif %}
-      # Extra slots: goedkoopste slots die vóór het eerste laadslot eindigen en goedkoper zijn dan de inkoop in het gat
+        {% if pad_netladen_ac > 0 and e_slot > 0 %}{{ (pad_netladen_ac / e_slot) | round(0, 'ceil') | int }}{% else %}0{% endif %}
+      # Extra slots: goedkoopste slots vóór het einde van het gat die (na verlies) goedkoper zijn dan de inkoop in de dure slots
       extra_slots: >
         {%- set ns = namespace(l=[]) -%}
-        {%- set p_waarde = (p_gap_avg * eff_rt) if p_gap_avg > 0 else p_gap_avg -%}
-        {%- for x in kand | sort(attribute='v') -%}
+        {%- set p_waarde = p_gap_avg * eff_rt -%}
+        {%- for x in pad_kand | sort(attribute='v') -%}
           {%- set sp = (p_waarde - x.v) / ([x.v | abs, c_prijs_noemer] | max) * 100 -%}
-          {%- if ns.l | length < n_extra and x.e <= t_laad_ts and sp >= spread_min and sp > 0 -%}
+          {%- if ns.l | length < n_extra and x.s < t_gap_eind_ts and sp >= spread_min and sp > 0 -%}
             {%- set ns.l = ns.l + [x] -%}
           {%- endif -%}
         {%- endfor -%}
         {{ ns.l }}
+
+      # ---- Totaal netladen en definitieve slots ------------------------------
+      # Het gewone plan en de pad-check overlappen: het gat zit al in de totale energiebalans.
+      # Daarom telt het grootste van de twee, niet de som.
+      netladen_ac: "{{ ([grid_ac, pad_netladen_ac if extra_slots | length > 0 else 0] | max) | round(3) }}"
+      n_totaal: >
+        {% if netladen_ac >= c_laden_stop_kwh and e_slot > 0 %}{{ (netladen_ac / e_slot) | round(0, 'ceil') | int }}{% else %}0{% endif %}
       gekozen: >
         {%- set extra_s = extra_slots | map(attribute='s') | list -%}
         {%- set ns = namespace(l=extra_slots) -%}
         {%- for x in gekozen_basis | sort(attribute='v') -%}
-          {%- if x.s not in extra_s and ns.l | length < n_slots -%}
+          {%- if x.s not in extra_s and ns.l | length < n_totaal -%}
             {%- set ns.l = ns.l + [x] -%}
           {%- endif -%}
         {%- endfor -%}
@@ -742,7 +827,7 @@ template:
         {% set ns = namespace(a=false) %}
         {% for x in gekozen %}{% if x.s <= nu_ts < x.e %}{% set ns.a = true %}{% endif %}{% endfor %}
         {{ ns.a }}
-      gepland_ac: "{{ ([gekozen | length * e_slot, grid_ac] | min) | round(3) }}"
+      gepland_ac: "{{ ([gekozen | length * e_slot, netladen_ac] | min) | round(3) }}"
       p_gekozen_avg: >
         {% if gekozen | length > 0 %}{{ (gekozen | map(attribute='v') | sum / (gekozen | length)) | round(5) }}{% else %}0{% endif %}
       kosten: "{{ (gepland_ac * p_gekozen_avg) | round(2) }}"
@@ -753,7 +838,7 @@ template:
       in_dal: "{{ prijzen_ok and prijs_nu < 999 and prijs_nu <= dal_drempel and prijs_nu < p_dag_gem }}"
       # Alleen vasthouden als er nog uit het net bijgeladen moet worden (accu komt niet vol uit zon)
       ontladen_vasthouden: >
-        {{ is_state('input_boolean.forecast_dal_ontladen_blokkeren', 'on') and in_dal and grid_ac >= c_laden_stop_kwh }}
+        {{ is_state('input_boolean.forecast_dal_ontladen_blokkeren', 'on') and in_dal and netladen_ac >= c_laden_stop_kwh }}
 
       # ---- Overzicht voor morgen --------------------------------------
       morgen_direct: "{{ direct_morgen_kwh | round(2) }}"
@@ -782,7 +867,7 @@ template:
             Geen batterijdata
           {% else %}
             {% set drempel = c_laden_stop_kwh if this.state == 'Laden' else c_laden_start_kwh %}
-            {% if grid_ac < drempel %}
+            {% if netladen_ac < drempel %}
               Niet nodig
             {% elif gekozen | length == 0 %}
               Niet gunstig
@@ -799,7 +884,8 @@ template:
             {% elif scenario == 'B' %}B (morgen duurder: zo vol mogelijk laden)
             {% else %}A (morgen goedkoper of gelijk: alleen overbruggen){% endif %}
           morgen_prijzen_bekend: "{{ morgen_bekend }}"
-          netladen_vandaag_kwh: "{{ grid_ac }}"
+          netladen_vandaag_kwh: "{{ netladen_ac }}"
+          netladen_energiebalans_kwh: "{{ grid_ac }}"
           gepland_netladen_kwh: "{{ gepland_ac }}"
           doel_opgeslagen_kwh: "{{ target_dc }}"
           batterij_nu_kwh: "{{ s_nu }}"
@@ -821,9 +907,17 @@ template:
               {%- set ns.l = ns.l + [{'start': x.s | timestamp_custom('%H:%M', true), 'eind': x.e | timestamp_custom('%H:%M', true), 'prijs': x.v}] -%}
             {%- endfor -%}
             {{ ns.l }}
-          # --- Pad-check (haalt de accu het eerste laadslot?) ---
+          # --- Pad-check (haalt de accu het moment dat er weer energie bijkomt?) ---
+          padcheck_accu_leeg_om: "{{ (t_leeg_ts | timestamp_custom('%Y-%m-%d %H:%M', true)) if t_leeg_ts < nu_ts + 172800 else none }}"
+          padcheck_zon_dekt_vanaf: "{{ t_zon_dek_ts | timestamp_custom('%Y-%m-%d %H:%M', true) }}"
+          padcheck_zon_bron: "{{ zon_dek_bron }}"
+          padcheck_gat_eind: "{{ t_gap_eind_ts | timestamp_custom('%Y-%m-%d %H:%M', true) }}"
           padcheck_gat_uren: "{{ gap_uren }}"
+          padcheck_zon_in_gat_kwh: "{{ gap_zon_direct }}"
           padcheck_tekort_kwh: "{{ gap_tekort_ac }}"
+          padcheck_tekort_dure_slots_kwh: "{{ gap_waardevol_ac }}"
+          padcheck_gat_prijs: "{{ p_gap_avg }}"
+          padcheck_netladen_kwh: "{{ pad_netladen_ac }}"
           padcheck_extra_slots: "{{ extra_slots | length }}"
           # --- Dal en laadvermogen ---
           prijs_nu: "{{ prijs_nu if prijs_nu < 999 else none }}"
@@ -880,11 +974,12 @@ template:
             {%- endfor -%}
             ]
           raw_tomorrow: >
+            {%- set gekozen_s = gekozen | map(attribute='s') | list -%}
             [
             {%- for p in raw_morgen -%}
               {%- set s = as_timestamp(p.start) -%}
               {"start": "{{ p.start }}", "end": "{{ p.end }}", "value": {{ p.value }},
-               "goedkoop": "{{ 'ja' if s in morgen_laadslots else 'nee' }}", "duur": "nee"}{{ ',' if not loop.last }}
+               "goedkoop": "{{ 'ja' if s in morgen_laadslots or s in gekozen_s else 'nee' }}", "duur": "nee"}{{ ',' if not loop.last }}
             {%- endfor -%}
             ]
 
@@ -944,7 +1039,7 @@ template:
         unit_of_measurement: "kWh"
         device_class: energy
         icon: mdi:transmission-tower-import
-        state: "{{ grid_ac }}"
+        state: "{{ netladen_ac }}"
 
       - name: "Forecast Verwacht Batterijgebruik"
         unique_id: forecast_verwacht_batterijgebruik
