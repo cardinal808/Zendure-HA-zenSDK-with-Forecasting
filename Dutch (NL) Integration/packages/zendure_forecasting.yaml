@@ -72,6 +72,10 @@ input_button:
 
 # ---------------------------------------------------------------------
 # 2. Integratiesensoren (kWh-tellers, afgeleid van vermogens-sensoren)
+#    Methode "left": de vermogens krijgen alleen bij een wijziging een nieuwe waarde
+#    (stapsgewijs). Trapezium zou tussen twee metingen een schuine lijn trekken en
+#    energie meetellen die er niet was. Voor net-import en -export worden bij voorkeur
+#    de kWh-tellers van de P1-meter gebruikt (zie "Forecast Teller P1 ...").
 # ---------------------------------------------------------------------
 sensor:
   - platform: integration
@@ -80,7 +84,7 @@ sensor:
     source: sensor.forecast_p1_import_vermogen
     unit_prefix: k
     round: 3
-    method: trapezoidal
+    method: left
 
   - platform: integration
     name: "Forecast P1 Export Totaal"
@@ -88,7 +92,7 @@ sensor:
     source: sensor.forecast_p1_export_vermogen
     unit_prefix: k
     round: 3
-    method: trapezoidal
+    method: left
 
   - platform: integration
     name: "Forecast P1 Export Uit Zon Totaal"
@@ -96,7 +100,7 @@ sensor:
     source: sensor.forecast_p1_export_uit_zon_vermogen
     unit_prefix: k
     round: 3
-    method: trapezoidal
+    method: left
 
   - platform: integration
     name: "Forecast Zendure Laden Totaal"
@@ -104,7 +108,7 @@ sensor:
     source: sensor.forecast_zendure_laden_vermogen
     unit_prefix: k
     round: 3
-    method: trapezoidal
+    method: left
 
   - platform: integration
     name: "Forecast Zendure Ontladen Totaal"
@@ -112,7 +116,7 @@ sensor:
     source: sensor.forecast_zendure_ontladen_vermogen
     unit_prefix: k
     round: 3
-    method: trapezoidal
+    method: left
 
   - platform: integration
     name: "Forecast Zendure Laden Uit Zon Totaal"
@@ -120,7 +124,7 @@ sensor:
     source: sensor.forecast_zendure_laden_uit_zon_vermogen
     unit_prefix: k
     round: 3
-    method: trapezoidal
+    method: left
 
   # -------------------------------------------------------------------
   # 3. Statistieken over de afgelopen 7 dagen (rollend)
@@ -313,6 +317,39 @@ template:
         minutes: "/10"
       - platform: homeassistant
         event: start
+    variables:
+      c_max_kwh_per_uur: 15              # grotere toename per uur geldt als meterwissel of fout
+      c_meter_max_weg_s: 21600           # meter langer dan 6 uur weg: terug naar berekening uit vermogen
+      nu_ts: "{{ as_timestamp(now()) }}"
+      # kWh-tellers van de P1-meter, automatisch herkend (eerste groep waarvan alle sensoren een waarde hebben):
+      # SlimmeLezer/ESPHome DSMR, HomeWizard P1, DSMR-integratie
+      p1_import_groepen:
+        - ['sensor.energy_consumed_tariff_1', 'sensor.energy_consumed_tariff_2']
+        - ['sensor.p1_meter_energy_import']
+        - ['sensor.electricity_meter_energy_consumption_tarif_1', 'sensor.electricity_meter_energy_consumption_tarif_2']
+      p1_export_groepen:
+        - ['sensor.energy_produced_tariff_1', 'sensor.energy_produced_tariff_2']
+        - ['sensor.p1_meter_energy_export']
+        - ['sensor.electricity_meter_energy_production_tarif_1', 'sensor.electricity_meter_energy_production_tarif_2']
+      # Som van de eerste complete groep in kWh; -1 = geen meter gevonden
+      meter_import: >
+        {%- set ns = namespace(v=-1) -%}
+        {%- for g in p1_import_groepen -%}
+          {%- if ns.v < 0 and g | select('has_value') | list | length == g | length -%}
+            {%- set ns.v = g | map('states') | map('float', 0) | sum -%}
+          {%- endif -%}
+        {%- endfor -%}
+        {{ ns.v | round(3) }}
+      meter_export: >
+        {%- set ns = namespace(v=-1) -%}
+        {%- for g in p1_export_groepen -%}
+          {%- if ns.v < 0 and g | select('has_value') | list | length == g | length -%}
+            {%- set ns.v = g | map('states') | map('float', 0) | sum -%}
+          {%- endif -%}
+        {%- endfor -%}
+        {{ ns.v | round(3) }}
+      int_import: "{{ states('sensor.forecast_p1_import_totaal') | float(-1) }}"
+      int_export: "{{ states('sensor.forecast_p1_export_totaal') | float(-1) }}"
     sensor:
       - name: "Forecast Teller Zon Productie"
         unique_id: forecast_teller_zon_productie
@@ -334,21 +371,105 @@ template:
             {{ v | round(3) }}
           {% endif %}
 
+      # Telt de toename van de P1-meter op (exact, zelfde bron als het energiedashboard).
+      # Zonder meter: de toename van de integratie uit het vermogen. Door op te tellen in
+      # plaats van de meterstand over te nemen loopt de teller door zonder sprong, ook bij
+      # een wissel van bron, en blijft de 7-daagse statistiek kloppen.
       - name: "Forecast Teller P1 Import"
         unique_id: forecast_teller_p1_import
         unit_of_measurement: "kWh"
         device_class: energy
         state_class: total_increasing
-        availability: "{{ has_value('sensor.forecast_p1_import_totaal') }}"
-        state: "{{ states('sensor.forecast_p1_import_totaal') | float(0) }}"
+        availability: "{{ meter_import >= 0 or int_import >= 0 }}"
+        # Valt de meter even weg, dan wordt het gemiste stuk opgeteld zodra hij terug is
+        # (laatste stand onthouden). Langer dan 6 uur zonder meter: terug naar het vermogen.
+        state: >
+          {% set vorig = this.state | float(-1) %}
+          {% set vorig = vorig if vorig >= 0 else ([int_import, 0] | max) %}
+          {% set m_oud = this.attributes.get('meter') %}
+          {% set m_ts = this.attributes.get('meter_ts') | float(0) %}
+          {% set m_geldig = m_oud is number and (nu_ts - m_ts) <= c_meter_max_weg_s %}
+          {% set i_oud = this.attributes.get('integratie') %}
+          {% if meter_import >= 0 %}
+            {% set d = (meter_import - m_oud) if m_geldig else 0 %}
+            {% set max_d = c_max_kwh_per_uur * ([(nu_ts - m_ts) / 3600, 1] | max) %}
+          {% elif m_geldig %}
+            {% set d = 0 %}{% set max_d = 0 %}
+          {% elif int_import >= 0 %}
+            {% set d = (int_import - i_oud) if i_oud is number else 0 %}
+            {% set max_d = c_max_kwh_per_uur %}
+          {% else %}
+            {% set d = 0 %}{% set max_d = 0 %}
+          {% endif %}
+          {{ (vorig + (d if 0 <= d <= max_d else 0)) | round(3) }}
+        attributes:
+          meter: >
+            {% set m_oud = this.attributes.get('meter') %}
+            {% set m_ts = this.attributes.get('meter_ts') | float(0) %}
+            {% if meter_import >= 0 %}{{ meter_import }}
+            {% elif m_oud is number and (nu_ts - m_ts) <= c_meter_max_weg_s %}{{ m_oud }}
+            {% else %}{{ none }}{% endif %}
+          meter_ts: >
+            {% set m_ts = this.attributes.get('meter_ts') | float(0) %}
+            {% if meter_import >= 0 %}{{ nu_ts | round(0) }}
+            {% elif m_ts > 0 and (nu_ts - m_ts) <= c_meter_max_weg_s %}{{ m_ts }}
+            {% else %}{{ none }}{% endif %}
+          integratie: "{{ int_import if int_import >= 0 else none }}"
+          bron: >
+            {% set m_ts = this.attributes.get('meter_ts') | float(0) %}
+            {% if meter_import >= 0 %}P1-meter (kWh-tellers)
+            {% elif m_ts > 0 and (nu_ts - m_ts) <= c_meter_max_weg_s %}P1-meter even niet bereikbaar (wordt bijgeteld)
+            {% else %}Berekend uit vermogen (geen P1-teller gevonden){% endif %}
 
+      # Telt de toename van de P1-meter op (exact, zelfde bron als het energiedashboard).
+      # Zonder meter: de toename van de integratie uit het vermogen. Door op te tellen in
+      # plaats van de meterstand over te nemen loopt de teller door zonder sprong, ook bij
+      # een wissel van bron, en blijft de 7-daagse statistiek kloppen.
       - name: "Forecast Teller P1 Export"
         unique_id: forecast_teller_p1_export
         unit_of_measurement: "kWh"
         device_class: energy
         state_class: total_increasing
-        availability: "{{ has_value('sensor.forecast_p1_export_totaal') }}"
-        state: "{{ states('sensor.forecast_p1_export_totaal') | float(0) }}"
+        availability: "{{ meter_export >= 0 or int_export >= 0 }}"
+        # Valt de meter even weg, dan wordt het gemiste stuk opgeteld zodra hij terug is
+        # (laatste stand onthouden). Langer dan 6 uur zonder meter: terug naar het vermogen.
+        state: >
+          {% set vorig = this.state | float(-1) %}
+          {% set vorig = vorig if vorig >= 0 else ([int_export, 0] | max) %}
+          {% set m_oud = this.attributes.get('meter') %}
+          {% set m_ts = this.attributes.get('meter_ts') | float(0) %}
+          {% set m_geldig = m_oud is number and (nu_ts - m_ts) <= c_meter_max_weg_s %}
+          {% set i_oud = this.attributes.get('integratie') %}
+          {% if meter_export >= 0 %}
+            {% set d = (meter_export - m_oud) if m_geldig else 0 %}
+            {% set max_d = c_max_kwh_per_uur * ([(nu_ts - m_ts) / 3600, 1] | max) %}
+          {% elif m_geldig %}
+            {% set d = 0 %}{% set max_d = 0 %}
+          {% elif int_export >= 0 %}
+            {% set d = (int_export - i_oud) if i_oud is number else 0 %}
+            {% set max_d = c_max_kwh_per_uur %}
+          {% else %}
+            {% set d = 0 %}{% set max_d = 0 %}
+          {% endif %}
+          {{ (vorig + (d if 0 <= d <= max_d else 0)) | round(3) }}
+        attributes:
+          meter: >
+            {% set m_oud = this.attributes.get('meter') %}
+            {% set m_ts = this.attributes.get('meter_ts') | float(0) %}
+            {% if meter_export >= 0 %}{{ meter_export }}
+            {% elif m_oud is number and (nu_ts - m_ts) <= c_meter_max_weg_s %}{{ m_oud }}
+            {% else %}{{ none }}{% endif %}
+          meter_ts: >
+            {% set m_ts = this.attributes.get('meter_ts') | float(0) %}
+            {% if meter_export >= 0 %}{{ nu_ts | round(0) }}
+            {% elif m_ts > 0 and (nu_ts - m_ts) <= c_meter_max_weg_s %}{{ m_ts }}
+            {% else %}{{ none }}{% endif %}
+          integratie: "{{ int_export if int_export >= 0 else none }}"
+          bron: >
+            {% set m_ts = this.attributes.get('meter_ts') | float(0) %}
+            {% if meter_export >= 0 %}P1-meter (kWh-tellers)
+            {% elif m_ts > 0 and (nu_ts - m_ts) <= c_meter_max_weg_s %}P1-meter even niet bereikbaar (wordt bijgeteld)
+            {% else %}Berekend uit vermogen (geen P1-teller gevonden){% endif %}
 
       - name: "Forecast Teller P1 Export Uit Zon"
         unique_id: forecast_teller_p1_export_uit_zon
@@ -401,8 +522,8 @@ template:
       c_max_uur_kwh: 15                  # hoger uurverbruik geldt als meetfout
       nu_ts: "{{ as_timestamp(now()) }}"
       # Huidige tellerstanden (kWh); -1 = niet beschikbaar
-      t_imp: "{{ states('sensor.forecast_p1_import_totaal') | float(-1) }}"
-      t_exp: "{{ states('sensor.forecast_p1_export_totaal') | float(-1) }}"
+      t_imp: "{{ states('sensor.forecast_teller_p1_import') | float(-1) }}"
+      t_exp: "{{ states('sensor.forecast_teller_p1_export') | float(-1) }}"
       t_laden: "{{ states('sensor.forecast_zendure_laden_totaal') | float(-1) }}"
       t_ontl: "{{ states('sensor.forecast_zendure_ontladen_totaal') | float(-1) }}"
       t_prod: >

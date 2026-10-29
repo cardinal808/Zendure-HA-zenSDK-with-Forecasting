@@ -1544,7 +1544,7 @@ views:
 
               - Solar production: **{{ prod | round(1) }} kWh**, of which used directly **{{ direct | round(1) }} kWh** ({{ ((direct / prod * 100) | round(1)) if prod > 0 else '-' }}%), to the battery **{{ charge_solar | round(1) }} kWh**, exported **{{ exp_solar | round(1) }} kWh**
 
-              - Grid: import {{ states('sensor.forecast_grid_import_7_days') | float(0) | round(1) }} kWh, export {{ states('sensor.forecast_grid_export_7_days') | float(0) | round(1) }} kWh
+              - Grid: import {{ states('sensor.forecast_grid_import_7_days') | float(0) | round(1) }} kWh, export {{ states('sensor.forecast_grid_export_7_days') | float(0) | round(1) }} kWh ({{ state_attr('sensor.forecast_counter_grid_import', 'source') or 'source unknown' }})
 
               - Battery: charged {{ states('sensor.forecast_zendure_charge_7_days') | float(0) | round(1) }} kWh, discharged {{ states('sensor.forecast_zendure_discharge_7_days') | float(0) | round(1) }} kWh
 

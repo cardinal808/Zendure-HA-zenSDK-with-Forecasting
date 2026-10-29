@@ -1549,7 +1549,7 @@ views:
 
               - Zonproductie: **{{ prod | round(1) }} kWh**, waarvan direct verbruikt **{{ direct | round(1) }} kWh** ({{ ((direct / prod * 100) | round(1)) if prod > 0 else '-' }}%), naar de accu **{{ laden_zon | round(1) }} kWh**, teruggeleverd **{{ exp_zon | round(1) }} kWh**
 
-              - Net: import {{ states('sensor.forecast_p1_import_7_dagen') | float(0) | round(1) }} kWh, export {{ states('sensor.forecast_p1_export_7_dagen') | float(0) | round(1) }} kWh
+              - Net: import {{ states('sensor.forecast_p1_import_7_dagen') | float(0) | round(1) }} kWh, export {{ states('sensor.forecast_p1_export_7_dagen') | float(0) | round(1) }} kWh ({{ state_attr('sensor.forecast_teller_p1_import', 'bron') or 'bron onbekend' }})
 
               - Accu: geladen {{ states('sensor.forecast_zendure_laden_7_dagen') | float(0) | round(1) }} kWh, ontladen {{ states('sensor.forecast_zendure_ontladen_7_dagen') | float(0) | round(1) }} kWh
 

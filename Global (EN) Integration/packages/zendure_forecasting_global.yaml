@@ -72,6 +72,10 @@ input_button:
 
 # ---------------------------------------------------------------------
 # 2. Integration sensors (kWh counters, derived from power sensors)
+#    Method "left": the power sensors only get a new value when they change (step-wise).
+#    Trapezoidal would draw a slanted line between two measurements and count energy
+#    that was not there. For grid import and export the P1 meter's kWh counters are
+#    preferred (see "Forecast Counter Grid ...").
 # ---------------------------------------------------------------------
 sensor:
   - platform: integration
@@ -80,7 +84,7 @@ sensor:
     source: sensor.forecast_grid_import_power
     unit_prefix: k
     round: 3
-    method: trapezoidal
+    method: left
 
   - platform: integration
     name: "Forecast Grid Export Total"
@@ -88,7 +92,7 @@ sensor:
     source: sensor.forecast_grid_export_power
     unit_prefix: k
     round: 3
-    method: trapezoidal
+    method: left
 
   - platform: integration
     name: "Forecast Grid Export From Solar Total"
@@ -96,7 +100,7 @@ sensor:
     source: sensor.forecast_grid_export_from_solar_power
     unit_prefix: k
     round: 3
-    method: trapezoidal
+    method: left
 
   - platform: integration
     name: "Forecast Zendure Charge Total"
@@ -104,7 +108,7 @@ sensor:
     source: sensor.forecast_zendure_charge_power
     unit_prefix: k
     round: 3
-    method: trapezoidal
+    method: left
 
   - platform: integration
     name: "Forecast Zendure Discharge Total"
@@ -112,7 +116,7 @@ sensor:
     source: sensor.forecast_zendure_discharge_power
     unit_prefix: k
     round: 3
-    method: trapezoidal
+    method: left
 
   - platform: integration
     name: "Forecast Zendure Charge From Solar Total"
@@ -120,7 +124,7 @@ sensor:
     source: sensor.forecast_zendure_charge_from_solar_power
     unit_prefix: k
     round: 3
-    method: trapezoidal
+    method: left
 
   # -------------------------------------------------------------------
   # 3. Statistics over the last 7 days (rolling)
@@ -313,6 +317,39 @@ template:
         minutes: "/10"
       - platform: homeassistant
         event: start
+    variables:
+      c_max_kwh_per_hour: 15             # a larger increase per hour counts as a meter swap or error
+      c_meter_max_gone_s: 21600          # meter gone for more than 6 hours: back to calculation from power
+      now_ts: "{{ as_timestamp(now()) }}"
+      # kWh counters of the P1 meter, detected automatically (first group in which all sensors have a value):
+      # SlimmeLezer/ESPHome DSMR, HomeWizard P1, DSMR integration
+      p1_import_groups:
+        - ['sensor.energy_consumed_tariff_1', 'sensor.energy_consumed_tariff_2']
+        - ['sensor.p1_meter_energy_import']
+        - ['sensor.electricity_meter_energy_consumption_tarif_1', 'sensor.electricity_meter_energy_consumption_tarif_2']
+      p1_export_groups:
+        - ['sensor.energy_produced_tariff_1', 'sensor.energy_produced_tariff_2']
+        - ['sensor.p1_meter_energy_export']
+        - ['sensor.electricity_meter_energy_production_tarif_1', 'sensor.electricity_meter_energy_production_tarif_2']
+      # Sum of the first complete group in kWh; -1 = no meter found
+      meter_import: >
+        {%- set ns = namespace(v=-1) -%}
+        {%- for g in p1_import_groups -%}
+          {%- if ns.v < 0 and g | select('has_value') | list | length == g | length -%}
+            {%- set ns.v = g | map('states') | map('float', 0) | sum -%}
+          {%- endif -%}
+        {%- endfor -%}
+        {{ ns.v | round(3) }}
+      meter_export: >
+        {%- set ns = namespace(v=-1) -%}
+        {%- for g in p1_export_groups -%}
+          {%- if ns.v < 0 and g | select('has_value') | list | length == g | length -%}
+            {%- set ns.v = g | map('states') | map('float', 0) | sum -%}
+          {%- endif -%}
+        {%- endfor -%}
+        {{ ns.v | round(3) }}
+      int_import: "{{ states('sensor.forecast_grid_import_total') | float(-1) }}"
+      int_export: "{{ states('sensor.forecast_grid_export_total') | float(-1) }}"
     sensor:
       - name: "Forecast Counter Solar Production"
         unique_id: forecast_counter_solar_production
@@ -334,21 +371,105 @@ template:
             {{ v | round(3) }}
           {% endif %}
 
+      # Adds up the increase of the P1 meter (exact, same source as the energy dashboard).
+      # Without a meter: the increase of the integration from power. By adding up instead of
+      # copying the meter reading, the counter continues without a jump, also when the source
+      # changes, and the 7-day statistic stays correct. If the meter is briefly gone, the missed
+      # part is added once it is back (last reading remembered). More than 6 hours without
+      # a meter: back to power.
       - name: "Forecast Counter Grid Import"
         unique_id: forecast_counter_grid_import
         unit_of_measurement: "kWh"
         device_class: energy
         state_class: total_increasing
-        availability: "{{ has_value('sensor.forecast_grid_import_total') }}"
-        state: "{{ states('sensor.forecast_grid_import_total') | float(0) }}"
+        availability: "{{ meter_import >= 0 or int_import >= 0 }}"
+        state: >
+          {% set prev = this.state | float(-1) %}
+          {% set prev = prev if prev >= 0 else ([int_import, 0] | max) %}
+          {% set m_old = this.attributes.get('meter') %}
+          {% set m_ts = this.attributes.get('meter_ts') | float(0) %}
+          {% set m_valid = m_old is number and (now_ts - m_ts) <= c_meter_max_gone_s %}
+          {% set i_old = this.attributes.get('integration') %}
+          {% if meter_import >= 0 %}
+            {% set d = (meter_import - m_old) if m_valid else 0 %}
+            {% set max_d = c_max_kwh_per_hour * ([(now_ts - m_ts) / 3600, 1] | max) %}
+          {% elif m_valid %}
+            {% set d = 0 %}{% set max_d = 0 %}
+          {% elif int_import >= 0 %}
+            {% set d = (int_import - i_old) if i_old is number else 0 %}
+            {% set max_d = c_max_kwh_per_hour %}
+          {% else %}
+            {% set d = 0 %}{% set max_d = 0 %}
+          {% endif %}
+          {{ (prev + (d if 0 <= d <= max_d else 0)) | round(3) }}
+        attributes:
+          meter: >
+            {% set m_old = this.attributes.get('meter') %}
+            {% set m_ts = this.attributes.get('meter_ts') | float(0) %}
+            {% if meter_import >= 0 %}{{ meter_import }}
+            {% elif m_old is number and (now_ts - m_ts) <= c_meter_max_gone_s %}{{ m_old }}
+            {% else %}{{ none }}{% endif %}
+          meter_ts: >
+            {% set m_ts = this.attributes.get('meter_ts') | float(0) %}
+            {% if meter_import >= 0 %}{{ now_ts | round(0) }}
+            {% elif m_ts > 0 and (now_ts - m_ts) <= c_meter_max_gone_s %}{{ m_ts }}
+            {% else %}{{ none }}{% endif %}
+          integration: "{{ int_import if int_import >= 0 else none }}"
+          source: >
+            {% set m_ts = this.attributes.get('meter_ts') | float(0) %}
+            {% if meter_import >= 0 %}P1 meter (kWh counters)
+            {% elif m_ts > 0 and (now_ts - m_ts) <= c_meter_max_gone_s %}P1 meter briefly unreachable (will be added)
+            {% else %}Calculated from power (no P1 counter found){% endif %}
 
+      # Adds up the increase of the P1 meter (exact, same source as the energy dashboard).
+      # Without a meter: the increase of the integration from power. By adding up instead of
+      # copying the meter reading, the counter continues without a jump, also when the source
+      # changes, and the 7-day statistic stays correct. If the meter is briefly gone, the missed
+      # part is added once it is back (last reading remembered). More than 6 hours without
+      # a meter: back to power.
       - name: "Forecast Counter Grid Export"
         unique_id: forecast_counter_grid_export
         unit_of_measurement: "kWh"
         device_class: energy
         state_class: total_increasing
-        availability: "{{ has_value('sensor.forecast_grid_export_total') }}"
-        state: "{{ states('sensor.forecast_grid_export_total') | float(0) }}"
+        availability: "{{ meter_export >= 0 or int_export >= 0 }}"
+        state: >
+          {% set prev = this.state | float(-1) %}
+          {% set prev = prev if prev >= 0 else ([int_export, 0] | max) %}
+          {% set m_old = this.attributes.get('meter') %}
+          {% set m_ts = this.attributes.get('meter_ts') | float(0) %}
+          {% set m_valid = m_old is number and (now_ts - m_ts) <= c_meter_max_gone_s %}
+          {% set i_old = this.attributes.get('integration') %}
+          {% if meter_export >= 0 %}
+            {% set d = (meter_export - m_old) if m_valid else 0 %}
+            {% set max_d = c_max_kwh_per_hour * ([(now_ts - m_ts) / 3600, 1] | max) %}
+          {% elif m_valid %}
+            {% set d = 0 %}{% set max_d = 0 %}
+          {% elif int_export >= 0 %}
+            {% set d = (int_export - i_old) if i_old is number else 0 %}
+            {% set max_d = c_max_kwh_per_hour %}
+          {% else %}
+            {% set d = 0 %}{% set max_d = 0 %}
+          {% endif %}
+          {{ (prev + (d if 0 <= d <= max_d else 0)) | round(3) }}
+        attributes:
+          meter: >
+            {% set m_old = this.attributes.get('meter') %}
+            {% set m_ts = this.attributes.get('meter_ts') | float(0) %}
+            {% if meter_export >= 0 %}{{ meter_export }}
+            {% elif m_old is number and (now_ts - m_ts) <= c_meter_max_gone_s %}{{ m_old }}
+            {% else %}{{ none }}{% endif %}
+          meter_ts: >
+            {% set m_ts = this.attributes.get('meter_ts') | float(0) %}
+            {% if meter_export >= 0 %}{{ now_ts | round(0) }}
+            {% elif m_ts > 0 and (now_ts - m_ts) <= c_meter_max_gone_s %}{{ m_ts }}
+            {% else %}{{ none }}{% endif %}
+          integration: "{{ int_export if int_export >= 0 else none }}"
+          source: >
+            {% set m_ts = this.attributes.get('meter_ts') | float(0) %}
+            {% if meter_export >= 0 %}P1 meter (kWh counters)
+            {% elif m_ts > 0 and (now_ts - m_ts) <= c_meter_max_gone_s %}P1 meter briefly unreachable (will be added)
+            {% else %}Calculated from power (no P1 counter found){% endif %}
 
       - name: "Forecast Counter Grid Export From Solar"
         unique_id: forecast_counter_grid_export_from_solar
@@ -401,8 +522,8 @@ template:
       c_max_hour_kwh: 15                 # higher hourly usage counts as a measurement error
       now_ts: "{{ as_timestamp(now()) }}"
       # Current counter values (kWh); -1 = not available
-      t_imp: "{{ states('sensor.forecast_grid_import_total') | float(-1) }}"
-      t_exp: "{{ states('sensor.forecast_grid_export_total') | float(-1) }}"
+      t_imp: "{{ states('sensor.forecast_counter_grid_import') | float(-1) }}"
+      t_exp: "{{ states('sensor.forecast_counter_grid_export') | float(-1) }}"
       t_charge: "{{ states('sensor.forecast_zendure_charge_total') | float(-1) }}"
       t_disch: "{{ states('sensor.forecast_zendure_discharge_total') | float(-1) }}"
       t_prod: >
