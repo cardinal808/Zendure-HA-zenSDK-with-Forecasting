@@ -2,6 +2,20 @@
 
 Versions follow `year.month.sequence`; the sequence restarts at 1 every month. Each version states which Gielz version it is based on. [Nederlands](CHANGELOG.nl.md)
 
+## 2026.10.2 — based on Gielz v20261007
+
+**Planner**
+- **Usage profile:** workdays remember longer (weight per new measurement 0.2 → 0.1, memory about 2 weeks), so a single unusual day has less effect; weekend unchanged (weight 0.2, about 2.5 weeks).
+- **Tomorrow's charging moments** as new attribute `tomorrow_charge_moments`: the indicative charge slots of tomorrow, adjacent quarters merged into blocks with their average price.
+
+**Dashboard**
+- *Tomorrow* block: the charging moments are shown after *Estimated grid charge tomorrow*.
+- *Today* block: *Charge margin* line removed (it is a setting, see Forecast Settings).
+- *Collected data (last 7 days)*: *Charge power: configured … measured …* line removed.
+
+**Upgrading**
+- Replace all files (only `zendure_forecasting_global.yaml` and the dashboard changed in content, the others only in version number); then reload **Automations** and **Template entities** (Developer tools → YAML). No restart needed.
+
 ## 2026.10.1 — based on Gielz v20261007
 
 First numbered version. Replaces reference `FC-20261027` and contains all changes since then.

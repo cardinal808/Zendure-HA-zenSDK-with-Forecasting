@@ -7,7 +7,7 @@ Choose your preferred language
 
 > **This is a fork of [Gielz1986/Zendure-HA-zenSDK](https://github.com/Gielz1986/Zendure-HA-zenSDK)** by Michiel Hofker (Gielz1986). All credit for the integration, the automation and the dashboard goes to the original project. This fork adds **one extra mode: Dynamic Smart Matching + Forecasting** (Dutch: *Dynamisch NOM + Forecasting*). For everything else (modes, wiki, support, updates), see the original repository. The original README follows below this section.
 
-**Version:** `2026.10.1` · based on Gielz configuration `v20261007` · available in Dutch (NL) and Global (EN) · [Changelog](CHANGELOG.md)
+**Version:** `2026.10.2` · based on Gielz configuration `v20261007` · available in Dutch (NL) and Global (EN) · [Changelog](CHANGELOG.md)
 
 Versions follow `year.month.sequence` (the sequence restarts at 1 every month). In Home Assistant you see the installed version and the latest version on GitHub (`sensor.forecasting_version`, `sensor.forecasting_release_check`) on the Configuration tab, and the release notes under Releasenotes.
 

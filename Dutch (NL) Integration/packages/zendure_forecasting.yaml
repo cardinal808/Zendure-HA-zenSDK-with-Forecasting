@@ -1,4 +1,4 @@
-# Zendure zenSDK (Gielz) + Forecasting 2026.10.1 | gebaseerd op Gielz v20261007 | set: publiek (zonder HVAC)
+# Zendure zenSDK (Gielz) + Forecasting 2026.10.2 | gebaseerd op Gielz v20261007 | set: publiek (zonder HVAC)
 # Gebaseerd op Gielz1986/Zendure-HA-zenSDK (Michiel Hofker). Zie README.md voor licentie en wijzigingen.
 # =====================================================================
 # Zendure Forecasting (aanvulling op zendure_gielz1986_nl.yaml)
@@ -232,7 +232,7 @@ template:
       - name: "Forecasting Versie"
         unique_id: forecasting_versie
         icon: mdi:one-up
-        state: "2026.10.1"
+        state: "2026.10.2"
         attributes:
           gielz_basis: "v20261007"
           set: "{{ 'compleet (inclusief HVAC)' if has_value('binary_sensor.hvac_actief') else 'publiek (zonder HVAC)' }}"
