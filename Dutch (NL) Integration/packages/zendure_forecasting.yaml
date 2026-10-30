@@ -1391,6 +1391,22 @@ template:
           morgen_netladen_indicatie_kwh: "{{ morgen_netladen }}"
           morgen_goedkoopste_start: >
             {% if morgen_bekend %}{{ t_cheap_morgen_ts | timestamp_custom('%H:%M', true) }}{% else %}onbekend{% endif %}
+          # Indicatieve laadmomenten morgen, aaneengesloten slots samengevoegd (gemiddelde prijs per blok)
+          morgen_laadmomenten: >
+            {%- set ns = namespace(l=[]) -%}
+            {%- for x in morg | selectattr('s', 'in', morgen_laadslots) | sort(attribute='s') -%}
+              {%- set b = ns.l[-1] if ns.l | length > 0 else none -%}
+              {%- if b is not none and b.e == x.s -%}
+                {%- set ns.l = ns.l[:-1] + [{'s': b.s, 'e': x.e, 'som': b.som + x.v, 'n': b.n + 1}] -%}
+              {%- else -%}
+                {%- set ns.l = ns.l + [{'s': x.s, 'e': x.e, 'som': x.v, 'n': 1}] -%}
+              {%- endif -%}
+            {%- endfor -%}
+            {%- set uit = namespace(l=[]) -%}
+            {%- for b in ns.l -%}
+              {%- set uit.l = uit.l + [{'start': b.s | timestamp_custom('%H:%M', true), 'eind': b.e | timestamp_custom('%H:%M', true), 'prijs': (b.som / b.n) | round(3)}] -%}
+            {%- endfor -%}
+            {{ uit.l }}
 
       # Grafiekdata staat in een apart sensor-object: samen zijn de attributen groter dan
       # de 16 kB-limiet van de recorder, en zo blijft de geschiedenis van het plan zelf bewaard.

@@ -1389,6 +1389,22 @@ template:
           tomorrow_grid_charge_estimate_kwh: "{{ tomorrow_grid_charge }}"
           tomorrow_cheapest_start: >
             {% if tomorrow_known %}{{ t_cheap_tomorrow_ts | timestamp_custom('%H:%M', true) }}{% else %}unknown{% endif %}
+          # Indicative charging moments tomorrow, adjacent slots merged (average price per block)
+          tomorrow_charge_moments: >
+            {%- set ns = namespace(l=[]) -%}
+            {%- for x in tmrw | selectattr('s', 'in', tomorrow_charge_slots) | sort(attribute='s') -%}
+              {%- set b = ns.l[-1] if ns.l | length > 0 else none -%}
+              {%- if b is not none and b.e == x.s -%}
+                {%- set ns.l = ns.l[:-1] + [{'s': b.s, 'e': x.e, 'som': b.som + x.v, 'n': b.n + 1}] -%}
+              {%- else -%}
+                {%- set ns.l = ns.l + [{'s': x.s, 'e': x.e, 'som': x.v, 'n': 1}] -%}
+              {%- endif -%}
+            {%- endfor -%}
+            {%- set uit = namespace(l=[]) -%}
+            {%- for b in ns.l -%}
+              {%- set uit.l = uit.l + [{'start': b.s | timestamp_custom('%H:%M', true), 'end': b.e | timestamp_custom('%H:%M', true), 'price': (b.som / b.n) | round(3)}] -%}
+            {%- endfor -%}
+            {{ uit.l }}
 
       # Chart data is in a separate sensor object: together the attributes exceed
       # the 16 kB recorder limit, and this way the history of the plan itself is kept.

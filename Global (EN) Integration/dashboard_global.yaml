@@ -1462,8 +1462,6 @@ views:
               {{ a.solar_remaining_today_kwh }} kWh, {{ a.self_consumption_pct }}%
               used directly)
 
-              - Charge margin: {{ a.margin_pct }}% ({{ a.margin_kwh }} kWh)
-
               - Charge power in plan: {{ a.charge_power_used_kw }} kW{% if a.charge_power_measured_w %} (measured {{ (a.charge_power_measured_w / 1000) | round(2) }} kW){% endif %}, price now {{ a.price_now }}{% if a.in_dip %} (cheap dip){% endif %}
 
               - **Still to charge from the grid: {{ a.grid_charge_today_kwh }} kWh**{% if
@@ -1490,8 +1488,7 @@ views:
               - Expected battery usage: {{ a.tomorrow_battery_usage_kwh }}
               kWh, solar to battery {{ a.tomorrow_solar_to_battery_kwh }} kWh
 
-              - Estimated grid charge tomorrow: **{{ a.tomorrow_grid_charge_estimate_kwh
-              }} kWh**
+              - Estimated grid charge tomorrow: **{{ a.tomorrow_grid_charge_estimate_kwh }} kWh**{% if a.tomorrow_charge_moments | default([]) | length > 0 %} in {% for s in a.tomorrow_charge_moments %}{{ s.start }}-{{ s.end }} (€{{ '%.3f' | format(s.price) }}){{ ', ' if not loop.last }}{% endfor %}{% endif %}
             text_only: true
           - type: heading
             icon: ''

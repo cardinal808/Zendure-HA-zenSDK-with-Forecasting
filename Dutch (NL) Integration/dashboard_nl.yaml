@@ -1467,8 +1467,6 @@ views:
               {{ a.zon_resterend_vandaag_kwh }} kWh, {{ a.zelfverbruik_pct }}%
               direct verbruikt)
 
-              - Laadmarge: {{ a.marge_pct }}% ({{ a.marge_kwh }} kWh)
-
               - Laadvermogen in planning: {{ a.laadvermogen_gebruikt_kw }} kW{% if a.laadvermogen_gemeten_w %} (gemeten {{ (a.laadvermogen_gemeten_w / 1000) | round(2) }} kW){% endif %}, prijs nu {{ a.prijs_nu }}{% if a.in_dal %} (goedkoop dal){% endif %}
 
               - **Nog uit het net laden: {{ a.netladen_vandaag_kwh }} kWh**{% if
@@ -1495,8 +1493,7 @@ views:
               - Verwacht batterijgebruik: {{ a.morgen_batterijgebruik_kwh }}
               kWh, zon naar batterij {{ a.morgen_zon_naar_batterij_kwh }} kWh
 
-              - Indicatie netladen morgen: **{{ a.morgen_netladen_indicatie_kwh
-              }} kWh**
+              - Indicatie netladen morgen: **{{ a.morgen_netladen_indicatie_kwh }} kWh**{% if a.morgen_laadmomenten | default([]) | length > 0 %} in {% for s in a.morgen_laadmomenten %}{{ s.start }}-{{ s.eind }} (€{{ '%.3f' | format(s.prijs) }}){{ ', ' if not loop.last }}{% endfor %}{% endif %}
             text_only: true
           - type: heading
             icon: ''
