@@ -1560,8 +1560,6 @@ views:
               - Rendement: laden {{ a.efficientie_laden_pct }}%, ontladen {{ a.efficientie_ontladen_pct }}%, samen {{ a.rendement_round_trip_pct }}% ({{ a.rendement_bron }})
 
               - Verbruik per uur: **{{ a.verbruik_per_uur_bron }}**, komende 24 uur {{ a.verbruik_komende_24u_kwh }} kWh. Profiel geleerd: {{ states('sensor.forecast_verbruiksprofiel') }} van 48 uren (werkdag + weekend){% if state_attr('sensor.forecast_verbruiksprofiel', 'laatste_uur') %}, laatste meting {{ state_attr('sensor.forecast_verbruiksprofiel', 'laatste_uur') }}: {{ state_attr('sensor.forecast_verbruiksprofiel', 'laatste_uur_kwh') }} kWh{% endif %}
-
-              - Laadvermogen: ingesteld {{ a.laadvermogen_ingesteld_kw }} kW, gemeten {{ ((a.laadvermogen_gemeten_w / 1000) | round(2)) if a.laadvermogen_gemeten_w else 'nog niet beschikbaar' }}{{ ' kW' if a.laadvermogen_gemeten_w else '' }}
             text_only: true
           - type: heading
             icon: ''

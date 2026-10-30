@@ -559,7 +559,9 @@ template:
         minutes: 0
         seconds: 5
     variables:
-      c_alpha_min: 0.2                   # weight of a new measurement once there are enough measurements
+      # Weight of a new measurement once there are enough measurements (memory = about 1 / weight measurements):
+      c_alpha_min_workday: 0.1           # workday: ~10 measurements = about 2 weeks
+      c_alpha_min_weekend: 0.2           # weekend: ~5 measurements = about 2.5 weeks
       c_max_hour_kwh: 15                 # higher hourly usage counts as a measurement error
       now_ts: "{{ as_timestamp(now()) }}"
       # Current counter values (kWh); -1 = not available
@@ -612,7 +614,7 @@ template:
             {% for i in range(24) %}
               {% set w = old[i] if old | length == 24 else none %}
               {% if hour_kwh >= 0 and hour_type == 'workday' and hour_idx == i %}
-                {% set a = [1 / ((n[i] | int(0)) + 1), c_alpha_min] | max %}
+                {% set a = [1 / ((n[i] | int(0)) + 1), c_alpha_min_workday] | max %}
                 {% set w = hour_kwh if w is none else (w * (1 - a) + hour_kwh * a) %}
                 {% set w = w | round(3) %}
               {% endif %}
@@ -626,7 +628,7 @@ template:
             {% for i in range(24) %}
               {% set w = old[i] if old | length == 24 else none %}
               {% if hour_kwh >= 0 and hour_type == 'weekend' and hour_idx == i %}
-                {% set a = [1 / ((n[i] | int(0)) + 1), c_alpha_min] | max %}
+                {% set a = [1 / ((n[i] | int(0)) + 1), c_alpha_min_weekend] | max %}
                 {% set w = hour_kwh if w is none else (w * (1 - a) + hour_kwh * a) %}
                 {% set w = w | round(3) %}
               {% endif %}

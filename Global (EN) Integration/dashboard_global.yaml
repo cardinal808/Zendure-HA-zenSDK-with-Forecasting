@@ -1555,8 +1555,6 @@ views:
               - Efficiency: charging {{ a.efficiency_charge_pct }}%, discharging {{ a.efficiency_discharge_pct }}%, round trip {{ a.efficiency_round_trip_pct }}% ({{ a.efficiency_source }})
 
               - Usage per hour: **{{ a.usage_per_hour_source }}**, next 24 hours {{ a.usage_next_24h_kwh }} kWh. Profile learned: {{ states('sensor.forecast_usage_profile') }} of 48 hours (workday + weekend){% if state_attr('sensor.forecast_usage_profile', 'last_hour') %}, last measurement {{ state_attr('sensor.forecast_usage_profile', 'last_hour') }}: {{ state_attr('sensor.forecast_usage_profile', 'last_hour_kwh') }} kWh{% endif %}
-
-              - Charge power: configured {{ a.charge_power_set_kw }} kW, measured {{ ((a.charge_power_measured_w / 1000) | round(2)) if a.charge_power_measured_w else 'not yet available' }}{{ ' kW' if a.charge_power_measured_w else '' }}
             text_only: true
           - type: heading
             icon: ''

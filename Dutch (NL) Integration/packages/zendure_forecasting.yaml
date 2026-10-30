@@ -559,7 +559,9 @@ template:
         minutes: 0
         seconds: 5
     variables:
-      c_alpha_min: 0.2                   # gewicht van een nieuwe meting zodra er genoeg metingen zijn
+      # Gewicht van een nieuwe meting zodra er genoeg metingen zijn (geheugen = ongeveer 1 / gewicht metingen):
+      c_alpha_min_werkdag: 0.1           # werkdag: ~10 metingen = ongeveer 2 weken
+      c_alpha_min_weekend: 0.2           # weekend: ~5 metingen = ongeveer 2,5 week
       c_max_uur_kwh: 15                  # hoger uurverbruik geldt als meetfout
       nu_ts: "{{ as_timestamp(now()) }}"
       # Huidige tellerstanden (kWh); -1 = niet beschikbaar
@@ -612,7 +614,7 @@ template:
             {% for i in range(24) %}
               {% set w = oud[i] if oud | length == 24 else none %}
               {% if uur_kwh >= 0 and uur_type == 'werkdag' and uur_idx == i %}
-                {% set a = [1 / ((n[i] | int(0)) + 1), c_alpha_min] | max %}
+                {% set a = [1 / ((n[i] | int(0)) + 1), c_alpha_min_werkdag] | max %}
                 {% set w = uur_kwh if w is none else (w * (1 - a) + uur_kwh * a) %}
                 {% set w = w | round(3) %}
               {% endif %}
@@ -626,7 +628,7 @@ template:
             {% for i in range(24) %}
               {% set w = oud[i] if oud | length == 24 else none %}
               {% if uur_kwh >= 0 and uur_type == 'weekend' and uur_idx == i %}
-                {% set a = [1 / ((n[i] | int(0)) + 1), c_alpha_min] | max %}
+                {% set a = [1 / ((n[i] | int(0)) + 1), c_alpha_min_weekend] | max %}
                 {% set w = uur_kwh if w is none else (w * (1 - a) + uur_kwh * a) %}
                 {% set w = w | round(3) %}
               {% endif %}
