@@ -1,4 +1,4 @@
-# Zendure zenSDK (Gielz) + Forecasting | set: publiek (zonder HVAC) | referentie: FC-20261027
+# Zendure zenSDK (Gielz) + Forecasting 2026.10.1 | gebaseerd op Gielz v20261007 | set: publiek (zonder HVAC)
 # Gebaseerd op Gielz1986/Zendure-HA-zenSDK (Michiel Hofker). Zie README.md voor licentie en wijzigingen.
 input_select:
   zendure_2400_ac_modus_selecteren:

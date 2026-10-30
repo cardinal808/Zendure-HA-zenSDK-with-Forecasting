@@ -1,4 +1,4 @@
-# Zendure zenSDK (Gielz) + Forecasting | set: publiek (zonder HVAC) | referentie: FC-20261027
+# Zendure zenSDK (Gielz) + Forecasting 2026.10.1 | gebaseerd op Gielz v20261007 | set: publiek (zonder HVAC)
 # Gebaseerd op Gielz1986/Zendure-HA-zenSDK (Michiel Hofker). Zie README.md voor licentie en wijzigingen.
 # =====================================================================
 # Zendure Forecasting (aanvulling op zendure_gielz1986_nl.yaml)
@@ -78,6 +78,21 @@ input_button:
 #    de kWh-tellers van de P1-meter gebruikt (zie "Forecast Teller P1 ...").
 # ---------------------------------------------------------------------
 sensor:
+  # Nieuwste release van deze uitbreiding op GitHub (voor de releasecheck)
+  - platform: rest
+    name: "GitHub Zendure Forecasting"
+    unique_id: github_zendure_forecasting
+    resource: "https://api.github.com/repos/cardinal808/Zendure-HA-zenSDK-with-Forecasting/releases/latest"
+    headers:
+      User-Agent: "HomeAssistant"
+    scan_interval: 3600
+    json_attributes:
+      - tag_name
+      - name
+      - published_at
+      - body
+    value_template: "{{ (value_json.tag_name | default('onbekend')) | replace('v', '') }}"
+
   - platform: integration
     name: "Forecast P1 Import Totaal"
     unique_id: forecast_p1_import_totaal
@@ -212,6 +227,32 @@ sensor:
     precision: 2
 
 template:
+  # Versie van deze uitbreiding: jaar.maand.volgnummer (volgnummer begint elke maand bij 1)
+  - sensor:
+      - name: "Forecasting Versie"
+        unique_id: forecasting_versie
+        icon: mdi:one-up
+        state: "2026.10.1"
+        attributes:
+          gielz_basis: "v20261007"
+          set: "{{ 'compleet (inclusief HVAC)' if has_value('binary_sensor.hvac_actief') else 'publiek (zonder HVAC)' }}"
+          github: "https://github.com/cardinal808/Zendure-HA-zenSDK-with-Forecasting"
+
+      - name: "Forecasting Releasecheck"
+        unique_id: forecasting_releasecheck
+        state: >
+          {% macro num(x) %}{% set p = (x | string | replace('v', '')).split('.') %}{% if p | length == 3 %}{{ '%04d%02d%03d' | format(p[0] | int(0), p[1] | int(0), p[2] | int(0)) }}{% endif %}{% endmacro %}
+          {% set g = state_attr('sensor.github_zendure_forecasting', 'tag_name') %}
+          {% set a = num(states('sensor.forecasting_versie')) %}
+          {% set b = num(g) if g not in [none, 'unknown', 'unavailable'] else '' %}
+          {% if a and b %}
+            {% if a > b %}Pre-release actief{% elif a < b %}Nieuwe release op GitHub{% else %}Up-to-date{% endif %}
+          {% else %}Onbekend{% endif %}
+        icon: >
+          {% if this.state == 'Up-to-date' %}mdi:emoticon-happy-outline
+          {% elif this.state == 'Pre-release actief' %}mdi:test-tube
+          {% else %}mdi:emoticon-sad-outline{% endif %}
+
   # Ontladen vasthouden in een goedkoop dal (alleen modus Dynamisch NOM + Forecasting)
   - binary_sensor:
       - name: "Forecast Dal Ontladen Geblokkeerd"

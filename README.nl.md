@@ -6,7 +6,9 @@
 
 > **Dit is een fork van [Gielz1986/Zendure-HA-zenSDK](https://github.com/Gielz1986/Zendure-HA-zenSDK)** van Michiel Hofker (Gielz1986). Alle eer voor de integratie, de automation en het dashboard gaat naar het oorspronkelijke project. Deze fork voegt **één extra modus toe: Dynamisch NOM + Forecasting** (Engels: *Dynamic Smart Matching + Forecasting*). Voor al het andere (modussen, wiki, ondersteuning, updates) zie je de oorspronkelijke repository. De originele README staat onder deze sectie.
 
-**Referentie:** `FC-20261027` · gebaseerd op Gielz-configuratie `v20261007` · beschikbaar in het Nederlands (NL) en Engels (Global).
+**Versie:** `2026.10.1` · gebaseerd op Gielz-configuratie `v20261007` · beschikbaar in het Nederlands (NL) en Engels (Global) · [Changelog](CHANGELOG.nl.md)
+
+Versies volgen `jaar.maand.volgnummer` (het volgnummer begint elke maand bij 1). In Home Assistant zie je de versie in gebruik en de nieuwste versie op GitHub (`sensor.forecasting_versie`, `sensor.forecasting_releasecheck`) op het tabblad Configuratie, en de releasenotes onder Releasenotes.
 
 ### Wat de modus doet
 
@@ -36,7 +38,7 @@ De accu laadt op de goedkoopste momenten, maar **alleen zoveel als nodig is**, r
 | `automation_nl.yaml` / `automation_global.yaml` | De nieuwe modus in de modus-keuze en in de 6 bestaande NOM-lijsten (nul-op-de-meter, SOC-bescherming, noodstop), een eigen laadblok dat alleen laadt als het plan *Laden* zegt, en een ontlaad-blokkade voor het goedkope dal. Bestaande modi zijn niet gewijzigd. |
 | `dashboard_nl.yaml` / `dashboard_global.yaml` | Nieuwe sectie Forecasting, nieuw blok Configuratie (Forecasting) en een schakelaar in Configuratie (Dashboard). |
 
-Elk gewijzigd bestand begint met een kop van twee regels met de referentie en de oorspronkelijke auteur.
+Elk gewijzigd bestand begint met een kop van twee regels met de versie, de Gielz-versie waarop hij is gebaseerd en de oorspronkelijke auteur.
 
 ### Installatie
 

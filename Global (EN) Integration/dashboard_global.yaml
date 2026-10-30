@@ -1,4 +1,4 @@
-# Zendure zenSDK (Gielz) + Forecasting | set: public (without HVAC) | reference: FC-20261027
+# Zendure zenSDK (Gielz) + Forecasting 2026.10.1 | based on Gielz v20261007 | set: public (without HVAC)
 # Based on Gielz1986/Zendure-HA-zenSDK (Michiel Hofker). See README.md for license and changes.
 views:
   - type: sections
@@ -3728,6 +3728,14 @@ views:
                 name: Available Version
               - entity: sensor.github_zendure_gielz1986_releasecheck
                 name: Release Check
+              - type: section
+                label: Forecasting
+              - entity: sensor.forecasting_version
+                name: Installed Version
+              - entity: sensor.github_zendure_forecasting
+                name: Available Version
+              - entity: sensor.forecasting_release_check
+                name: Release Check
           - type: markdown
             content: >
               &nbsp;&nbsp;[![Open
@@ -3754,6 +3762,17 @@ views:
 
 
               {{ state_attr('sensor.github_zendure_gielz1986', 'body')}}
+            grid_options:
+              columns: 24
+              rows: auto
+            text_only: true
+          - type: markdown
+            content: >
+              &nbsp;&nbsp;[![Forecasting
+              release](https://img.shields.io/github/v/release/cardinal808/Zendure-HA-zenSDK-with-Forecasting?style=for-the-badge&label=Forecasting&color=01a180&logo=github)](https://github.com/cardinal808/Zendure-HA-zenSDK-with-Forecasting/releases/latest)
+
+
+              {{ state_attr('sensor.github_zendure_forecasting', 'body') }}
             grid_options:
               columns: 24
               rows: auto

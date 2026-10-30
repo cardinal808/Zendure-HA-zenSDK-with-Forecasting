@@ -7,7 +7,9 @@ Choose your preferred language
 
 > **This is a fork of [Gielz1986/Zendure-HA-zenSDK](https://github.com/Gielz1986/Zendure-HA-zenSDK)** by Michiel Hofker (Gielz1986). All credit for the integration, the automation and the dashboard goes to the original project. This fork adds **one extra mode: Dynamic Smart Matching + Forecasting** (Dutch: *Dynamisch NOM + Forecasting*). For everything else (modes, wiki, support, updates), see the original repository. The original README follows below this section.
 
-**Reference:** `FC-20261027` · based on Gielz configuration `v20261007` · available in Dutch (NL) and Global (EN).
+**Version:** `2026.10.1` · based on Gielz configuration `v20261007` · available in Dutch (NL) and Global (EN) · [Changelog](CHANGELOG.md)
+
+Versions follow `year.month.sequence` (the sequence restarts at 1 every month). In Home Assistant you see the installed version and the latest version on GitHub (`sensor.forecasting_version`, `sensor.forecasting_release_check`) on the Configuration tab, and the release notes under Releasenotes.
 
 ### What the mode does
 
@@ -37,7 +39,7 @@ The battery charges at the cheapest moments, but **only as much as is actually n
 | `automation_nl.yaml` / `automation_global.yaml` | The new mode in the mode selection and in the 6 existing Smart Matching lists (zero-on-the-meter, SOC protection, emergency stop), its own charging block that only charges when the plan says *Charge*, and a discharge hold for the cheap dip. Existing modes are unchanged. |
 | `dashboard_nl.yaml` / `dashboard_global.yaml` | New Forecasting section, new Configuration (Forecasting) block and a switch in Configuration (Dashboard). |
 
-Each changed file starts with a two-line header with the reference and the original author.
+Each changed file starts with a two-line header with the version, the Gielz version it is based on and the original author.
 
 ### Installation
 

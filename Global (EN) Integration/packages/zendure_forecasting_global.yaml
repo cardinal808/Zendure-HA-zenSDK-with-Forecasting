@@ -1,4 +1,4 @@
-# Zendure zenSDK (Gielz) + Forecasting | set: public (without HVAC) | reference: FC-20261027
+# Zendure zenSDK (Gielz) + Forecasting 2026.10.1 | based on Gielz v20261007 | set: public (without HVAC)
 # Based on Gielz1986/Zendure-HA-zenSDK (Michiel Hofker). See README.md for license and changes.
 # =====================================================================
 # Zendure Forecasting (add-on to zendure_gielz1986_global.yaml)
@@ -78,6 +78,21 @@ input_button:
 #    preferred (see "Forecast Counter Grid ...").
 # ---------------------------------------------------------------------
 sensor:
+  # Latest release of this extension on GitHub (for the release check)
+  - platform: rest
+    name: "GitHub Zendure Forecasting"
+    unique_id: github_zendure_forecasting
+    resource: "https://api.github.com/repos/cardinal808/Zendure-HA-zenSDK-with-Forecasting/releases/latest"
+    headers:
+      User-Agent: "HomeAssistant"
+    scan_interval: 3600
+    json_attributes:
+      - tag_name
+      - name
+      - published_at
+      - body
+    value_template: "{{ (value_json.tag_name | default('unknown')) | replace('v', '') }}"
+
   - platform: integration
     name: "Forecast Grid Import Total"
     unique_id: forecast_grid_import_total
@@ -212,6 +227,32 @@ sensor:
     precision: 2
 
 template:
+  # Version of this extension: year.month.sequence (sequence restarts at 1 every month)
+  - sensor:
+      - name: "Forecasting Version"
+        unique_id: forecasting_version
+        icon: mdi:one-up
+        state: "2026.10.1"
+        attributes:
+          gielz_base: "v20261007"
+          set: "{{ 'complete (including HVAC)' if has_value('binary_sensor.hvac_active') else 'public (without HVAC)' }}"
+          github: "https://github.com/cardinal808/Zendure-HA-zenSDK-with-Forecasting"
+
+      - name: "Forecasting Release Check"
+        unique_id: forecasting_release_check
+        state: >
+          {% macro num(x) %}{% set p = (x | string | replace('v', '')).split('.') %}{% if p | length == 3 %}{{ '%04d%02d%03d' | format(p[0] | int(0), p[1] | int(0), p[2] | int(0)) }}{% endif %}{% endmacro %}
+          {% set g = state_attr('sensor.github_zendure_forecasting', 'tag_name') %}
+          {% set a = num(states('sensor.forecasting_version')) %}
+          {% set b = num(g) if g not in [none, 'unknown', 'unavailable'] else '' %}
+          {% if a and b %}
+            {% if a > b %}Pre-release Active{% elif a < b %}New release on GitHub{% else %}Up-to-date{% endif %}
+          {% else %}Unknown{% endif %}
+        icon: >
+          {% if this.state == 'Up-to-date' %}mdi:emoticon-happy-outline
+          {% elif this.state == 'Pre-release Active' %}mdi:test-tube
+          {% else %}mdi:emoticon-sad-outline{% endif %}
+
   # Hold discharging in a cheap dip (only mode Dynamic Smart Matching + Forecasting)
   - binary_sensor:
       - name: "Forecast Discharge Held In Dip"

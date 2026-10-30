@@ -1,7 +1,7 @@
-# Zendure zenSDK (Gielz) + Forecasting | set: publiek (zonder HVAC) | referentie: FC-20261027
+# Zendure zenSDK (Gielz) + Forecasting 2026.10.1 | gebaseerd op Gielz v20261007 | set: publiek (zonder HVAC)
 # Gebaseerd op Gielz1986/Zendure-HA-zenSDK (Michiel Hofker). Zie README.md voor licentie en wijzigingen.
 alias: Zendure zenSDK (Gielz)
-description: Configuratie Versie (v20261007)
+description: Configuratie Versie (v20261007) + Forecasting 2026.10.1
 triggers:
   - seconds: /5
     id: aansturing_trigger

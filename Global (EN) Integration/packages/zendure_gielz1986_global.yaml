@@ -1,4 +1,4 @@
-# Zendure zenSDK (Gielz) + Forecasting | set: public (without HVAC) | reference: FC-20261027
+# Zendure zenSDK (Gielz) + Forecasting 2026.10.1 | based on Gielz v20261007 | set: public (without HVAC)
 # Based on Gielz1986/Zendure-HA-zenSDK (Michiel Hofker). See README.md for license and changes.
 input_select:
   zendure_operation_mode:
