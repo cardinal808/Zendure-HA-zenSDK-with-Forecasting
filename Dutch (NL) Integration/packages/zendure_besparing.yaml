@@ -1,0 +1,322 @@
+# Zendure zenSDK (Gielz) + Forecasting 2026.11.1 | gebaseerd op Gielz v20261007
+# Gebaseerd op Gielz1986/Zendure-HA-zenSDK (Michiel Hofker). Zie README.md voor licentie en wijzigingen.
+# =====================================================================
+# Besparing: wat leveren zon, accu en het dynamische contract op?
+#
+# Plaats dit bestand naast zendure_forecasting.yaml (zelfde packages-map); het gebruikt
+# de kWh-tellers daaruit (Forecast Teller P1 Import/Export, Zendure laden/ontladen) en
+# de zonnepanelen-sensor uit Configuratie (Forecasting).
+#
+# Elk kwartier wordt de energie van dat kwartier verrekend tegen de prijs van precies dat
+# prijsslot (de tellers bevriezen op :00, :15, :30 en :45, gelijk met de 15-minutenprijzen;
+# bij uurprijzen telt elk kwartier tegen de prijs van dat uur), in zes situaties:
+#                         vast contract     dynamisch contract
+#   geen zon, geen accu   geen_vast         geen_dyn
+#   alleen zon            zon_vast          zon_dyn
+#   zon + accu (echt)     nu_vast           nu_dyn
+# Huisverbruik = import - export + zon - accu laden + accu ontladen (zelfde als het
+# verbruiksprofiel). "Alleen zon" = per kwartier verbruik min zon: tekort is import,
+# overschot is teruglevering.
+#
+# Besparing (t.o.v. vast contract zonder zon en accu) = geen_vast - nu_dyn, opgesplitst in:
+#   zon               = geen_vast - zon_vast
+#   dynamisch tarief  = zon_vast  - zon_dyn
+#   accu / slim laden = zon_dyn   - nu_dyn
+#
+# Terugverdientijd accu: aanschafprijs / (besparing door de accu per jaar). De besparing per
+# jaar wordt doorgetrokken uit de periode "totaal"; wat de accu vóór de start van de meting
+# al opbracht kan bij "Accu Al Terugverdiend" worden ingevuld.
+#
+# Teruglevering heeft een eigen prijs (vast: terugleverprijs; dynamisch: Nordpool-prijs
+# + bonus-% over een positieve marktprijs + opslag teruglevering; de opslag kan negatief zijn
+# als de leverancier iets inhoudt). Bij saldering: terugleverprijs = leveringsprijs.
+# =====================================================================
+
+input_number:
+  besparing_vast_leveringsprijs:
+    name: Besparing Vast Tarief Levering
+    icon: mdi:cash-lock
+    min: 0
+    max: 2
+    step: 0.0001
+    mode: box
+    unit_of_measurement: "€/kWh"
+
+  besparing_vast_terugleverprijs:
+    name: Besparing Vast Tarief Teruglevering
+    icon: mdi:cash-refund
+    min: -1
+    max: 2
+    step: 0.0001
+    mode: box
+    unit_of_measurement: "€/kWh"
+
+  besparing_dyn_opslag_levering:
+    name: Besparing Dynamisch Opslag Levering
+    icon: mdi:cash-plus
+    min: -1
+    max: 1
+    step: 0.0001
+    mode: box
+    unit_of_measurement: "€/kWh"
+
+  besparing_dyn_opslag_teruglevering:
+    name: Besparing Dynamisch Opslag Teruglevering
+    icon: mdi:cash-minus
+    min: -1
+    max: 1
+    step: 0.0001
+    mode: box
+    unit_of_measurement: "€/kWh"
+
+  besparing_dyn_bonus_teruglevering:
+    name: Besparing Dynamisch Bonus Teruglevering
+    icon: mdi:percent
+    min: 0
+    max: 100
+    step: 0.5
+    mode: box
+    unit_of_measurement: "%"
+
+  besparing_accu_aanschafprijs:
+    name: Besparing Accu Aanschafprijs
+    icon: mdi:battery-charging-high
+    min: 0
+    max: 50000
+    step: 1
+    mode: box
+    unit_of_measurement: "€"
+
+  besparing_accu_al_terugverdiend:
+    name: Besparing Accu Al Terugverdiend
+    icon: mdi:cash-check
+    min: 0
+    max: 50000
+    step: 1
+    mode: box
+    unit_of_measurement: "€"
+
+input_button:
+  besparing_totaal_reset:
+    name: Besparing Totaal Opnieuw Beginnen
+    icon: mdi:restart
+
+template:
+  - trigger:
+      # 30 s na de tellers (die bevriezen op :00, :15, :30 en :45)
+      - platform: time_pattern
+        minutes: "/15"
+        seconds: 30
+      - platform: state
+        entity_id: input_button.besparing_totaal_reset
+      # direct bijwerken bij een andere aanschafprijs (tussentijds rekenen is veilig:
+      # de tellers staan nog op het begin van het kwartier, er wordt niets dubbel geteld)
+      - platform: state
+        entity_id:
+          - input_number.besparing_accu_aanschafprijs
+          - input_number.besparing_accu_al_terugverdiend
+    variables:
+      c_max_kwh_interval: 6              # grotere toename in een kwartier geldt als fout of meterwissel
+      c_max_gat_s: 1000                  # alleen aansluitende kwartieren (na een herstart of gat: overslaan)
+      nu_ts: "{{ as_timestamp(now()) }}"
+      # Alleen een echte druk op de knop (niet het terugzetten van de knop bij een herstart)
+      reset: >
+        {{ trigger.platform == 'state' and trigger.entity_id == 'input_button.besparing_totaal_reset'
+           and trigger.from_state is not none
+           and trigger.from_state.state not in ['unknown', 'unavailable'] }}
+
+      # ---- Tellerstanden (kWh); -1 = niet beschikbaar ----
+      # Allemaal uit de bevroren tellers van zendure_forecasting.yaml, zodat ze op
+      # hetzelfde moment (het begin van het kwartier) zijn vastgelegd.
+      t_imp: "{{ states('sensor.forecast_teller_p1_import') | float(-1) }}"
+      t_exp: "{{ states('sensor.forecast_teller_p1_export') | float(-1) }}"
+      t_laden: "{{ states('sensor.forecast_teller_zendure_laden') | float(-1) }}"
+      t_ontl: "{{ states('sensor.forecast_teller_zendure_ontladen') | float(-1) }}"
+      t_prod: "{{ states('sensor.forecast_teller_zon_productie') | float(-1) }}"
+      vorig: "{{ state_attr('sensor.zendure_besparing', 'meting') }}"
+      # 's Nachts mag de omvormer offline zijn: dan geldt de vorige stand (geen productie)
+      prod_nu: >
+        {% if t_prod >= 0 %}{{ t_prod }}
+        {% elif vorig is mapping and not is_state('sun.sun', 'above_horizon') %}{{ vorig.prod }}
+        {% else %}-1{% endif %}
+      meting_ok: "{{ t_imp >= 0 and t_exp >= 0 and t_laden >= 0 and t_ontl >= 0 and prod_nu >= 0 }}"
+
+      # ---- Dynamische prijs van het slot dat nu loopt (wordt bewaard voor het volgende kwartier) ----
+      prijzen: "{{ state_attr('sensor.dynamisch_nordpool', 'raw_today') or [] }}"
+      slot_nu: >
+        {%- set ns = namespace(p=none, e=none) -%}
+        {%- for x in prijzen -%}
+          {%- set s = as_timestamp(x.start, 0) -%}{%- set e = as_timestamp(x.end, 0) -%}
+          {%- if s <= nu_ts < e -%}{%- set ns.p = x.value | float(0) -%}{%- set ns.e = e -%}{%- endif -%}
+        {%- endfor -%}
+        {{ {'p': ns.p, 'e': ns.e} }}
+
+      # ---- Energie van het afgelopen kwartier ----
+      dt: "{{ (nu_ts - (vorig.ts | float(0))) if vorig is mapping else 0 }}"
+      delta: >
+        {%- if meting_ok and vorig is mapping and 0 < dt <= c_max_gat_s -%}
+          {%- set di = t_imp - vorig.imp -%}{%- set de = t_exp - vorig.exp -%}{%- set dp = prod_nu - vorig.prod -%}
+          {%- set dl = t_laden - vorig.laden -%}{%- set dn = t_ontl - vorig.ontl -%}
+          {%- if [di, de, dp, dl, dn] | select('ge', 0) | select('le', c_max_kwh_interval) | list | length == 5 -%}
+            {%- set v = [di - de + dp - dl + dn, 0] | max -%}
+            {{ {'imp': di, 'exp': de, 'zon': dp, 'verbruik': v, 'imp0': [v - dp, 0] | max, 'exp0': [dp - v, 0] | max} }}
+          {%- else -%}{{ none }}{%- endif -%}
+        {%- else -%}{{ none }}{%- endif -%}
+      # Prijs van het afgelopen kwartier = de prijs die bij de vorige berekening (begin van
+      # dat kwartier) gold. Alleen als die ontbreekt: de prijs van nu.
+      p_dyn: >
+        {%- set po = vorig.p if vorig is mapping else none -%}
+        {%- if po is number -%}{{ po }}{%- elif slot_nu.p is number -%}{{ slot_nu.p }}{%- else -%}{{ none }}{%- endif -%}
+
+      # ---- Tarieven ----
+      vast_in: "{{ states('input_number.besparing_vast_leveringsprijs') | float(0) }}"
+      vast_uit: "{{ states('input_number.besparing_vast_terugleverprijs') | float(0) }}"
+      opsl_in: "{{ states('input_number.besparing_dyn_opslag_levering') | float(0) }}"
+      opsl_uit: "{{ states('input_number.besparing_dyn_opslag_teruglevering') | float(0) }}"
+      # Bonus (%) over de marktprijs bij teruglevering, alleen als die prijs positief is
+      bonus_uit: "{{ states('input_number.besparing_dyn_bonus_teruglevering') | float(0) / 100 }}"
+
+      # ---- Toename voor dit kwartier (kWh en €) ----
+      inc: >
+        {%- if delta is mapping and p_dyn is number -%}
+          {%- set din = p_dyn + opsl_in -%}{%- set duit = p_dyn + bonus_uit * ([p_dyn, 0] | max) + opsl_uit -%}{%- set d = delta -%}
+          {{ {'verbruik': d.verbruik, 'zon': d.zon, 'imp': d.imp, 'exp': d.exp, 'imp0': d.imp0, 'exp0': d.exp0,
+              'geen_vast': d.verbruik * vast_in, 'geen_dyn': d.verbruik * din,
+              'zon_vast': d.imp0 * vast_in - d.exp0 * vast_uit, 'zon_dyn': d.imp0 * din - d.exp0 * duit,
+              'nu_vast': d.imp * vast_in - d.exp * vast_uit, 'nu_dyn': d.imp * din - d.exp * duit} }}
+        {%- else -%}{{ none }}{%- endif -%}
+
+      # ---- Periodes: dag, maand, jaar, totaal (+ gisteren) ----
+      # Het kwartier telt mee in de dag waarin het begon (23:45-00:00 hoort bij gisteren).
+      ref_ts: "{{ (vorig.ts | float(nu_ts)) if delta is mapping else nu_ts }}"
+      d_key: "{{ ref_ts | timestamp_custom('%Y-%m-%d', true) }}"
+      m_key: "{{ ref_ts | timestamp_custom('%Y-%m', true) }}"
+      j_key: "{{ ref_ts | timestamp_custom('%Y', true) }}"
+      emmers: >-
+        {%- set K = ['verbruik', 'zon', 'imp', 'exp', 'imp0', 'exp0', 'geen_vast', 'geen_dyn', 'zon_vast', 'zon_dyn', 'nu_vast', 'nu_dyn'] -%}
+        {%- set o = state_attr('sensor.zendure_besparing', 'emmers') -%}
+        {%- set o = o if o is mapping else {} -%}
+        {%- set sleutels = {'dag': d_key, 'maand': m_key, 'jaar': j_key} -%}
+        {%- set ns = namespace(uit=[]) -%}
+        {%- for b in ['dag', 'maand', 'jaar', 'totaal'] -%}
+          {%- set ob = o.get(b) if o.get(b) is mapping else none -%}
+          {%- if b == 'totaal' -%}
+            {%- set zelfde = ob is not none and not reset -%}
+            {%- set start = ob.start if zelfde else d_key -%}
+          {%- else -%}
+            {%- set start = sleutels[b] -%}
+            {#- als tekst vergelijken: "2026" wordt anders als getal gelezen -#}
+            {%- set zelfde = ob is not none and (ob.start | string) == (start | string) -%}
+          {%- endif -%}
+          {%- set nv = namespace(l=['"start": "' ~ start ~ '"']) -%}
+          {%- for k in K -%}
+            {%- set basis = (ob.get(k, 0) | float(0)) if zelfde else 0 -%}
+            {%- set plus = (inc.get(k, 0) | float(0)) if inc is mapping else 0 -%}
+            {%- set nv.l = nv.l + ['"%s": %s' | format(k, (basis + plus) | round(4))] -%}
+          {%- endfor -%}
+          {%- set ns.uit = ns.uit + ['"%s": {%s}' | format(b, nv.l | join(', '))] -%}
+        {%- endfor -%}
+        {%- set od = o.get('dag') if o.get('dag') is mapping else none -%}
+        {%- set og = o.get('gisteren') if o.get('gisteren') is mapping else none -%}
+        {%- set gist = od if (od is not none and (od.start | string) != (d_key | string)) else og -%}
+        {%- if gist is not none -%}{%- set ns.uit = ns.uit + ['"gisteren": ' ~ (gist | to_json)] -%}{%- endif -%}
+        {{ '{' ~ ns.uit | join(', ') ~ '}' }}
+
+      # ---- Terugverdientijd accu ----
+      tv_prijs: "{{ states('input_number.besparing_accu_aanschafprijs') | float(0) }}"
+      tv_vooraf: "{{ states('input_number.besparing_accu_al_terugverdiend') | float(0) }}"
+      # Gemeten dagen in de periode "totaal" (op datum, dus tijdzone-onafhankelijk)
+      tv_dagen: >
+        {% set d0 = strptime(emmers.totaal.start | string, '%Y-%m-%d', none) %}
+        {% if d0 is none %}0{% else %}{{ ((now().date() - d0.date()).days + (now().hour * 60 + now().minute) / 1440) | round(3) }}{% endif %}
+      tv_gemeten: "{{ (emmers.totaal.zon_dyn - emmers.totaal.nu_dyn) | round(2) }}"
+      tv_terug: "{{ (tv_vooraf + tv_gemeten) | round(2) }}"
+      # Doorgetrokken naar een jaar, pas vanaf 1 dag meting
+      tv_per_jaar: "{{ (tv_gemeten / tv_dagen * 365) | round(2) if tv_dagen >= 1 else 0 }}"
+      tv_nog_eur: "{{ ([tv_prijs - tv_terug, 0] | max) | round(2) }}"
+      tv_nog_jaar: "{{ (tv_nog_eur / tv_per_jaar) | round(1) if tv_per_jaar > 0 else none }}"
+    sensor:
+      - name: "Zendure Besparing"
+        unique_id: zendure_besparing
+        icon: mdi:piggy-bank-outline
+        unit_of_measurement: "€"
+        device_class: monetary
+        state_class: total
+        state: >
+          {% set b = emmers.totaal %}
+          {{ (b.geen_vast - b.nu_dyn) | round(2) }}
+        attributes:
+          # Opgetelde kWh en € per periode (zie uitleg bovenaan)
+          emmers: "{{ emmers }}"
+          sinds: "{{ emmers.totaal.start }}"
+          zon: "{{ (emmers.totaal.geen_vast - emmers.totaal.zon_vast) | round(2) }}"
+          dynamisch_tarief: "{{ (emmers.totaal.zon_vast - emmers.totaal.zon_dyn) | round(2) }}"
+          accu: "{{ (emmers.totaal.zon_dyn - emmers.totaal.nu_dyn) | round(2) }}"
+          betaald: "{{ emmers.totaal.nu_dyn | round(2) }}"
+          prijs_laatste_interval: "{{ p_dyn }}"
+          laatste_interval_verrekend: "{{ inc is mapping }}"
+          # Tellerstanden en prijs van nu, voor de berekening over een kwartier
+          meting: >
+            {% if meting_ok %}{{ {'ts': nu_ts | round(0), 'imp': t_imp, 'exp': t_exp, 'prod': prod_nu,
+                                  'laden': t_laden, 'ontl': t_ontl, 'p': slot_nu.p} }}
+            {% else %}{{ none }}{% endif %}
+
+      - name: "Zendure Besparing Vandaag"
+        unique_id: zendure_besparing_vandaag
+        icon: mdi:piggy-bank-outline
+        unit_of_measurement: "€"
+        device_class: monetary
+        state_class: total
+        state: "{{ (emmers.dag.geen_vast - emmers.dag.nu_dyn) | round(2) }}"
+        attributes:
+          zon: "{{ (emmers.dag.geen_vast - emmers.dag.zon_vast) | round(2) }}"
+          dynamisch_tarief: "{{ (emmers.dag.zon_vast - emmers.dag.zon_dyn) | round(2) }}"
+          accu: "{{ (emmers.dag.zon_dyn - emmers.dag.nu_dyn) | round(2) }}"
+          betaald: "{{ emmers.dag.nu_dyn | round(2) }}"
+
+      - name: "Zendure Besparing Deze Maand"
+        unique_id: zendure_besparing_deze_maand
+        icon: mdi:piggy-bank-outline
+        unit_of_measurement: "€"
+        device_class: monetary
+        state_class: total
+        state: "{{ (emmers.maand.geen_vast - emmers.maand.nu_dyn) | round(2) }}"
+        attributes:
+          zon: "{{ (emmers.maand.geen_vast - emmers.maand.zon_vast) | round(2) }}"
+          dynamisch_tarief: "{{ (emmers.maand.zon_vast - emmers.maand.zon_dyn) | round(2) }}"
+          accu: "{{ (emmers.maand.zon_dyn - emmers.maand.nu_dyn) | round(2) }}"
+          betaald: "{{ emmers.maand.nu_dyn | round(2) }}"
+
+      - name: "Zendure Besparing Dit Jaar"
+        unique_id: zendure_besparing_dit_jaar
+        icon: mdi:piggy-bank-outline
+        unit_of_measurement: "€"
+        device_class: monetary
+        state_class: total
+        state: "{{ (emmers.jaar.geen_vast - emmers.jaar.nu_dyn) | round(2) }}"
+        attributes:
+          zon: "{{ (emmers.jaar.geen_vast - emmers.jaar.zon_vast) | round(2) }}"
+          dynamisch_tarief: "{{ (emmers.jaar.zon_vast - emmers.jaar.zon_dyn) | round(2) }}"
+          accu: "{{ (emmers.jaar.zon_dyn - emmers.jaar.nu_dyn) | round(2) }}"
+          betaald: "{{ emmers.jaar.nu_dyn | round(2) }}"
+
+      # Terugverdientijd van de accu (besparing door accu en slim laden, dynamisch contract)
+      - name: "Zendure Accu Terugverdientijd"
+        unique_id: zendure_accu_terugverdientijd
+        icon: mdi:cash-clock
+        unit_of_measurement: "jaar"
+        availability: "{{ tv_prijs > 0 }}"
+        state: "{{ (tv_prijs / tv_per_jaar) | round(1) if tv_per_jaar > 0 else none }}"
+        attributes:
+          aanschafprijs: "{{ tv_prijs }}"
+          terugverdiend: "{{ tv_terug }}"
+          terugverdiend_pct: "{{ ([tv_terug / tv_prijs * 100, 100] | min) | round(1) if tv_prijs > 0 else 0 }}"
+          waarvan_gemeten: "{{ tv_gemeten }}"
+          nog_te_gaan: "{{ tv_nog_eur }}"
+          besparing_per_jaar: "{{ tv_per_jaar }}"
+          nog_jaren: "{{ tv_nog_jaar }}"
+          terugverdiend_rond: >
+            {% if tv_nog_eur <= 0 %}terugverdiend
+            {% elif tv_nog_jaar is number %}{{ (now() + timedelta(days=(tv_nog_jaar * 365) | int)).strftime('%m-%Y') }}
+            {% else %}{{ none }}{% endif %}
+          gemeten_dagen: "{{ tv_dagen }}"

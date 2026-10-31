@@ -7,7 +7,7 @@ Choose your preferred language
 
 > **This is a fork of [Gielz1986/Zendure-HA-zenSDK](https://github.com/Gielz1986/Zendure-HA-zenSDK)** by Michiel Hofker (Gielz1986). All credit for the integration, the automation and the dashboard goes to the original project. This fork adds **one extra mode: Dynamic Smart Matching + Forecasting** (Dutch: *Dynamisch NOM + Forecasting*). For everything else (modes, wiki, support, updates), see the original repository. The original README follows below this section.
 
-**Version:** `2026.10.2` · based on Gielz configuration `v20261007` · available in Dutch (NL) and Global (EN) · [Changelog](CHANGELOG.md)
+**Version:** `2026.11.1` · based on Gielz configuration `v20261007` · available in Dutch (NL) and Global (EN) · [Changelog](CHANGELOG.md)
 
 Versions follow `year.month.sequence` (the sequence restarts at 1 every month). In Home Assistant you see the installed version and the latest version on GitHub (`sensor.forecasting_version`, `sensor.forecasting_release_check`) on the Configuration tab, and the release notes under Releasenotes.
 
@@ -23,21 +23,24 @@ The battery charges at the cheapest moments, but **only as much as is actually n
 - **Average daily usage** comes from your own history (import, export, production, battery in/out): calculated from about 2 hours after installation and more accurate every day, up to 7 days. No input field needed.
 - **Grid import and export from the P1 meter:** the meter's kWh counters are detected automatically (SlimmeLezer/ESPHome DSMR: `energy_consumed/produced_tariff_1/2`, HomeWizard P1, DSMR integration) and used, just like the energy dashboard. Without a meter it is calculated from power (method left). If the meter is briefly gone, the missed part is added later.
 - **Efficiency filter:** a charge slot must be cheaper than the value of the stored energy after round-trip loss, and in scenario A below the day average. The round-trip efficiency comes from the **total RTE** (all kWh out / all kWh in), split equally over charging and discharging. The 24-hour point measurements of efficiency come out too low (unweighted, every stop counts as 0%) and are only used when the total RTE is not usable yet.
-- **Path check:** calculates when the battery runs empty and when energy comes in again: the first charge slot or the moment solar covers usage (from the Solcast detailed forecast, otherwise sunrise + 3 hours). If there is a gap, extra charge slots are planned before it, even when nothing else needs to be charged. Only the expensive slots in the gap count: a charge slot must lie before the expensive slot it replaces and be cheaper after round-trip loss.
+- **Path check:** calculates when the battery runs empty and looks from there until solar covers usage (from the Solcast detailed forecast, otherwise sunrise + 3 hours) or until the end of the bridge, whichever comes first. Expensive quarter hours in that gap get the cheapest charge slots before them, even when nothing else needs to be charged, and only if those are cheaper after round-trip loss. With *hold discharging in a cheap dip* on, the path check assumes the battery supplies nothing in those dips.
 - **Usage profile per hour**, separately for workdays and weekends: every full hour your actual house usage is measured and folded into a moving average per hour of the day (`sensor.forecast_usage_profile`). The planner uses it per quarter for the path check, the moment the battery runs empty, solar coverage and the bridge. Until an hour has enough measurements (workday 3, weekend 2), the day average applies. Holidays follow `binary_sensor.workday_sensor` (Workday integration) if it exists.
 - **Measured charge power** is used to determine the number of slots.
 - Optional: **hold discharging in a cheap dip** (save the battery).
-- **Plan Timeline** on the dashboard: for the next 36 hours per price slot in four compact rows the price (green/orange/red, blue = planned charging), solar and house usage, battery charge and discharge with the expected state of charge, and grid import and export. Only apexcharts-card needed. Tip: exclude `sensor.zendure_forecast_chart` from the recorder (`recorder: exclude: entities:`), its attributes exceed the recorder's 16 kB limit.
-- Dashboard: a Forecasting section on the Zendure tab (plan for today and tomorrow, tiles, collected 7-day data, recalculate button) and a Configuration (Forecasting) block with all input fields. Both can be shown or hidden with **Show Forecasting On Dashboard**.
+- **Charge blocks in plain language:** per block when, how long, how many kWh and at what average price, for today and (indicatively) for tomorrow.
+- **Savings** (new, `packages/zendure_savings_global.yaml`): every quarter hour your usage is settled at a fixed and a dynamic tariff, with and without solar and battery. A separate tab shows per day, month, year and total what you save and from what (solar, dynamic tariff, battery and smart charging), plus the battery payback time. The tables look better with [card-mod](https://github.com/thomasloven/lovelace-card-mod) (optional).
+- **Plan Timeline** on the dashboard: for the next 36 hours per price slot in four compact rows the price (colours as in Gielz: green = planned charging, red = expensive), solar and house usage, battery charge and discharge with the expected state of charge, and grid import and export. Only apexcharts-card needed. Tip: exclude `sensor.zendure_forecast_chart` from the recorder (`recorder: exclude: entities:`), its attributes exceed the recorder's 16 kB limit.
+- Dashboard: a Forecasting section on the Zendure tab (plan for today and tomorrow, usage profile, collected 7-day data, recalculate button), a Savings tab and a Configuration (Forecasting) block with all input fields. Both can be shown or hidden with **Show Forecasting On Dashboard**.
 
 ### What changed compared with the original
 
 | File (NL / Global) | Change |
 |---|---|
 | `packages/zendure_forecasting.yaml` / `packages/zendure_forecasting_global.yaml` | **New.** Helpers, counters, 7-day statistics, the planner and derived sensors. |
+| `packages/zendure_besparing.yaml` / `packages/zendure_savings_global.yaml` | **New.** Input fields for tariffs and battery price, and the savings and payback sensors. |
 | `packages/zendure_gielz1986_nl.yaml` / `packages/zendure_gielz1986_global.yaml` | Only one extra option in the mode selector. |
 | `automation_nl.yaml` / `automation_global.yaml` | The new mode in the mode selection and in the 6 existing Smart Matching lists (zero-on-the-meter, SOC protection, emergency stop), its own charging block that only charges when the plan says *Charge*, and a discharge hold for the cheap dip. Existing modes are unchanged. |
-| `dashboard_nl.yaml` / `dashboard_global.yaml` | New Forecasting section, new Configuration (Forecasting) block and a switch in Configuration (Dashboard). |
+| `dashboard_nl.yaml` / `dashboard_global.yaml` | New Forecasting section, new Savings tab, new Configuration (Forecasting) and Configuration (Savings) blocks and a switch in Configuration (Dashboard). |
 
 Each changed file starts with a two-line header with the version, the Gielz version it is based on and the original author.
 
@@ -45,13 +48,13 @@ Each changed file starts with a two-line header with the version, the Gielz vers
 
 First install the original integration as described below (packages file, automation, dashboard). Then:
 
-1. Put `zendure_forecasting_global.yaml` (Global) or `zendure_forecasting.yaml` (NL) in the same `packages` folder as the Gielz package, and replace the Gielz package with the version from this fork.
+1. Put `zendure_forecasting_global.yaml` and `zendure_savings_global.yaml` (Global) or `zendure_forecasting.yaml` and `zendure_besparing.yaml` (NL) in the same `packages` folder as the Gielz package, and replace the Gielz package with the version from this fork.
 2. Replace the automation and the dashboard with the versions from this fork (or merge the changes into your own version).
 3. Restart Home Assistant.
-4. On the Configuration tab, under **Configuration (Forecasting)**, enter: the sensor for solar remaining today, solar tomorrow (kWh, e.g. Forecast.Solar or Solcast) and a total counter of your solar panels (kWh). Optionally set the charge margin.
+4. On the Configuration tab, under **Configuration (Forecasting)**, enter: the sensor for solar remaining today, solar tomorrow (kWh, e.g. Forecast.Solar or Solcast) and a total counter of your solar panels (kWh). Optionally set the charge margin. Under **Configuration (Savings)** enter your tariffs and the purchase price of the battery.
 5. Select the mode **Dynamic Smart Matching + Forecasting**.
 
-**Requires:** the Gielz package, Nord Pool (as already set up in Gielz), a P1/home energy meter, a solar forecast integration and apexcharts-card for the Gielz dashboard. The planner becomes more accurate after about a week of history.
+**Requires:** the Gielz package, Nord Pool (as already set up in Gielz), a P1/home energy meter, a solar forecast integration and apexcharts-card for the Gielz dashboard; card-mod is optional (table styling on the Savings tab). The planner becomes more accurate after about a week of history.
 
 > **Status:** personal project. The Dutch version is in use by the author. The Global (EN) version is a translation of the Dutch set: it was checked offline (the planner gives the same results as the Dutch version in 400 simulated situations), but has not yet run in a live Home Assistant. No warranty: start with a low charge margin and check the plan on the dashboard.
 

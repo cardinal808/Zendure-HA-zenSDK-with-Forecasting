@@ -2,6 +2,30 @@
 
 Versies volgen `jaar.maand.volgnummer`; het volgnummer begint elke maand bij 1. Elke versie vermeldt op welke Gielz-versie hij is gebaseerd. [English](CHANGELOG.md)
 
+## 2026.11.1 — gebaseerd op Gielz v20261007
+
+**Nieuw: Besparing**
+- Nieuw pakket `packages/zendure_besparing.yaml` en een tab **Besparing**. Elk kwartier wordt je verbruik verrekend tegen een vast tarief en tegen de dynamische prijs van dat moment, in zes situaties (zonder zon en accu, alleen zon, zon + accu; elk vast en dynamisch).
+- Tegels *Vandaag, Deze maand, Dit jaar, Totaal*, een overzicht van waar de besparing vandaan komt (zon, dynamisch tarief, accu en slim laden), kosten per situatie, grafieken per dag en per maand, en de **terugverdientijd van de accu**.
+- Invoervelden in **Configuratie (Besparing)**: vaste tarieven, opslag en bonus voor dynamisch, aanschafprijs van de accu en wat die al had terugverdiend.
+- De tabellen worden opgemaakt met [card-mod](https://github.com/thomasloven/lovelace-card-mod) als die is geïnstalleerd; zonder card-mod werkt alles, alleen eenvoudiger opgemaakt.
+
+**Planner**
+- **Pad-check** stopte bij het eerste geplande laadslot, waardoor dure kwartieren later op de avond buiten beeld bleven. Hij kijkt nu van *accu leeg* tot de zon het verbruik dekt of tot het einde van de overbrugging.
+- **Dal-blokkade in de pad-check:** staat *niet ontladen in een goedkoop dal* aan, dan rekent de pad-check ermee dat de accu in die dalen niets levert (dal per dag bepaald).
+- **Indicatie van morgen** volgt dezelfde regels als de pad-check: welke dure kwartieren de accu dekt, wat het huis direct uit het net koopt en welke laadslots daarvoor nodig zijn. Nieuwe attributen `morgen_uit_accu_kwh`, `morgen_direct_net_kwh`, `morgen_netladen_balans_kwh`, `morgen_dure_kwartieren_kwh`; `morgen_laadmomenten` heeft nu ook `minuten` en `kwh`.
+- **Laadblokken:** nieuw attribuut `laadblokken` (dag, start, eind, minuten, kWh, gemiddelde prijs) en `gepland_netladen_kwh`.
+- De tellers voor import, export, zon en accu bevriezen nu elk kwartier (was elk uur), nodig voor de besparing per kwartier.
+
+**Dashboard**
+- Plan in gewone taal en de blokken *Vandaag* en *Morgen* herschreven: per laadblok wanneer, hoe lang, hoeveel kWh en tegen welke prijs; duidelijk wat uit de accu komt en wat direct uit het net; *Overbruggen tot* heet nu *Plan van vandaag loopt tot*.
+- **Plan Tijdlijn:** prijskleuren zoals Gielz (groen = gepland laden, rood = de duurste periodes van Gielz, grijs = overig).
+- Tegels *Forecast Instellingen* verwijderd; *Verbruiksprofiel* verplaatst naar sectie 2 (Import | Export); *Verzamelde gegevens* is een eigen kaart.
+
+**Upgraden**
+- Vervang alle bestanden en zet `zendure_besparing.yaml` (NL) of `zendure_savings_global.yaml` (Global) erbij in de map `packages`. **Herstart** Home Assistant (nieuwe invoervelden).
+- Vul daarna bij **Configuratie (Besparing)** je tarieven en de accuprijs in. De besparing telt vanaf dat moment.
+
 ## 2026.10.2 — gebaseerd op Gielz v20261007
 
 **Planner**

@@ -1,7 +1,7 @@
-# Zendure zenSDK (Gielz) + Forecasting 2026.10.2 | based on Gielz v20261007 | set: public (without HVAC)
+# Zendure zenSDK (Gielz) + Forecasting 2026.11.1 | based on Gielz v20261007 | set: public (without HVAC)
 # Based on Gielz1986/Zendure-HA-zenSDK (Michiel Hofker). See README.md for license and changes.
 alias: Zendure zenSDK (Gielz) Global
-description: Configuration Version (v20261007) + Forecasting 2026.10.2
+description: Configuration Version (v20261007) + Forecasting 2026.11.1
 triggers:
   - seconds: /5
     id: aansturing_trigger
@@ -1795,7 +1795,7 @@ actions:
             data:
               message: >-
                 🔮Dynamic Smart Matching + Forecasting charging started — planned grid charge
-                {{ state_attr('sensor.zendure_forecast_plan', 'grid_charge_today_kwh') }} kWh
+                {{ state_attr('sensor.zendure_forecast_plan', 'planned_grid_charge_kwh') }} kWh
               entity_id: input_select.zendure_operation_mode
               name: ' '
           - wait_for_trigger:

@@ -1,0 +1,324 @@
+# Zendure zenSDK (Gielz) + Forecasting 2026.11.1 | based on Gielz v20261007
+# Based on Gielz1986/Zendure-HA-zenSDK (Michiel Hofker). See README.md for license and changes.
+# =====================================================================
+# Savings: what do solar, the battery and the dynamic contract earn?
+#
+# Place this file next to zendure_forecasting_global.yaml (same packages folder); it uses
+# the kWh counters from it (Forecast Counter Grid Import/Export, Zendure charge/discharge) and
+# the solar panels sensor from Configuration (Forecasting).
+#
+# Every quarter hour the energy of that quarter hour is settled against the price of exactly
+# that price slot (the counters freeze at :00, :15, :30 and :45, in step with the 15-minute
+# prices; with hourly prices each quarter hour counts against the price of that hour), in six
+# situations:
+#                         fixed contract    dynamic contract
+#   no solar, no battery  none_fixed        none_dyn
+#   solar only            solar_fixed       solar_dyn
+#   solar + battery (real) now_fixed        now_dyn
+# House usage = import - export + solar - battery charge + battery discharge (same as the
+# usage profile). "Solar only" = usage minus solar per quarter hour: a shortfall is import,
+# a surplus is export.
+#
+# Savings (compared to a fixed contract without solar and battery) = none_fixed - now_dyn,
+# split into:
+#   solar                    = none_fixed  - solar_fixed
+#   dynamic tariff           = solar_fixed - solar_dyn
+#   battery / smart charging = solar_dyn   - now_dyn
+#
+# Battery payback time: purchase price / (savings by the battery per year). The savings per
+# year are extrapolated from the "total" period; what the battery earned before the measurement
+# started can be entered at "Battery Already Earned".
+#
+# Export has its own price (fixed: feed-in price; dynamic: Nordpool price + bonus % on a
+# positive market price + feed-in markup; the markup can be negative if the supplier deducts
+# something). With net metering: feed-in price = supply price.
+# =====================================================================
+
+input_number:
+  savings_setting_fixed_supply_price:
+    name: Savings Fixed Supply Price
+    icon: mdi:cash-lock
+    min: 0
+    max: 2
+    step: 0.0001
+    mode: box
+    unit_of_measurement: "€/kWh"
+
+  savings_setting_fixed_feedin_price:
+    name: Savings Fixed Feed-in Price
+    icon: mdi:cash-refund
+    min: -1
+    max: 2
+    step: 0.0001
+    mode: box
+    unit_of_measurement: "€/kWh"
+
+  savings_setting_dynamic_supply_markup:
+    name: Savings Dynamic Supply Markup
+    icon: mdi:cash-plus
+    min: -1
+    max: 1
+    step: 0.0001
+    mode: box
+    unit_of_measurement: "€/kWh"
+
+  savings_setting_dynamic_feedin_markup:
+    name: Savings Dynamic Feed-in Markup
+    icon: mdi:cash-minus
+    min: -1
+    max: 1
+    step: 0.0001
+    mode: box
+    unit_of_measurement: "€/kWh"
+
+  savings_setting_dynamic_feedin_bonus:
+    name: Savings Dynamic Feed-in Bonus
+    icon: mdi:percent
+    min: 0
+    max: 100
+    step: 0.5
+    mode: box
+    unit_of_measurement: "%"
+
+  savings_setting_battery_purchase_price:
+    name: Savings Battery Purchase Price
+    icon: mdi:battery-charging-high
+    min: 0
+    max: 50000
+    step: 1
+    mode: box
+    unit_of_measurement: "€"
+
+  savings_setting_battery_already_earned:
+    name: Savings Battery Already Earned
+    icon: mdi:cash-check
+    min: 0
+    max: 50000
+    step: 1
+    mode: box
+    unit_of_measurement: "€"
+
+input_button:
+  savings_total_reset:
+    name: Savings Restart Total
+    icon: mdi:restart
+
+template:
+  - trigger:
+      # 30 s after the counters (which freeze at :00, :15, :30 and :45)
+      - platform: time_pattern
+        minutes: "/15"
+        seconds: 30
+      - platform: state
+        entity_id: input_button.savings_total_reset
+      # update immediately when the purchase price changes (calculating in between is safe:
+      # the counters are still at the start of the quarter hour, nothing is counted twice)
+      - platform: state
+        entity_id:
+          - input_number.savings_setting_battery_purchase_price
+          - input_number.savings_setting_battery_already_earned
+    variables:
+      c_max_kwh_interval: 6              # a larger increase in one quarter hour counts as an error or meter swap
+      c_max_gap_s: 1000                  # only consecutive quarter hours (after a restart or gap: skip)
+      now_ts: "{{ as_timestamp(now()) }}"
+      # Only a real button press (not the button being restored after a restart)
+      reset: >
+        {{ trigger.platform == 'state' and trigger.entity_id == 'input_button.savings_total_reset'
+           and trigger.from_state is not none
+           and trigger.from_state.state not in ['unknown', 'unavailable'] }}
+
+      # ---- Counter readings (kWh); -1 = not available ----
+      # All from the frozen counters of zendure_forecasting_global.yaml, so they were recorded
+      # at the same moment (the start of the quarter hour).
+      t_imp: "{{ states('sensor.forecast_counter_grid_import') | float(-1) }}"
+      t_exp: "{{ states('sensor.forecast_counter_grid_export') | float(-1) }}"
+      t_charge: "{{ states('sensor.forecast_counter_zendure_charge') | float(-1) }}"
+      t_disch: "{{ states('sensor.forecast_counter_zendure_discharge') | float(-1) }}"
+      t_prod: "{{ states('sensor.forecast_counter_solar_production') | float(-1) }}"
+      prev: "{{ state_attr('sensor.zendure_savings', 'measurement') }}"
+      # At night the inverter may be offline: then the previous reading applies (no production)
+      prod_now: >
+        {% if t_prod >= 0 %}{{ t_prod }}
+        {% elif prev is mapping and not is_state('sun.sun', 'above_horizon') %}{{ prev.prod }}
+        {% else %}-1{% endif %}
+      measurement_ok: "{{ t_imp >= 0 and t_exp >= 0 and t_charge >= 0 and t_disch >= 0 and prod_now >= 0 }}"
+
+      # ---- Dynamic price of the slot running now (kept for the next quarter hour) ----
+      prices: "{{ state_attr('sensor.dynamic_nordpool', 'raw_today') or [] }}"
+      slot_now: >
+        {%- set ns = namespace(p=none, e=none) -%}
+        {%- for x in prices -%}
+          {%- set s = as_timestamp(x.start, 0) -%}{%- set e = as_timestamp(x.end, 0) -%}
+          {%- if s <= now_ts < e -%}{%- set ns.p = x.value | float(0) -%}{%- set ns.e = e -%}{%- endif -%}
+        {%- endfor -%}
+        {{ {'p': ns.p, 'e': ns.e} }}
+
+      # ---- Energy of the past quarter hour ----
+      dt: "{{ (now_ts - (prev.ts | float(0))) if prev is mapping else 0 }}"
+      delta: >
+        {%- if measurement_ok and prev is mapping and 0 < dt <= c_max_gap_s -%}
+          {%- set di = t_imp - prev.imp -%}{%- set de = t_exp - prev.exp -%}{%- set dp = prod_now - prev.prod -%}
+          {%- set dc = t_charge - prev.charge -%}{%- set dd = t_disch - prev.disch -%}
+          {%- if [di, de, dp, dc, dd] | select('ge', 0) | select('le', c_max_kwh_interval) | list | length == 5 -%}
+            {%- set u = [di - de + dp - dc + dd, 0] | max -%}
+            {{ {'imp': di, 'exp': de, 'solar': dp, 'usage': u, 'imp0': [u - dp, 0] | max, 'exp0': [dp - u, 0] | max} }}
+          {%- else -%}{{ none }}{%- endif -%}
+        {%- else -%}{{ none }}{%- endif -%}
+      # Price of the past quarter hour = the price that applied at the previous calculation (start
+      # of that quarter hour). Only if that is missing: the current price.
+      p_dyn: >
+        {%- set po = prev.p if prev is mapping else none -%}
+        {%- if po is number -%}{{ po }}{%- elif slot_now.p is number -%}{{ slot_now.p }}{%- else -%}{{ none }}{%- endif -%}
+
+      # ---- Tariffs ----
+      fixed_in: "{{ states('input_number.savings_setting_fixed_supply_price') | float(0) }}"
+      fixed_out: "{{ states('input_number.savings_setting_fixed_feedin_price') | float(0) }}"
+      markup_in: "{{ states('input_number.savings_setting_dynamic_supply_markup') | float(0) }}"
+      markup_out: "{{ states('input_number.savings_setting_dynamic_feedin_markup') | float(0) }}"
+      # Bonus (%) on the market price for export, only when that price is positive
+      bonus_out: "{{ states('input_number.savings_setting_dynamic_feedin_bonus') | float(0) / 100 }}"
+
+      # ---- Increase for this quarter hour (kWh and €) ----
+      inc: >
+        {%- if delta is mapping and p_dyn is number -%}
+          {%- set din = p_dyn + markup_in -%}{%- set dout = p_dyn + bonus_out * ([p_dyn, 0] | max) + markup_out -%}{%- set d = delta -%}
+          {{ {'usage': d.usage, 'solar': d.solar, 'imp': d.imp, 'exp': d.exp, 'imp0': d.imp0, 'exp0': d.exp0,
+              'none_fixed': d.usage * fixed_in, 'none_dyn': d.usage * din,
+              'solar_fixed': d.imp0 * fixed_in - d.exp0 * fixed_out, 'solar_dyn': d.imp0 * din - d.exp0 * dout,
+              'now_fixed': d.imp * fixed_in - d.exp * fixed_out, 'now_dyn': d.imp * din - d.exp * dout} }}
+        {%- else -%}{{ none }}{%- endif -%}
+
+      # ---- Periods: day, month, year, total (+ yesterday) ----
+      # The quarter hour counts in the day in which it started (23:45-00:00 belongs to yesterday).
+      ref_ts: "{{ (prev.ts | float(now_ts)) if delta is mapping else now_ts }}"
+      d_key: "{{ ref_ts | timestamp_custom('%Y-%m-%d', true) }}"
+      m_key: "{{ ref_ts | timestamp_custom('%Y-%m', true) }}"
+      y_key: "{{ ref_ts | timestamp_custom('%Y', true) }}"
+      buckets: >-
+        {%- set K = ['usage', 'solar', 'imp', 'exp', 'imp0', 'exp0', 'none_fixed', 'none_dyn', 'solar_fixed', 'solar_dyn', 'now_fixed', 'now_dyn'] -%}
+        {%- set o = state_attr('sensor.zendure_savings', 'buckets') -%}
+        {%- set o = o if o is mapping else {} -%}
+        {%- set keys = {'day': d_key, 'month': m_key, 'year': y_key} -%}
+        {%- set ns = namespace(out=[]) -%}
+        {%- for b in ['day', 'month', 'year', 'total'] -%}
+          {%- set ob = o.get(b) if o.get(b) is mapping else none -%}
+          {%- if b == 'total' -%}
+            {%- set same = ob is not none and not reset -%}
+            {%- set start = ob.start if same else d_key -%}
+          {%- else -%}
+            {%- set start = keys[b] -%}
+            {#- compare as text: "2026" would otherwise be read as a number -#}
+            {%- set same = ob is not none and (ob.start | string) == (start | string) -%}
+          {%- endif -%}
+          {%- set nv = namespace(l=['"start": "' ~ start ~ '"']) -%}
+          {%- for k in K -%}
+            {%- set base = (ob.get(k, 0) | float(0)) if same else 0 -%}
+            {%- set plus = (inc.get(k, 0) | float(0)) if inc is mapping else 0 -%}
+            {%- set nv.l = nv.l + ['"%s": %s' | format(k, (base + plus) | round(4))] -%}
+          {%- endfor -%}
+          {%- set ns.out = ns.out + ['"%s": {%s}' | format(b, nv.l | join(', '))] -%}
+        {%- endfor -%}
+        {%- set od = o.get('day') if o.get('day') is mapping else none -%}
+        {%- set oy = o.get('yesterday') if o.get('yesterday') is mapping else none -%}
+        {%- set yest = od if (od is not none and (od.start | string) != (d_key | string)) else oy -%}
+        {%- if yest is not none -%}{%- set ns.out = ns.out + ['"yesterday": ' ~ (yest | to_json)] -%}{%- endif -%}
+        {{ '{' ~ ns.out | join(', ') ~ '}' }}
+
+      # ---- Battery payback time ----
+      pb_price: "{{ states('input_number.savings_setting_battery_purchase_price') | float(0) }}"
+      pb_before: "{{ states('input_number.savings_setting_battery_already_earned') | float(0) }}"
+      # Measured days in the "total" period (by date, so independent of the time zone)
+      pb_days: >
+        {% set d0 = strptime(buckets.total.start | string, '%Y-%m-%d', none) %}
+        {% if d0 is none %}0{% else %}{{ ((now().date() - d0.date()).days + (now().hour * 60 + now().minute) / 1440) | round(3) }}{% endif %}
+      pb_measured: "{{ (buckets.total.solar_dyn - buckets.total.now_dyn) | round(2) }}"
+      pb_earned: "{{ (pb_before + pb_measured) | round(2) }}"
+      # Extrapolated to a year, only from 1 day of measurement
+      pb_per_year: "{{ (pb_measured / pb_days * 365) | round(2) if pb_days >= 1 else 0 }}"
+      pb_left_eur: "{{ ([pb_price - pb_earned, 0] | max) | round(2) }}"
+      pb_left_years: "{{ (pb_left_eur / pb_per_year) | round(1) if pb_per_year > 0 else none }}"
+    sensor:
+      - name: "Zendure Savings"
+        unique_id: zendure_savings
+        icon: mdi:piggy-bank-outline
+        unit_of_measurement: "€"
+        device_class: monetary
+        state_class: total
+        state: >
+          {% set b = buckets.total %}
+          {{ (b.none_fixed - b.now_dyn) | round(2) }}
+        attributes:
+          # Summed kWh and € per period (see explanation at the top)
+          buckets: "{{ buckets }}"
+          since: "{{ buckets.total.start }}"
+          solar: "{{ (buckets.total.none_fixed - buckets.total.solar_fixed) | round(2) }}"
+          dynamic_tariff: "{{ (buckets.total.solar_fixed - buckets.total.solar_dyn) | round(2) }}"
+          battery: "{{ (buckets.total.solar_dyn - buckets.total.now_dyn) | round(2) }}"
+          paid: "{{ buckets.total.now_dyn | round(2) }}"
+          price_last_interval: "{{ p_dyn }}"
+          last_interval_settled: "{{ inc is mapping }}"
+          # Counter readings and price now, for the calculation in a quarter hour
+          measurement: >
+            {% if measurement_ok %}{{ {'ts': now_ts | round(0), 'imp': t_imp, 'exp': t_exp, 'prod': prod_now,
+                                       'charge': t_charge, 'disch': t_disch, 'p': slot_now.p} }}
+            {% else %}{{ none }}{% endif %}
+
+      - name: "Zendure Savings Today"
+        unique_id: zendure_savings_today
+        icon: mdi:piggy-bank-outline
+        unit_of_measurement: "€"
+        device_class: monetary
+        state_class: total
+        state: "{{ (buckets.day.none_fixed - buckets.day.now_dyn) | round(2) }}"
+        attributes:
+          solar: "{{ (buckets.day.none_fixed - buckets.day.solar_fixed) | round(2) }}"
+          dynamic_tariff: "{{ (buckets.day.solar_fixed - buckets.day.solar_dyn) | round(2) }}"
+          battery: "{{ (buckets.day.solar_dyn - buckets.day.now_dyn) | round(2) }}"
+          paid: "{{ buckets.day.now_dyn | round(2) }}"
+
+      - name: "Zendure Savings This Month"
+        unique_id: zendure_savings_this_month
+        icon: mdi:piggy-bank-outline
+        unit_of_measurement: "€"
+        device_class: monetary
+        state_class: total
+        state: "{{ (buckets.month.none_fixed - buckets.month.now_dyn) | round(2) }}"
+        attributes:
+          solar: "{{ (buckets.month.none_fixed - buckets.month.solar_fixed) | round(2) }}"
+          dynamic_tariff: "{{ (buckets.month.solar_fixed - buckets.month.solar_dyn) | round(2) }}"
+          battery: "{{ (buckets.month.solar_dyn - buckets.month.now_dyn) | round(2) }}"
+          paid: "{{ buckets.month.now_dyn | round(2) }}"
+
+      - name: "Zendure Savings This Year"
+        unique_id: zendure_savings_this_year
+        icon: mdi:piggy-bank-outline
+        unit_of_measurement: "€"
+        device_class: monetary
+        state_class: total
+        state: "{{ (buckets.year.none_fixed - buckets.year.now_dyn) | round(2) }}"
+        attributes:
+          solar: "{{ (buckets.year.none_fixed - buckets.year.solar_fixed) | round(2) }}"
+          dynamic_tariff: "{{ (buckets.year.solar_fixed - buckets.year.solar_dyn) | round(2) }}"
+          battery: "{{ (buckets.year.solar_dyn - buckets.year.now_dyn) | round(2) }}"
+          paid: "{{ buckets.year.now_dyn | round(2) }}"
+
+      # Battery payback time (savings by battery and smart charging, dynamic contract)
+      - name: "Zendure Battery Payback Time"
+        unique_id: zendure_battery_payback_time
+        icon: mdi:cash-clock
+        unit_of_measurement: "years"
+        availability: "{{ pb_price > 0 }}"
+        state: "{{ (pb_price / pb_per_year) | round(1) if pb_per_year > 0 else none }}"
+        attributes:
+          purchase_price: "{{ pb_price }}"
+          earned: "{{ pb_earned }}"
+          earned_pct: "{{ ([pb_earned / pb_price * 100, 100] | min) | round(1) if pb_price > 0 else 0 }}"
+          of_which_measured: "{{ pb_measured }}"
+          still_to_go: "{{ pb_left_eur }}"
+          savings_per_year: "{{ pb_per_year }}"
+          years_left: "{{ pb_left_years }}"
+          paid_back_around: >
+            {% if pb_left_eur <= 0 %}paid back
+            {% elif pb_left_years is number %}{{ (now() + timedelta(days=(pb_left_years * 365) | int)).strftime('%m-%Y') }}
+            {% else %}{{ none }}{% endif %}
+          measured_days: "{{ pb_days }}"

@@ -6,7 +6,7 @@
 
 > **Dit is een fork van [Gielz1986/Zendure-HA-zenSDK](https://github.com/Gielz1986/Zendure-HA-zenSDK)** van Michiel Hofker (Gielz1986). Alle eer voor de integratie, de automation en het dashboard gaat naar het oorspronkelijke project. Deze fork voegt **één extra modus toe: Dynamisch NOM + Forecasting** (Engels: *Dynamic Smart Matching + Forecasting*). Voor al het andere (modussen, wiki, ondersteuning, updates) zie je de oorspronkelijke repository. De originele README staat onder deze sectie.
 
-**Versie:** `2026.10.2` · gebaseerd op Gielz-configuratie `v20261007` · beschikbaar in het Nederlands (NL) en Engels (Global) · [Changelog](CHANGELOG.nl.md)
+**Versie:** `2026.11.1` · gebaseerd op Gielz-configuratie `v20261007` · beschikbaar in het Nederlands (NL) en Engels (Global) · [Changelog](CHANGELOG.nl.md)
 
 Versies volgen `jaar.maand.volgnummer` (het volgnummer begint elke maand bij 1). In Home Assistant zie je de versie in gebruik en de nieuwste versie op GitHub (`sensor.forecasting_versie`, `sensor.forecasting_releasecheck`) op het tabblad Configuratie, en de releasenotes onder Releasenotes.
 
@@ -22,21 +22,24 @@ De accu laadt op de goedkoopste momenten, maar **alleen zoveel als nodig is**, r
 - **Gemiddeld dagverbruik** komt uit je eigen historie (import, export, productie, accu in/uit): vanaf ongeveer 2 uur na installatie al berekend en elke dag nauwkeuriger, tot 7 dagen. Geen invoerveld nodig.
 - **Net-import en -export uit de P1-meter:** de kWh-tellers van de meter worden automatisch herkend (SlimmeLezer/ESPHome DSMR: `energy_consumed/produced_tariff_1/2`, HomeWizard P1, DSMR-integratie) en gebruikt, net als in het energiedashboard. Zonder meter wordt het berekend uit het vermogen (methode left). Valt de meter even weg, dan wordt het gemiste stuk later bijgeteld.
 - **Rendementsfilter:** een laadslot moet goedkoper zijn dan de waarde van de opgeslagen energie na round-trip-verlies, en in scenario A onder het daggemiddelde. Het round-trip-rendement komt uit **RTE totaal** (alle kWh eruit / alle kWh erin), gelijk verdeeld over laden en ontladen. De 24-uurs momentmetingen van de efficiëntie vallen te laag uit (ongewogen, elke stop telt als 0%) en worden alleen gebruikt als RTE totaal nog niet bruikbaar is.
-- **Pad-check:** berekent wanneer de accu leeg raakt en wanneer er weer energie bijkomt: het eerste laadslot of het moment dat de zon het verbruik dekt (uit de Solcast-detailvoorspelling, anders zonsopkomst + 3 uur). Valt daar een gat, dan worden extra laadslots ervoor gepland, ook als er verder niets geladen hoeft te worden. Alleen de dure slots in het gat tellen mee: een laadslot moet vóór het dure slot liggen dat het vervangt, en na round-trip-verlies goedkoper zijn.
+- **Pad-check:** berekent wanneer de accu leeg raakt en kijkt van daar tot het moment dat de zon het verbruik dekt (uit de Solcast-detailvoorspelling, anders zonsopkomst + 3 uur) of tot het einde van de overbrugging, wat eerder is. Dure kwartieren in dat gat krijgen de goedkoopste laadslots ervóór, ook als er verder niets geladen hoeft te worden, en alleen als die na round-trip-verlies goedkoper zijn. Staat *niet ontladen in een goedkoop dal* aan, dan rekent de pad-check ermee dat de accu in die dalen niets levert.
 - **Verbruiksprofiel per uur**, apart voor werkdag en weekend: elk heel uur wordt je werkelijke huisverbruik gemeten en verwerkt in een voortschrijdend gemiddelde per uur van de dag (`sensor.forecast_verbruiksprofiel`). De planner gebruikt dat per kwartier voor de pad-check, het moment dat de accu leeg is, de zon-dekking en de overbrugging. Zolang een uur nog niet genoeg metingen heeft (werkdag 3, weekend 2), geldt het daggemiddelde. Feestdagen volgen `binary_sensor.workday_sensor` (Workday-integratie) als die bestaat.
 - **Gemeten laadvermogen** wordt gebruikt voor het aantal slots.
 - Optioneel: **niet ontladen in een goedkoop dal** (accu sparen).
-- **Plan Tijdlijn** op het dashboard: voor de komende 36 uur per prijsslot in vier compacte rijen de prijs (groen/oranje/rood, blauw = gepland laden), zon en huisverbruik, laden en ontladen van de accu met het verwachte laadpercentage, en net-import en -export. Alleen apexcharts-card nodig. Tip: sluit `sensor.zendure_forecast_grafiek` uit van de recorder (`recorder: exclude: entities:`), de attributen zijn groter dan de 16 kB-limiet van de recorder.
-- Dashboard: sectie Forecasting op tab Zendure (plan vandaag en morgen, tegels, verzamelde 7-daagse gegevens, herbereken-knop) en een blok Configuratie (Forecasting) met alle invoervelden. Beide zijn te tonen of te verbergen met **Forecasting Tonen Op Dashboard**.
+- **Laadblokken in gewone taal:** per blok wanneer, hoe lang, hoeveel kWh en tegen welke gemiddelde prijs, voor vandaag en (indicatief) voor morgen.
+- **Besparing** (nieuw, `packages/zendure_besparing.yaml`): elk kwartier wordt je verbruik verrekend tegen een vast en een dynamisch tarief, met en zonder zon en accu. Op een eigen tab zie je per dag, maand, jaar en totaal wat je bespaart en waardoor (zon, dynamisch tarief, accu en slim laden), plus de terugverdientijd van de accu. De tabellen worden mooier opgemaakt met [card-mod](https://github.com/thomasloven/lovelace-card-mod) (optioneel).
+- **Plan Tijdlijn** op het dashboard: voor de komende 36 uur per prijsslot in vier compacte rijen de prijs (kleuren zoals Gielz: groen = gepland laden, rood = duur), zon en huisverbruik, laden en ontladen van de accu met het verwachte laadpercentage, en net-import en -export. Alleen apexcharts-card nodig. Tip: sluit `sensor.zendure_forecast_grafiek` uit van de recorder (`recorder: exclude: entities:`), de attributen zijn groter dan de 16 kB-limiet van de recorder.
+- Dashboard: sectie Forecasting op tab Zendure (plan vandaag en morgen, verbruiksprofiel, verzamelde 7-daagse gegevens, herbereken-knop), een tab Besparing en een blok Configuratie (Forecasting) met alle invoervelden. Beide zijn te tonen of te verbergen met **Forecasting Tonen Op Dashboard**.
 
 ### Wat er veranderd is ten opzichte van het origineel
 
 | Bestand (NL / Global) | Wijziging |
 |---|---|
 | `packages/zendure_forecasting.yaml` / `packages/zendure_forecasting_global.yaml` | **Nieuw.** Helpers, tellers, 7-daagse statistieken, de planner en afgeleide sensoren. |
+| `packages/zendure_besparing.yaml` / `packages/zendure_savings_global.yaml` | **Nieuw.** Invoervelden voor tarieven en accuprijs, en de besparings- en terugverdientijdsensoren. |
 | `packages/zendure_gielz1986_nl.yaml` / `packages/zendure_gielz1986_global.yaml` | Alleen één extra optie in de modus-keuzelijst. |
 | `automation_nl.yaml` / `automation_global.yaml` | De nieuwe modus in de modus-keuze en in de 6 bestaande NOM-lijsten (nul-op-de-meter, SOC-bescherming, noodstop), een eigen laadblok dat alleen laadt als het plan *Laden* zegt, en een ontlaad-blokkade voor het goedkope dal. Bestaande modi zijn niet gewijzigd. |
-| `dashboard_nl.yaml` / `dashboard_global.yaml` | Nieuwe sectie Forecasting, nieuw blok Configuratie (Forecasting) en een schakelaar in Configuratie (Dashboard). |
+| `dashboard_nl.yaml` / `dashboard_global.yaml` | Nieuwe sectie Forecasting, nieuwe tab Besparing, nieuwe blokken Configuratie (Forecasting) en Configuratie (Besparing) en een schakelaar in Configuratie (Dashboard). |
 
 Elk gewijzigd bestand begint met een kop van twee regels met de versie, de Gielz-versie waarop hij is gebaseerd en de oorspronkelijke auteur.
 
@@ -44,13 +47,13 @@ Elk gewijzigd bestand begint met een kop van twee regels met de versie, de Gielz
 
 Installeer eerst de oorspronkelijke integratie zoals hieronder beschreven (packages-bestand, automation, dashboard). Daarna:
 
-1. Zet `zendure_forecasting.yaml` (NL) of `zendure_forecasting_global.yaml` (Global) in dezelfde `packages`-map als het Gielz-pakket, en vervang het Gielz-pakket door de versie uit deze fork.
+1. Zet `zendure_forecasting.yaml` en `zendure_besparing.yaml` (NL) of `zendure_forecasting_global.yaml` en `zendure_savings_global.yaml` (Global) in dezelfde `packages`-map als het Gielz-pakket, en vervang het Gielz-pakket door de versie uit deze fork.
 2. Vervang de automation en het dashboard door de versies uit deze fork (of voeg de wijzigingen samen met je eigen versie).
 3. Herstart Home Assistant.
-4. Vul in tab Configuratie bij **Configuratie (Forecasting)** in: de sensor voor zon resterend vandaag, zon morgen (kWh, bijv. Forecast.Solar of Solcast) en een totaalteller van je zonnepanelen (kWh). Zet eventueel de laadmarge.
+4. Vul in tab Configuratie bij **Configuratie (Forecasting)** in: de sensor voor zon resterend vandaag, zon morgen (kWh, bijv. Forecast.Solar of Solcast) en een totaalteller van je zonnepanelen (kWh). Zet eventueel de laadmarge. Vul bij **Configuratie (Besparing)** je tarieven en de aanschafprijs van de accu in.
 5. Kies de modus **Dynamisch NOM + Forecasting**.
 
-**Vereist:** het Gielz-pakket, Nord Pool (zoals al ingesteld in Gielz), een P1-meter, een zon-forecast integratie en apexcharts-card voor het Gielz-dashboard. De planner wordt na ongeveer een week historie nauwkeuriger.
+**Vereist:** het Gielz-pakket, Nord Pool (zoals al ingesteld in Gielz), een P1-meter, een zon-forecast integratie en apexcharts-card voor het Gielz-dashboard; card-mod is optioneel (opmaak van de tabellen op de tab Besparing). De planner wordt na ongeveer een week historie nauwkeuriger.
 
 > **Status:** persoonlijk project. De Nederlandse versie is in gebruik bij de auteur. De Engelse (Global) versie is een vertaling van de Nederlandse set: offline gecontroleerd (de planner geeft in 400 gesimuleerde situaties dezelfde uitkomst als de Nederlandse versie), maar nog niet in een echte Home Assistant gedraaid. Geen garantie: begin met een lage laadmarge en controleer het plan op het dashboard.
 

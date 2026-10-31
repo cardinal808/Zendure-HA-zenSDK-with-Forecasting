@@ -1,4 +1,4 @@
-# Zendure zenSDK (Gielz) + Forecasting 2026.10.2 | based on Gielz v20261007 | set: public (without HVAC)
+# Zendure zenSDK (Gielz) + Forecasting 2026.11.1 | based on Gielz v20261007 | set: public (without HVAC)
 # Based on Gielz1986/Zendure-HA-zenSDK (Michiel Hofker). See README.md for license and changes.
 views:
   - type: sections
@@ -52,7 +52,7 @@ views:
           - type: markdown
             content: >-
               <ha-alert alert-type="info">Help text</ha-alert>For explanations
-              of the different operation modes, see the wiki:  
+              of the different operation modes, see the wiki:
 
               [Operation Modes (GitHub
               Wiki)](https://github.com/Gielz1986/Zendure-HA-zenSDK/wiki/Global-%E2%80%90-Operation-modes)
@@ -1022,6 +1022,99 @@ views:
                   in_header: false
               - entity: sensor.zendure_energy_export
                 name: Export
+          - type: heading
+            icon: ''
+            heading: Usage Profile
+            heading_style: title
+            visibility:
+              - condition: state
+                entity: input_boolean.dashboard_setting_show_forecasting
+                state: 'on'
+          - type: custom:apexcharts-card
+            graph_span: 24h
+            span:
+              start: day
+            header:
+              show: true
+              title: ''
+            apex_config:
+              noData:
+                text: The profile is still being learned (one measurement every full hour).
+              chart:
+                height: 160px
+              plotOptions:
+                bar:
+                  columnWidth: 80%
+              legend:
+                show: true
+                floating: true
+                horizontalAlign: left
+                offsetY: 17
+              tooltip:
+                x:
+                  format: HH:00
+                  show: true
+                'y':
+                  formatter: |
+                    EVAL: (val) => val === null ? '-' : `${val.toFixed(2)} kWh`
+              grid:
+                show: true
+                borderColor: color-mix(in srgb, var(--divider-color) 50%, transparent)
+                strokeDashArray: 0
+                padding:
+                  top: -10
+              xaxis:
+                labels:
+                  show: true
+                  format: HH
+                  style:
+                    colors: grey
+                axisTicks:
+                  show: false
+              yaxis:
+                - decimalsInFloat: 1
+                  min: 0
+                  labels:
+                    style:
+                      colors: >-
+                        color-mix(in srgb, var(--primary-text-color) 75%,
+                        transparent)
+            series:
+              - entity: sensor.forecast_usage_profile
+                name: Workday
+                type: column
+                color: '#01a180'
+                show:
+                  in_header: false
+                data_generator: |
+                  const d = entity.attributes.workday || [];
+                  const base = new Date(); base.setHours(0, 0, 0, 0);
+                  return d.map((v, i) => [base.getTime() + i * 3600000, v]);
+              - entity: sensor.forecast_usage_profile
+                name: Weekend
+                type: column
+                color: '#a2a2a3'
+                show:
+                  in_header: false
+                data_generator: |
+                  const d = entity.attributes.weekend || [];
+                  const base = new Date(); base.setHours(0, 0, 0, 0);
+                  return d.map((v, i) => [base.getTime() + i * 3600000, v]);
+            visibility:
+              - condition: state
+                entity: input_boolean.dashboard_setting_show_forecasting
+                state: 'on'
+          - type: markdown
+            content: >-
+              <ha-alert alert-type="info">Help</ha-alert>Average usage per hour, learned from your own measurements. Becomes useful after about a week.
+            text_only: true
+            visibility:
+              - condition: state
+                entity: input_boolean.dashboard_setting_show_help
+                state: 'on'
+              - condition: state
+                entity: input_boolean.dashboard_setting_show_forecasting
+                state: 'on'
                 statistics:
                   period: month
                   type: change
@@ -1426,117 +1519,44 @@ views:
                 color: '#01a180'
                 text: Recalculate
           - type: markdown
-            content: >-
-              {% set p = 'sensor.zendure_forecast_plan' %} {% set a =
-              states[p].attributes %} {% if
-              states('input_select.zendure_operation_mode') !=
-              'Dynamic Smart Matching + Forecasting' %} <ha-alert alert-type="info">Mode
-              **Dynamic Smart Matching + Forecasting** is not active. The plan below
-              is a simulation.</ha-alert> {% endif %} {% if
-              a.solar_remaining_today_sensor_ok == false or
-              a.solar_tomorrow_sensor_ok == false %} <ha-alert
-              alert-type="warning">A solar forecast sensor is not filled in or
-              not available. That solar is counted as 0 kWh (more grid charging
-              will be planned).</ha-alert> {% endif %} **Status:** {{
-              states(p) }}  
+            content: |-
+              {% set p = 'sensor.zendure_forecast_plan' %}{% set a = states[p].attributes %}{% if states('input_select.zendure_operation_mode') != 'Dynamic Smart Matching + Forecasting' %}<ha-alert alert-type="info">Mode **Dynamic Smart Matching + Forecasting** is not active. The plan below is a simulation.</ha-alert>{% endif %}{% if a.solar_remaining_today_sensor_ok == false or a.solar_tomorrow_sensor_ok == false %}<ha-alert alert-type="warning">A solar forecast sensor is not filled in or not available. That solar is counted as 0 kWh (more grid charging will be planned).</ha-alert>{% endif %}
+              **Status:** {{ states(p) }}
 
               **Scenario:** {{ a.scenario }}
 
-
               **Plan:** {{ a.plan_explanation }}
-
 
               ### Today
 
-              - Battery now: **{{ a.battery_now_kwh }}** of {{
-              a.battery_max_kwh }} kWh usable
-
-              - Bridge until **{{ a.bridge_until }}** ({{
-              a.bridge_hours }} hours)
-
-              - Expected battery usage: **{{ a.expected_battery_usage_kwh }}
-              kWh**
-
-              - Expected solar to battery: **{{
-              a.expected_solar_to_battery_kwh }} kWh** (solar still expected:
-              {{ a.solar_remaining_today_kwh }} kWh, {{ a.self_consumption_pct }}%
-              used directly)
-
-              - Charge power in plan: {{ a.charge_power_used_kw }} kW{% if a.charge_power_measured_w %} (measured {{ (a.charge_power_measured_w / 1000) | round(2) }} kW){% endif %}, price now {{ a.price_now }}{% if a.in_dip %} (cheap dip){% endif %}
-
-              - **Still to charge from the grid: {{ a.grid_charge_today_kwh }} kWh**{% if
-              a.planned_slots | length > 0 %} in {% for s in a.planned_slots
-              %}{{ s.start }}-{{ s.end }} (€{{ '%.3f' | format(s.price) }}){{
-              ', ' if not loop.last }}{% endfor %}, estimated cost €{{ '%.2f'
-              | format(a.estimated_cost) }}{% elif a.grid_charge_today_kwh |
-              float(0) >= 0.3 %} (charging does not pay off now, see Plan){% endif %}
-
-              {% if a.pathcheck_gap_hours | float(0) > 0 %}{% set td = now().strftime('%Y-%m-%d') %}- Path check: battery empty around **{{ ('tomorrow ' if (a.pathcheck_battery_empty_at or '')[:10] != td else '') ~ (a.pathcheck_battery_empty_at or '')[11:] }}**, gap until **{{ ('tomorrow ' if (a.pathcheck_gap_end or '')[:10] != td else '') ~ (a.pathcheck_gap_end or '')[11:] }}** (solar covers usage from {{ ('tomorrow ' if (a.pathcheck_solar_covers_from or '')[:10] != td else '') ~ (a.pathcheck_solar_covers_from or '')[11:] }}, {{ a.pathcheck_solar_source }}). Gap {{ a.pathcheck_gap_hours }} hours, {{ a.pathcheck_shortfall_kwh }} kWh bought from the grid, of which {{ a.pathcheck_shortfall_expensive_slots_kwh }} kWh in expensive slots{% if a.pathcheck_gap_price | float(0) > 0 %} (average €{{ '%.3f' | format(a.pathcheck_gap_price | float(0)) }}){% endif %}{% if a.pathcheck_extra_slots | int(0) > 0 %}: {{ a.pathcheck_extra_slots }} extra charge slot(s) planned{% endif %}{% endif %}
-
+              - Battery now: **{{ a.battery_now_kwh }}** of {{ a.battery_max_kwh }} kWh usable
+              {% set td = now().strftime('%Y-%m-%d') %}- Today's plan runs until **{{ ('tomorrow ' if (a.bridge_until or '')[:10] != td else '') ~ (a.bridge_until or '')[11:] }}** ({{ a.bridge_hours }} hours), the start of tomorrow's cheap hours; after that it plans again with tomorrow's prices
+              {% set lb = a.charge_blocks | default([]) %}- Expected usage until end of bridge (after direct solar): **{{ '%.1f' | format(a.expected_battery_usage_kwh | float(0)) }} kWh**, covered by the battery{% if lb | length > 0 %} and the planned charging{% endif %}{% if a.pathcheck_dip_hold %} (outside the cheap dips){% endif %}, the rest directly from the grid
+              - Expected solar to battery: **{{ a.expected_solar_to_battery_kwh }} kWh** (solar still expected: {{ a.solar_remaining_today_kwh }} kWh, {{ a.self_consumption_pct }}% used directly)
+              - Price now: €{{ '%.3f' | format(a.price_now | float(0)) }}{% if a.in_dip %}, cheap dip{% if a.hold_discharge %}: the battery is being saved and the house buys directly from the grid, because that is cheaper than power from the battery{% endif %}{% endif %}
+              {% set lb = a.charge_blocks | default([]) %}- **Charge from the grid: {% if lb | length > 0 %}{{ '%.1f' | format(a.planned_grid_charge_kwh | float(0)) }} kWh planned at {{ a.charge_power_used_kw }} kW, estimated cost €{{ '%.2f' | format(a.estimated_cost) }}**{% else %}nothing planned**{% endif %}{% set rest = (a.grid_charge_today_kwh | float(0)) - (a.planned_grid_charge_kwh | float(0)) %}{% if rest >= 0.3 %} (energy balance {{ '%.1f' | format(a.grid_charge_today_kwh | float(0)) }} kWh; the rest is not stored, because buying directly from the grid is then cheaper after charge and discharge losses){% endif %}
+              {% if a.pathcheck_gap_hours | float(0) > 0 %}{% set td = now().strftime('%Y-%m-%d') %}- Path check: battery empty around **{{ ('tomorrow ' if (a.pathcheck_battery_empty_at or '')[:10] != td else '') ~ (a.pathcheck_battery_empty_at or '')[11:] }}**{% if a.pathcheck_dip_hold %} (the battery does not supply in cheap dips){% endif %}, checked until **{{ ('tomorrow ' if (a.pathcheck_gap_end or '')[:10] != td else '') ~ (a.pathcheck_gap_end or '')[11:] }}** {% if (a.pathcheck_solar_source or '') is search('no longer|None') %}(solar does not cover usage before the end of the bridge){% else %}(solar covers usage from {{ ('tomorrow ' if (a.pathcheck_solar_covers_from or '')[:10] != td else '') ~ (a.pathcheck_solar_covers_from or '')[11:] }}, {{ a.pathcheck_solar_source }}){% endif %}. {{ a.pathcheck_gap_hours }} hours, {{ a.pathcheck_shortfall_kwh }} kWh bought from the grid, of which {{ a.pathcheck_shortfall_expensive_slots_kwh }} kWh in expensive slots{% if a.pathcheck_gap_price | float(0) > 0 %} (average €{{ '%.3f' | format(a.pathcheck_gap_price | float(0)) }}){% endif %}{% if a.pathcheck_extra_slots | int(0) > 0 %}: {{ a.pathcheck_extra_slots }} charge slot(s) planned for it{% endif %}{% endif %}
+              {% for b in lb %}- Charge {{ b.day }} {{ b.start }}–{{ b.end }}: {{ b.minutes }} minutes, about {{ '%.1f' | format(b.kwh) }} kWh, average €{{ '%.3f' | format(b.price) }}
+              {% endfor %}
 
               ### Tomorrow
 
-              - Tomorrow's prices known: {{ 'yes' if a.tomorrow_prices_known else
-              "no (today's pattern assumed)" }}
-
-              - Cheapest charging moment starts at {{ a.tomorrow_cheapest_start
-              }}, price difference vs. today {{ a.spread_tomorrow_pct }}%
-
-              - Solar tomorrow: {{ a.solar_tomorrow_kwh }} kWh, used directly {{
-              a.tomorrow_solar_direct_kwh }} kWh
-
-              - Expected battery usage: {{ a.tomorrow_battery_usage_kwh }}
-              kWh, solar to battery {{ a.tomorrow_solar_to_battery_kwh }} kWh
-
-              - Estimated grid charge tomorrow: **{{ a.tomorrow_grid_charge_estimate_kwh }} kWh**{% if a.tomorrow_charge_moments | default([]) | length > 0 %} in {% for s in a.tomorrow_charge_moments %}{{ s.start }}-{{ s.end }} (€{{ '%.3f' | format(s.price) }}){{ ', ' if not loop.last }}{% endfor %}{% endif %}
+              - Tomorrow's prices known: {{ 'yes' if a.tomorrow_prices_known else "no (today's pattern assumed)" }}
+              - Cheapest hours tomorrow vs. today: {{ a.spread_tomorrow_pct }}% (decides scenario A or B)
+              - Solar tomorrow: {{ a.solar_tomorrow_kwh }} kWh, of which {{ a.tomorrow_solar_direct_kwh }} kWh used directly{% if a.tomorrow_solar_to_battery_kwh | float(0) > 0 %} and {{ a.tomorrow_solar_to_battery_kwh }} kWh to the battery{% endif %}
+              - Expected usage tomorrow (after direct solar): **{{ '%.1f' | format(a.tomorrow_battery_usage_kwh | float(0)) }} kWh**. About **{{ '%.1f' | format(a.tomorrow_from_battery_kwh | float(0)) }} kWh of it comes from the battery**, in the expensive quarter hours. The rest, {{ '%.1f' | format(a.tomorrow_direct_grid_kwh | float(0)) }} kWh, the house buys directly from the grid, because in those hours that is cheaper than storing it first
+              {% set mb = a.tomorrow_charge_moments | default([]) %}- Estimated grid charge tomorrow: **{% if mb | length > 0 %}{{ '%.1f' | format(a.tomorrow_grid_charge_estimate_kwh | float(0)) }} kWh**, for the expensive quarter hours (planned definitively after midnight){% else %}nothing**, charging is not expected to pay off{% endif %}
+              {% for b in mb %}- Charge tomorrow {{ b.start }}–{{ b.end }}: {{ b.minutes | default('-') }} minutes, about {{ '%.1f' | format(b.kwh | default(0)) }} kWh, average €{{ '%.3f' | format(b.price) }}
+              {% endfor %}
             text_only: true
-          - type: heading
-            icon: ''
-            heading: Forecast Settings
-            heading_style: title
-          - type: tile
-            entity: sensor.forecast_solar_remaining_today
-            name: Solar remaining today
-            vertical: false
-          - type: tile
-            entity: sensor.forecast_solar_tomorrow
-            name: Solar tomorrow
-            vertical: false
-          - type: tile
-            entity: sensor.forecast_solar_self_consumption
-            name: Solar self-consumption
-            vertical: false
-            state_content:
-              - state
-              - source
-          - type: tile
-            entity: sensor.forecast_charge_margin
-            name: Charge margin
-            vertical: false
-            state_content:
-              - state
-              - percentage
-          - type: tile
-            entity: sensor.forecast_average_usage_per_day
-            name: Average usage per day
-            vertical: false
-          - type: tile
-            entity: sensor.forecast_expected_battery_usage
-            name: Expected battery usage
-            vertical: false
-          - type: tile
-            entity: sensor.forecast_expected_solar_to_battery
-            name: Solar to battery
-            vertical: false
           - type: markdown
+            title: Collected data (last 7 days)
             content: >-
               {%- set a = states['sensor.zendure_forecast_plan'].attributes -%}
               {%- set prod = states('sensor.forecast_solar_production_7_days') | float(0) -%}
               {%- set exp_solar = states('sensor.forecast_grid_export_from_solar_7_days') | float(0) -%}
               {%- set charge_solar = states('sensor.forecast_zendure_charge_from_solar_7_days') | float(0) -%}
               {%- set direct = [prod - exp_solar - charge_solar, 0] | max -%}
-              ### Collected data (last 7 days)
-
               - History available: **{{ a.history_days }}** of 7 days
 
               - Solar production: **{{ prod | round(1) }} kWh**, of which used directly **{{ direct | round(1) }} kWh** ({{ ((direct / prod * 100) | round(1)) if prod > 0 else '-' }}%), to the battery **{{ charge_solar | round(1) }} kWh**, exported **{{ exp_solar | round(1) }} kWh**
@@ -1552,89 +1572,7 @@ views:
               - Efficiency: charging {{ a.efficiency_charge_pct }}%, discharging {{ a.efficiency_discharge_pct }}%, round trip {{ a.efficiency_round_trip_pct }}% ({{ a.efficiency_source }})
 
               - Usage per hour: **{{ a.usage_per_hour_source }}**, next 24 hours {{ a.usage_next_24h_kwh }} kWh. Profile learned: {{ states('sensor.forecast_usage_profile') }} of 48 hours (workday + weekend){% if state_attr('sensor.forecast_usage_profile', 'last_hour') %}, last measurement {{ state_attr('sensor.forecast_usage_profile', 'last_hour') }}: {{ state_attr('sensor.forecast_usage_profile', 'last_hour_kwh') }} kWh{% endif %}
-            text_only: true
-          - type: heading
-            icon: ''
-            heading: Usage Profile
-            heading_style: title
-          - type: custom:apexcharts-card
-            graph_span: 24h
-            span:
-              start: day
-            header:
-              show: true
-              title: ''
-            apex_config:
-              noData:
-                text: The profile is still being learned (one measurement every full hour).
-              chart:
-                height: 160px
-              plotOptions:
-                bar:
-                  columnWidth: 80%
-              legend:
-                show: true
-                floating: true
-                horizontalAlign: left
-                offsetY: 17
-              tooltip:
-                x:
-                  format: HH:00
-                  show: true
-                'y':
-                  formatter: |
-                    EVAL: (val) => val === null ? '-' : `${val.toFixed(2)} kWh`
-              grid:
-                show: true
-                borderColor: color-mix(in srgb, var(--divider-color) 50%, transparent)
-                strokeDashArray: 0
-                padding:
-                  top: -10
-              xaxis:
-                labels:
-                  show: true
-                  format: HH
-                  style:
-                    colors: grey
-                axisTicks:
-                  show: false
-              yaxis:
-                - decimalsInFloat: 1
-                  min: 0
-                  labels:
-                    style:
-                      colors: >-
-                        color-mix(in srgb, var(--primary-text-color) 75%,
-                        transparent)
-            series:
-              - entity: sensor.forecast_usage_profile
-                name: Workday
-                type: column
-                color: '#01a180'
-                show:
-                  in_header: false
-                data_generator: |
-                  const d = entity.attributes.workday || [];
-                  const base = new Date(); base.setHours(0, 0, 0, 0);
-                  return d.map((v, i) => [base.getTime() + i * 3600000, v]);
-              - entity: sensor.forecast_usage_profile
-                name: Weekend
-                type: column
-                color: '#a2a2a3'
-                show:
-                  in_header: false
-                data_generator: |
-                  const d = entity.attributes.weekend || [];
-                  const base = new Date(); base.setHours(0, 0, 0, 0);
-                  return d.map((v, i) => [base.getTime() + i * 3600000, v]);
-          - type: markdown
-            content: >-
-              <ha-alert alert-type="info">Help</ha-alert>Average usage per hour, learned from your own measurements. Becomes useful after about a week.
-            text_only: true
-            visibility:
-              - condition: state
-                entity: input_boolean.dashboard_setting_show_help
-                state: 'on'
+            text_only: false
         visibility:
           - condition: state
             entity: input_boolean.dashboard_setting_show_forecasting
@@ -1648,7 +1586,7 @@ views:
             heading_style: title
           - type: markdown
             content: >-
-              <ha-alert alert-type="info">Help</ha-alert>Forecast per price slot for the next 36 hours. Price: green cheap, orange mid, red expensive, blue = planned charging, grey = not known yet. Tomorrow's charging is indicative; the cheap-dip hold is not part of this forecast. Solar only with a Solcast detailed forecast.
+              <ha-alert alert-type="info">Help</ha-alert>Forecast per price slot for the next 36 hours. Price (colours as in Gielz): green = planned charging, red = expensive (Gielz's most expensive periods), grey = other, light grey = price not known yet. Tomorrow's charging is indicative; the cheap-dip hold is not part of this forecast. Solar only with a Solcast detailed forecast.
             text_only: true
             visibility:
               - condition: state
@@ -1742,13 +1680,21 @@ views:
                     data_generator: |
                       const d = entity.attributes.timeline;
                       if (!d || !d.t) return [];
-                      const s = [...d.price].sort((a, b) => a - b);
-                      const lo = s[Math.floor(s.length / 3)], hi = s[Math.floor(s.length * 2 / 3)];
+                      // Colours as in Gielz (Dynamic Today/Tomorrow): green = charging (here: planned
+                      // by the planner), red = expensive (Gielz's most expensive periods), grey = other.
+                      // Light grey = price not known yet (today's pattern assumed).
+                      const g = hass.states['sensor.dynamic_lowest_price_period'];
+                      const exp = new Set();
+                      if (g) {
+                        [...(g.attributes.raw_today || []), ...(g.attributes.raw_tomorrow || [])]
+                          .forEach((p) => { if (p.duur === 'Yes') exp.add(new Date(p.start).getTime()); });
+                      }
                       return d.t.map((t, i) => {
                         const v = d.price[i];
-                        let c = v <= lo ? '#01a180' : (v >= hi ? '#c53b2c' : '#e0a030');
-                        if (!d.known[i]) c = 'rgba(162,162,163,0.6)';
-                        if (d.charge[i]) c = '#2e7dd7';
+                        let c = 'rgba(162,162,163,1)';
+                        if (exp.has(t * 1000)) c = 'rgba(197,59,44,1)';
+                        if (!d.known[i]) c = 'rgba(162,162,163,0.4)';
+                        if (d.charge[i]) c = 'rgba(1,161,128,1)';
                         return { x: t * 1000, y: v, fillColor: c };
                       });
               - type: custom:apexcharts-card
@@ -2063,6 +2009,326 @@ views:
     cards: []
     icon: mdi:battery
     dense_section_placement: false
+  - type: sections
+    max_columns: 3
+    title: Savings
+    path: savings
+    icon: mdi:currency-eur
+    sections:
+      - type: grid
+        column_span: 3
+        cards:
+          - type: heading
+            icon: ''
+            heading: Savings
+            heading_style: title
+          - type: grid
+            columns: 4
+            square: false
+            cards:
+              - type: tile
+                entity: sensor.zendure_savings_today
+                name: Today
+                icon: mdi:calendar-today
+                color: green
+                vertical: false
+              - type: tile
+                entity: sensor.zendure_savings_this_month
+                name: This month
+                icon: mdi:calendar-month
+                color: green
+                vertical: false
+              - type: tile
+                entity: sensor.zendure_savings_this_year
+                name: This year
+                icon: mdi:calendar-blank-multiple
+                color: green
+                vertical: false
+              - type: tile
+                entity: sensor.zendure_savings
+                name: Total
+                icon: mdi:piggy-bank-outline
+                color: green
+                vertical: false
+            grid_options:
+              columns: full
+          - type: markdown
+            content: >-
+              <ha-alert alert-type="info">Help text</ha-alert>Every quarter
+              hour your usage is settled at the fixed tariff and at the
+              dynamic price of that moment, with and without solar and battery.
+              Export counts at the (lower) feed-in price. **Saved** is the
+              difference between a fixed contract without solar and battery
+              and what you pay with solar, battery and a dynamic contract.
+              Fixed costs (standing charges, grid fees, tax credits) are not
+              included; they are the same in every situation.
+            text_only: true
+            visibility:
+              - condition: state
+                entity: input_boolean.dashboard_setting_show_help
+                state: 'on'
+            grid_options:
+              columns: full
+      - type: grid
+        cards:
+          - type: markdown
+            title: Overview
+            text_only: false
+            content: |
+              {%- set e = state_attr('sensor.zendure_savings', 'buckets') or {} -%}
+              {%- set P = [('day', 'Today'), ('month', 'Month'), ('year', 'Year'), ('total', 'Total')] -%}
+              {%- macro eur(x) -%}{%- set x = x | float(0) | round(2) -%}{{ ('-' if x < 0 else '') ~ '€ ' ~ ('%.2f' | format(x | abs)) }}{%- endmacro -%}
+              {%- macro colour(x) -%}{%- set x = x | float(0) | round(2) -%}{% if x > 0 %}<font color="#01a180">{{ eur(x) }}</font>{% elif x < 0 %}<font color="#c53b2c">{{ eur(x) }}</font>{% else %}{{ eur(x) }}{% endif %}{%- endmacro -%}
+              {%- macro kwh(x) -%}{{ '%.1f' | format(x | float(0)) }}{%- endmacro -%}
+              {%- macro w(b, k) -%}{{ ((e.get(b) or {}).get(k, 0)) | float(0) }}{%- endmacro -%}
+              {% if states('input_number.savings_setting_fixed_supply_price') | float(0) <= 0 %}
+              <ha-alert alert-type="warning">Enter the fixed tariff under Settings, Configuration (Savings).</ha-alert>
+              {% endif %}
+              | | {% for k, n in P %}{{ n }} | {% endfor %}
+              |:---|{% for k, n in P %}---:|{% endfor %}
+              | **Saved** | {% for k, n in P %}**{{ colour(w(k, 'none_fixed') | float - w(k, 'now_dyn') | float) }}** | {% endfor %}
+              | <ha-icon icon="mdi:solar-power-variant"></ha-icon>by solar | {% for k, n in P %}{{ colour(w(k, 'none_fixed') | float - w(k, 'solar_fixed') | float) }} | {% endfor %}
+              | <ha-icon icon="mdi:chart-bell-curve-cumulative"></ha-icon>by dynamic tariff | {% for k, n in P %}{{ colour(w(k, 'solar_fixed') | float - w(k, 'solar_dyn') | float) }} | {% endfor %}
+              | <ha-icon icon="mdi:battery-charging"></ha-icon>by battery and smart charging | {% for k, n in P %}{{ colour(w(k, 'solar_dyn') | float - w(k, 'now_dyn') | float) }} | {% endfor %}
+              | <ha-icon icon="mdi:cash-remove"></ha-icon>Fixed contract, no solar or battery | {% for k, n in P %}{{ eur(w(k, 'none_fixed')) }} | {% endfor %}
+              | <ha-icon icon="mdi:cash-check"></ha-icon>Actually paid | {% for k, n in P %}{{ eur(w(k, 'now_dyn')) }} | {% endfor %}
+
+              | Energy (kWh) | {% for k, n in P %}{{ n }} | {% endfor %}
+              |:---|{% for k, n in P %}---:|{% endfor %}
+              | <ha-icon icon="mdi:home-lightning-bolt-outline"></ha-icon>Usage | {% for k, n in P %}{{ kwh(w(k, 'usage')) }} | {% endfor %}
+              | <ha-icon icon="mdi:solar-power"></ha-icon>Solar | {% for k, n in P %}{{ kwh(w(k, 'solar')) }} | {% endfor %}
+              | <ha-icon icon="mdi:transmission-tower-import"></ha-icon>Import | {% for k, n in P %}{{ kwh(w(k, 'imp')) }} | {% endfor %}
+              | <ha-icon icon="mdi:transmission-tower-export"></ha-icon>Export | {% for k, n in P %}{{ kwh(w(k, 'exp')) }} | {% endfor %}
+
+              <small>Total since {{ (e.get('total') or {}).get('start', '-') }}{% if e.get('yesterday') %} · saved yesterday {{ eur(w('yesterday', 'none_fixed') | float - w('yesterday', 'now_dyn') | float) }}{% endif %}</small>
+            grid_options:
+              columns: full
+            card_mod:
+              style:
+                ha-markdown$: |
+                  table { width: 100%; border-collapse: collapse; table-layout: fixed; margin: 2px 0 6px; }
+                  th, td { border: none !important; padding: 6px 6px !important; }
+                  th { font-size: 0.72em; font-weight: 500; text-transform: uppercase; letter-spacing: .02em; color: var(--secondary-text-color); border-bottom: 1px solid var(--divider-color) !important; }
+                  td { border-bottom: 1px solid color-mix(in srgb, var(--divider-color) 45%, transparent) !important; }
+                  tr:last-child td { border-bottom: none !important; }
+                  th:not(:first-child), td:not(:first-child) { text-align: right !important; white-space: nowrap; font-variant-numeric: tabular-nums; }
+                  th:first-child, td:first-child { width: 42%; }
+                  ha-icon { --mdc-icon-size: 18px; color: var(--secondary-text-color); margin-right: 6px; vertical-align: -3px; }
+                  small { color: var(--secondary-text-color); }
+          - type: markdown
+            title: Cost per situation
+            text_only: false
+            content: |
+              {%- set e = state_attr('sensor.zendure_savings', 'buckets') or {} -%}
+              {%- set P = [('month', 'Month'), ('year', 'Year'), ('total', 'Total')] -%}
+              {%- macro eur(x) -%}{%- set x = x | float(0) | round(2) -%}{{ ('-' if x < 0 else '') ~ '€ ' ~ ('%.2f' | format(x | abs)) }}{%- endmacro -%}
+              {%- macro w(b, k) -%}{{ ((e.get(b) or {}).get(k, 0)) | float(0) }}{%- endmacro -%}
+              {%- set S = [('none_fixed', 'mdi:home-outline', 'No solar, no battery', 'fixed'), ('none_dyn', 'mdi:home-outline', 'No solar, no battery', 'dynamic'), ('solar_fixed', 'mdi:solar-power-variant', 'Solar only', 'fixed'), ('solar_dyn', 'mdi:solar-power-variant', 'Solar only', 'dynamic'), ('now_fixed', 'mdi:home-battery', 'Solar + battery', 'fixed'), ('now_dyn', 'mdi:home-battery', 'Solar + battery', 'dynamic')] -%}
+              | What would you have paid? | {% for k, n in P %}{{ n }} | {% endfor %}
+              |:---|{% for k, n in P %}---:|{% endfor %}
+              {% for key, icon, label, contract in S %}| <ha-icon icon="{{ icon }}"></ha-icon>{% if key == 'now_dyn' %}**{{ label }}, {{ contract }}** <small>(your situation)</small>{% else %}{{ label }}, {{ contract }}{% endif %} | {% for k, n in P %}{% if key == 'now_dyn' %}**<font color="#01a180">{{ eur(w(k, key)) }}</font>**{% else %}{{ eur(w(k, key)) }}{% endif %} | {% endfor %}
+              {% endfor %}
+            grid_options:
+              columns: full
+            card_mod:
+              style:
+                ha-markdown$: |
+                  table { width: 100%; border-collapse: collapse; table-layout: fixed; margin: 2px 0 6px; }
+                  th, td { border: none !important; padding: 6px 6px !important; }
+                  th { font-size: 0.72em; font-weight: 500; text-transform: uppercase; letter-spacing: .02em; color: var(--secondary-text-color); border-bottom: 1px solid var(--divider-color) !important; }
+                  td { border-bottom: 1px solid color-mix(in srgb, var(--divider-color) 45%, transparent) !important; }
+                  tr:last-child td { border-bottom: none !important; }
+                  th:not(:first-child), td:not(:first-child) { text-align: right !important; white-space: nowrap; font-variant-numeric: tabular-nums; }
+                  th:first-child, td:first-child { width: 55%; }
+                  ha-icon { --mdc-icon-size: 18px; color: var(--secondary-text-color); margin-right: 6px; vertical-align: -3px; }
+                  small { color: var(--secondary-text-color); }
+      - type: grid
+        cards:
+          - type: heading
+            icon: ''
+            heading: Savings per day
+            heading_style: title
+          - type: custom:apexcharts-card
+            graph_span: 30d
+            span:
+              end: day
+            cache: false
+            header:
+              show: false
+            apex_config:
+              chart:
+                height: 160px
+              legend:
+                show: false
+              plotOptions:
+                bar:
+                  columnWidth: 80%
+              tooltip:
+                x:
+                  format: d/MM
+                  show: true
+                'y':
+                  formatter: |
+                    EVAL: (val) => val === null ? '-' : `€ ${val.toFixed(2)}`
+              grid:
+                show: true
+                borderColor: color-mix(in srgb, var(--divider-color) 50%, transparent)
+                strokeDashArray: 0
+                padding:
+                  top: -10
+              xaxis:
+                labels:
+                  show: false
+                axisTicks:
+                  show: false
+                axisBorder:
+                  color: color-mix(in srgb, var(--divider-color) 50%, transparent)
+              yaxis:
+                - decimalsInFloat: 2
+                  labels:
+                    style:
+                      colors: >-
+                        color-mix(in srgb, var(--primary-text-color) 75%,
+                        transparent)
+            series:
+              - entity: sensor.zendure_savings
+                name: Saved
+                type: column
+                color: '#01a180'
+                float_precision: 2
+                statistics:
+                  type: change
+                  period: day
+                  align: start
+                show:
+                  in_header: false
+            grid_options:
+              columns: full
+          - type: heading
+            icon: ''
+            heading: Savings per month
+            heading_style: title
+          - type: custom:apexcharts-card
+            graph_span: 12month
+            span:
+              start: month
+              offset: -11month
+            cache: false
+            header:
+              show: false
+            apex_config:
+              chart:
+                height: 160px
+              legend:
+                show: false
+              tooltip:
+                x:
+                  format: MM-yyyy
+                  show: true
+                'y':
+                  formatter: |
+                    EVAL: (val) => val === null ? '-' : `€ ${val.toFixed(2)}`
+              grid:
+                show: true
+                borderColor: color-mix(in srgb, var(--divider-color) 50%, transparent)
+                strokeDashArray: 0
+                padding:
+                  top: -10
+              xaxis:
+                labels:
+                  show: false
+                axisTicks:
+                  show: false
+                axisBorder:
+                  color: color-mix(in srgb, var(--divider-color) 50%, transparent)
+              yaxis:
+                - decimalsInFloat: 0
+                  labels:
+                    style:
+                      colors: >-
+                        color-mix(in srgb, var(--primary-text-color) 75%,
+                        transparent)
+            series:
+              - entity: sensor.zendure_savings
+                name: Saved
+                type: column
+                color: '#01a180'
+                float_precision: 2
+                statistics:
+                  type: change
+                  period: month
+                  align: start
+                show:
+                  in_header: false
+            grid_options:
+              columns: full
+          - type: markdown
+            content: >-
+              <ha-alert alert-type="info">Help text</ha-alert>The charts come from
+              the statistics (LTS) of the total savings and therefore run about
+              an hour behind on average. After "Restart total" that day shows a
+              negative value.
+            text_only: true
+            visibility:
+              - condition: state
+                entity: input_boolean.dashboard_setting_show_help
+                state: 'on'
+            grid_options:
+              columns: full
+      - type: grid
+        cards:
+          - type: tile
+            entity: sensor.zendure_battery_payback_time
+            name: Battery payback time
+            icon: mdi:cash-clock
+            color: green
+            vertical: false
+            grid_options:
+              columns: full
+          - type: markdown
+            title: Payback
+            text_only: false
+            content: |
+              {%- set s = 'sensor.zendure_battery_payback_time' -%}
+              {%- set price = states('input_number.savings_setting_battery_purchase_price') | float(0) -%}
+              {%- macro eur(x, d=2) -%}{%- set x = x | float(0) -%}{{ ('-' if x < 0 else '') ~ '€ ' ~ (('%.' ~ d ~ 'f') | format(x | abs)) }}{%- endmacro -%}
+              {%- set earned = state_attr(s, 'earned') | float(0) -%}
+              {%- set pct = [[state_attr(s, 'earned_pct') | float(0), 0] | max, 100] | min -%}
+              {%- set n = (pct / 5) | round(0) | int -%}
+              {% if price <= 0 -%}
+              Enter the purchase price of the battery under Settings, Configuration (Savings).
+              {%- else -%}
+              {% if has_value(s) %}**{{ states(s) }} years** in total{% if state_attr(s, 'still_to_go') | float(0) > 0 %}, **{{ state_attr(s, 'years_left') }} years** to go (around {{ state_attr(s, 'paid_back_around') }}){% else %}, **paid back**{% endif %}{% else %}Not enough data yet: the first estimate follows after a full day of measuring.{% endif %}
+
+              <font color="#01a180">{{ '█' * n }}</font><font color="#5a5a5c">{{ '█' * (20 - n) }}</font> {{ pct | round(1) }}%
+
+              | | |
+              |:---|---:|
+              | <ha-icon icon="mdi:cash"></ha-icon>Purchase price | {{ eur(price, 0) }} |
+              | <ha-icon icon="mdi:cash-check"></ha-icon>Earned back | {% if earned < 0 %}<font color="#c53b2c">{{ eur(earned) }}</font>{% else %}<font color="#01a180">{{ eur(earned) }}</font>{% endif %} |
+              | <ha-icon icon="mdi:cash-clock"></ha-icon>Still to go | {{ eur(state_attr(s, 'still_to_go') if state_attr(s, 'still_to_go') is not none else price - earned) }} |
+              {% if has_value(s) %}| <ha-icon icon="mdi:calendar-sync"></ha-icon>Savings by the battery per year | {{ eur(state_attr(s, 'savings_per_year'), 0) }} |
+              {% endif %}
+              {% if (state_attr(s, 'measured_days') | float(0)) < 365 %}
+              <small>Indication based on {{ state_attr(s, 'measured_days') | float(0) | round(0) | int }} day(s) of measuring. Summer and winter differ a lot (less solar in winter, but often a larger price spread); after a year of measuring the estimate is most reliable. Tariffs and battery price: Settings tab, block Configuration (Savings).</small>
+              {%- endif %}
+              {%- endif %}
+            grid_options:
+              columns: full
+            card_mod:
+              style:
+                ha-markdown$: |
+                  table { width: 100%; border-collapse: collapse; table-layout: fixed; margin: 2px 0 6px; }
+                  th, td { border: none !important; padding: 6px 6px !important; }
+                  th { font-size: 0.72em; font-weight: 500; text-transform: uppercase; letter-spacing: .02em; color: var(--secondary-text-color); border-bottom: 1px solid var(--divider-color) !important; }
+                  td { border-bottom: 1px solid color-mix(in srgb, var(--divider-color) 45%, transparent) !important; }
+                  tr:last-child td { border-bottom: none !important; }
+                  th:not(:first-child), td:not(:first-child) { text-align: right !important; white-space: nowrap; font-variant-numeric: tabular-nums; }
+                  th:first-child, td:first-child { width: 60%; }
+                  ha-icon { --mdc-icon-size: 18px; color: var(--secondary-text-color); margin-right: 6px; vertical-align: -3px; }
+                  small { color: var(--secondary-text-color); }
+                  thead { display: none; }
+    cards: []
   - type: sections
     max_columns: 4
     icon: mdi:battery-heart-variant
@@ -3626,6 +3892,64 @@ views:
                 name: Solar forecast reliability % (0 = 100%)
               - entity: input_boolean.forecast_setting_hold_discharge_in_dip
                 name: Hold discharge in cheap dip (save the battery)
+            visibility:
+              - condition: state
+                entity: input_boolean.dashboard_setting_show_forecasting
+                state: 'on'
+          - type: heading
+            icon: ''
+            heading: Configuration (Savings)
+            heading_style: title
+            visibility:
+              - condition: state
+                entity: input_boolean.dashboard_setting_show_forecasting
+                state: 'on'
+          - type: markdown
+            content: >-
+              <ha-alert alert-type="info">Help text</ha-alert>Enter the
+              all-in prices per kWh (including energy tax and VAT).
+              **Fixed supply tariff** and **feed-in** come from your fixed or
+              variable contract; with full net metering the feed-in price
+              equals the supply price. For dynamic, the price from the Nordpool
+              sensor is used plus the **markup**: if your sensor is already
+              all-in, leave the supply markup at 0. Dynamic feed-in = market
+              price + **bonus %** of the market price (only when it is
+              positive) + **feed-in markup** per kWh. If the supplier deducts
+              something, make the markup negative. The button only restarts
+              the total.
+
+
+              **Battery purchase price**: what the battery (with inverter and
+              installation) cost. **Battery already earned back**: what the
+              battery earned before this measurement started (optional). The
+              payback time uses the savings by battery and smart charging with
+              a dynamic contract.
+            text_only: true
+            visibility:
+              - condition: state
+                entity: input_boolean.dashboard_setting_show_help
+                state: 'on'
+              - condition: state
+                entity: input_boolean.dashboard_setting_show_forecasting
+                state: 'on'
+          - type: entities
+            entities:
+              - entity: input_number.savings_setting_fixed_supply_price
+                name: Fixed supply tariff
+              - entity: input_number.savings_setting_fixed_feedin_price
+                name: Fixed feed-in tariff
+              - entity: input_number.savings_setting_dynamic_supply_markup
+                name: Dynamic supply markup
+              - entity: input_number.savings_setting_dynamic_feedin_markup
+                name: Dynamic feed-in markup
+              - entity: input_number.savings_setting_dynamic_feedin_bonus
+                name: Dynamic feed-in bonus % (of market price)
+              - entity: input_number.savings_setting_battery_purchase_price
+                name: Battery purchase price
+              - entity: input_number.savings_setting_battery_already_earned
+                name: Battery already earned back (before measuring)
+              - entity: input_button.savings_total_reset
+                name: Restart total
             visibility:
               - condition: state
                 entity: input_boolean.dashboard_setting_show_forecasting
