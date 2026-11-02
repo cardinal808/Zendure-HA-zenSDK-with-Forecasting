@@ -844,8 +844,14 @@ template:
           {%- set prof = prof_wd if wd else prof_we -%}
           {%- set pn = prof_n_wd if wd else prof_n_we -%}
           {%- set nmin = 3 if wd else 2 -%}
-          {%- set ok = prof | length == 24 and pn | length == 24 and prof[h] is not none and (pn[h] | int(0)) >= nmin -%}
-          {%- set ns.l = ns.l + [{'s': st, 'kw': ((prof[h] | float(l_hour)) if ok else l_hour) | round(4), 'p': ok}] -%}
+          {%- set has = prof | length == 24 and pn | length == 24 and prof[h] is not none -%}
+          {%- set n = (pn[h] | int(0)) if has else 0 -%}
+          {%- set ok = has and n >= nmin -%}
+          {#- Not enough measurements yet: blend the measurements there are with the day average
+              (1 of 2 measurements = half profile, half day average). That way a clear evening
+              peak already counts while the profile is still learning. -#}
+          {%- set kw = (prof[h] | float(l_hour)) if ok else (((n * (prof[h] | float(l_hour)) + (nmin - n) * l_hour) / nmin) if has and n > 0 else l_hour) -%}
+          {%- set ns.l = ns.l + [{'s': st, 'kw': kw | round(4), 'p': ok}] -%}
         {%- endfor -%}
         {{ ns.l }}
       hour_load_end_ts: "{{ (now_ts // 3600) * 3600 + 52 * 3600 }}"
@@ -1090,8 +1096,29 @@ template:
           {%- endif -%}
         {%- endfor -%}
         {{ ns.t if ns.t > 0 else (ns.end + (ns.e / l_hour * 3600 if l_hour > 0 else 172800)) }}
+      # The charge margin applies here too: the battery counts as empty when only the margin is left,
+      # so an underestimated usage does not immediately leave an expensive peak without battery.
+      # (t_empty_ts above is the expectation without margin, for the dashboard.)
+      t_empty_plan_ts: >
+        {%- set ns = namespace(e=([s_now - margin_dc, 0] | max) * eff_out, t=0, end=now_ts) -%}
+        {%- for x in (cand + tmrw) | sort(attribute='s') -%}
+          {%- if ns.t == 0 and x.e > now_ts -%}
+            {%- set a = [x.s, now_ts] | max -%}
+            {%- set ns.end = x.e -%}
+            {%- set is_tmrw = x.s >= end_today_ts -%}
+            {%- set dip = dip_hold_plan and ((x.v <= dip_threshold_tomorrow and x.v < p_tmrw_avg) if is_tmrw else (x.v <= dip_threshold and x.v < p_day_avg)) -%}
+            {%- if not dip -%}
+              {%- set uu = hour_load | selectattr('s', 'le', a) | list -%}
+              {%- set kw = (uu | last).kw if uu | length > 0 else l_hour -%}
+              {%- set need = kw * (x.e - a) / 3600 -%}
+              {%- if need >= ns.e and kw > 0 -%}{%- set ns.t = a + ns.e / kw * 3600 -%}
+              {%- else -%}{%- set ns.e = ns.e - need -%}{%- endif -%}
+            {%- endif -%}
+          {%- endif -%}
+        {%- endfor -%}
+        {{ ns.t if ns.t > 0 else (ns.end + (ns.e / l_hour * 3600 if l_hour > 0 else 172800)) }}
       t_gap_end_ts: "{{ [t_cover_ts, t_end_ts] | min }}"
-      t_gap_start_ts: "{{ [t_empty_ts, now_ts] | max }}"
+      t_gap_start_ts: "{{ [t_empty_plan_ts, now_ts] | max }}"
       gap_hours: "{{ ([t_gap_end_ts - t_gap_start_ts, 0] | max / 3600) | round(2) }}"
       gap_load: >
         {%- set ns = namespace(k=0) -%}

@@ -844,8 +844,14 @@ template:
           {%- set prof = prof_wd if wd else prof_we -%}
           {%- set pn = prof_n_wd if wd else prof_n_we -%}
           {%- set nmin = 3 if wd else 2 -%}
-          {%- set ok = prof | length == 24 and pn | length == 24 and prof[h] is not none and (pn[h] | int(0)) >= nmin -%}
-          {%- set ns.l = ns.l + [{'s': st, 'kw': ((prof[h] | float(l_uur)) if ok else l_uur) | round(4), 'p': ok}] -%}
+          {%- set heeft = prof | length == 24 and pn | length == 24 and prof[h] is not none -%}
+          {%- set n = (pn[h] | int(0)) if heeft else 0 -%}
+          {%- set ok = heeft and n >= nmin -%}
+          {#- Nog niet genoeg metingen: meng de metingen die er zijn met het daggemiddelde
+              (1 van 2 metingen = half profiel, half daggemiddelde). Zo telt een duidelijke
+              avondpiek al mee terwijl het profiel nog leert. -#}
+          {%- set kw = (prof[h] | float(l_uur)) if ok else (((n * (prof[h] | float(l_uur)) + (nmin - n) * l_uur) / nmin) if heeft and n > 0 else l_uur) -%}
+          {%- set ns.l = ns.l + [{'s': st, 'kw': kw | round(4), 'p': ok}] -%}
         {%- endfor -%}
         {{ ns.l }}
       uur_last_eind_ts: "{{ (nu_ts // 3600) * 3600 + 52 * 3600 }}"
@@ -1090,8 +1096,29 @@ template:
           {%- endif -%}
         {%- endfor -%}
         {{ ns.t if ns.t > 0 else (ns.eind + (ns.e / l_uur * 3600 if l_uur > 0 else 172800)) }}
+      # De laadmarge geldt ook hier: de accu wordt als leeg gerekend als alleen de marge nog over is,
+      # zodat een te lage verbruiksschatting niet meteen een dure piek zonder accu geeft.
+      # (t_leeg_ts hierboven is de verwachting zonder marge, voor het dashboard.)
+      t_leeg_plan_ts: >
+        {%- set ns = namespace(e=([s_nu - marge_dc, 0] | max) * eff_out, t=0, eind=nu_ts) -%}
+        {%- for x in (kand + morg) | sort(attribute='s') -%}
+          {%- if ns.t == 0 and x.e > nu_ts -%}
+            {%- set a = [x.s, nu_ts] | max -%}
+            {%- set ns.eind = x.e -%}
+            {%- set is_morgen = x.s >= eind_vandaag_ts -%}
+            {%- set dal = dal_blokkade_plan and ((x.v <= dal_drempel_morgen and x.v < p_morg_gem) if is_morgen else (x.v <= dal_drempel and x.v < p_dag_gem)) -%}
+            {%- if not dal -%}
+              {%- set uu = uur_last | selectattr('s', 'le', a) | list -%}
+              {%- set kw = (uu | last).kw if uu | length > 0 else l_uur -%}
+              {%- set nodig = kw * (x.e - a) / 3600 -%}
+              {%- if nodig >= ns.e and kw > 0 -%}{%- set ns.t = a + ns.e / kw * 3600 -%}
+              {%- else -%}{%- set ns.e = ns.e - nodig -%}{%- endif -%}
+            {%- endif -%}
+          {%- endif -%}
+        {%- endfor -%}
+        {{ ns.t if ns.t > 0 else (ns.eind + (ns.e / l_uur * 3600 if l_uur > 0 else 172800)) }}
       t_gap_eind_ts: "{{ [t_zon_dek_ts, t_end_ts] | min }}"
-      t_gap_start_ts: "{{ [t_leeg_ts, nu_ts] | max }}"
+      t_gap_start_ts: "{{ [t_leeg_plan_ts, nu_ts] | max }}"
       gap_uren: "{{ ([t_gap_eind_ts - t_gap_start_ts, 0] | max / 3600) | round(2) }}"
       gap_last: >
         {%- set ns = namespace(k=0) -%}
