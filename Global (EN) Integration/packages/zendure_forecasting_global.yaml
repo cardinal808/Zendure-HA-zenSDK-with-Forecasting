@@ -1175,12 +1175,22 @@ template:
       # slots that end before that expensive slot. A charge slot after the peak does not help the peak.
       # A charge slot delivers at most e_slot kWh (AC) and can serve several expensive slots.
       # Capped by the room in the battery.
+      # Charge margin with an (almost) empty battery: the margin is subtracted from the battery
+      # content above, but if the battery holds less than the margin, the shortfall counts as extra
+      # usage in the first expensive quarter, so the buffer is charged before the expensive
+      # quarters (when that pays off).
+      margin_shortfall_ac: "{{ (([margin_dc - s_now, 0] | max) * eff_out) | round(3) }}"
+      gap_with_margin: >
+        {%- set first = gap_valuable | sort(attribute='s') | first if gap_valuable | length > 0 else none -%}
+        {%- if first is not none and margin_shortfall_ac > 0 -%}
+          {{ gap_valuable + [{'s': first.s, 'v': first.v, 'kwh': margin_shortfall_ac}] }}
+        {%- else -%}{{ gap_valuable }}{%- endif -%}
       path_allocation: >
         {%- set ns = namespace(l=[], total=0) -%}
         {%- set max_ac = (room / eff_in) if eff_in > 0 else 0 -%}
         {%- if path_active and e_slot > 0 and eff_rt > 0 -%}
           {%- set charge_cand = path_cand | sort(attribute='v') -%}
-          {%- for q in gap_valuable | sort(attribute='v', reverse=true) -%}
+          {%- for q in gap_with_margin | sort(attribute='v', reverse=true) -%}
             {%- set nq = namespace(need=q.kwh / eff_rt) -%}
             {%- for x in charge_cand -%}
               {%- if nq.need > 0.001 and ns.total < max_ac and x.e <= q.s and x.e > now_ts -%}

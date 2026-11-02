@@ -1175,12 +1175,21 @@ template:
       # die vóór dat dure slot eindigen. Een laadslot dat pas na de piek valt, helpt de piek niet.
       # Een laadslot levert maximaal e_slot kWh (AC) en kan meerdere dure slots bedienen.
       # Begrensd op de ruimte in de accu.
+      # Laadmarge bij een (bijna) lege accu: de marge wordt hierboven van de accu-inhoud afgetrokken,
+      # maar is de accu leeger dan de marge, dan telt het tekort als extra verbruik in het eerste
+      # dure kwartier, zodat de buffer vóór de dure kwartieren wordt bijgeladen (als dat loont).
+      marge_tekort_ac: "{{ (([marge_dc - s_nu, 0] | max) * eff_out) | round(3) }}"
+      gap_met_marge: >
+        {%- set eerste = gap_waardevol | sort(attribute='s') | first if gap_waardevol | length > 0 else none -%}
+        {%- if eerste is not none and marge_tekort_ac > 0 -%}
+          {{ gap_waardevol + [{'s': eerste.s, 'v': eerste.v, 'kwh': marge_tekort_ac}] }}
+        {%- else -%}{{ gap_waardevol }}{%- endif -%}
       pad_toewijzing: >
         {%- set ns = namespace(l=[], totaal=0) -%}
         {%- set max_ac = (room / eff_in) if eff_in > 0 else 0 -%}
         {%- if pad_actief and e_slot > 0 and eff_rt > 0 -%}
           {%- set laad_kand = pad_kand | sort(attribute='v') -%}
-          {%- for q in gap_waardevol | sort(attribute='v', reverse=true) -%}
+          {%- for q in gap_met_marge | sort(attribute='v', reverse=true) -%}
             {%- set nq = namespace(nodig=q.kwh / eff_rt) -%}
             {%- for x in laad_kand -%}
               {%- if nq.nodig > 0.001 and ns.totaal < max_ac and x.e <= q.s and x.e > nu_ts -%}
