@@ -2018,6 +2018,12 @@ views:
       - type: grid
         column_span: 3
         cards:
+          - type: markdown
+            content: >-
+              <ha-alert alert-type="info">This tab is a <b>work in progress</b>, expect improvements in the next release.</ha-alert>
+            text_only: true
+            grid_options:
+              columns: full
           - type: heading
             icon: ''
             heading: Savings
