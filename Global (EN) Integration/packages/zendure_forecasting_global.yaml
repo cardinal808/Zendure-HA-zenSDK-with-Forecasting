@@ -701,6 +701,7 @@ template:
       c_min_bridge_s: 1800         # bridging is at least 30 minutes
       c_charge_start_kwh: 0.3             # a charging round starts from this grid charge (kWh)
       c_charge_stop_kwh: 0.05             # a charging round stops below this remainder (kWh)
+      c_hold_min_difference: 0.01        # smart hold: price now at least this much (€/kWh) below the threshold price
       c_charge_min_w: 500                 # measured charge power below this level is ignored
       c_price_floor: 0.02               # lower bound in price comparisons (EUR/kWh)
       c_path_min_hours: 0.25               # path check only for a gap of at least 15 minutes
@@ -1258,8 +1259,46 @@ template:
       # (dip_threshold is defined above the path check)
       in_dip: "{{ prices_ok and price_now < 999 and price_now <= dip_threshold and price_now < p_day_avg }}"
       # Only hold if grid charging is still needed (battery won't fill up from solar)
-      hold_discharge: >
+      dip_hold: >
         {{ is_state('input_boolean.forecast_setting_hold_discharge_in_dip', 'on') and in_dip and grid_total_ac >= c_charge_stop_kwh }}
+
+      # ---- Smart hold: shift the charge that is there to the most expensive quarters ----
+      # If the battery does not last until the end of the gap (solar coverage or end of bridge) and no
+      # charge moment is planned any more, the charge goes to the most expensive quarters. Holding
+      # costs no extra loss (the power comes out later just the same), so it pays off as soon as the
+      # price now is below the cheapest quarter the battery still covers then (the threshold price).
+      sh_quarters: >
+        {%- set ns = namespace(l=[]) -%}
+        {%- for x in path_cand -%}
+          {%- set a = [x.s, now_ts] | max -%}{%- set b = [x.e, t_gap_end_ts] | min -%}
+          {%- if b > a -%}
+            {%- set nz = namespace(k=0) -%}
+            {%- for z in solar_detail -%}
+              {%- set pa = [z.s, a] | max -%}{%- set pb = [z.s + c_detail_period_s, b] | min -%}
+              {%- if pb > pa -%}{%- set nz.k = nz.k + ([z.pv, z.kw] | min) * (pb - pa) / 3600 -%}{%- endif -%}
+            {%- endfor -%}
+            {%- set uu = hour_load | selectattr('s', 'le', a) | list -%}
+            {%- set kw = (uu | last).kw if uu | length > 0 else l_hour -%}
+            {%- set k = [kw * (b - a) / 3600 - nz.k, 0] | max -%}
+            {%- if k > 0 -%}{%- set ns.l = ns.l + [{'s': x.s, 'v': x.v, 'kwh': k | round(4)}] -%}{%- endif -%}
+          {%- endif -%}
+        {%- endfor -%}
+        {{ ns.l }}
+      sh_charge_planned: "{{ chosen | selectattr('e', 'gt', now_ts) | selectattr('s', 'lt', t_gap_end_ts) | list | length > 0 }}"
+      sh_threshold: >
+        {%- set ns = namespace(e=s_now * eff_out, p=none) -%}
+        {%- set total = sh_quarters | map(attribute='kwh') | sum -%}
+        {%- if ns.e > 0 and total > ns.e -%}
+          {%- for q in sh_quarters | sort(attribute='v', reverse=true) -%}
+            {%- if ns.e > 0 -%}{%- set ns.p = q.v -%}{%- set ns.e = ns.e - q.kwh -%}{%- endif -%}
+          {%- endfor -%}
+        {%- endif -%}
+        {{ ns.p }}
+      smart_hold: >
+        {{ is_state('input_boolean.forecast_setting_hold_discharge_in_dip', 'on') and prices_ok and price_now < 999
+           and not sh_charge_planned and sh_threshold is number and solar_dc <= room
+           and price_now < sh_threshold - c_hold_min_difference }}
+      hold_discharge: "{{ dip_hold or smart_hold }}"
 
       # ---- Overview for tomorrow --------------------------------------
       tomorrow_direct: "{{ direct_tomorrow_kwh | round(2) }}"
@@ -1471,6 +1510,7 @@ template:
             {%- elif grid_total_ac < threshold -%}No grid charging needed: battery and expected solar are enough until {{ at(t_end_ts) }}.{{ tomorrow_line }}
             {%- elif chosen | length == 0 -%}
               {%- if empty -%}The battery is empty. The house now takes power directly from the grid{% if gap_slots | length > 0 %}, until {{ at(t_gap_end_ts) }} at most €{{ '%.3f' | format(gap_slots | map(attribute='v') | max) }}{% endif %}. Before that there is no charge moment left that is cheaper than buying directly after {{ ((1 - eff_rt) * 100) | round(0) | int }}% charge and discharge loss.
+              {%- elif smart_hold -%}The battery ({{ '%.1f' | format(s_now) }} kWh) does not last until {{ at(t_gap_end_ts) }} and there is no charge moment left. It is therefore saved for the most expensive quarters (€{{ '%.3f' | format(sh_threshold) }} and up); until then the house buys directly at €{{ '%.3f' | format(price_now) }}. Charging from the grid does not pay off now.
               {%- elif dip_hold_plan -%}The battery ({{ '%.1f' | format(s_now) }} kWh) is saved during cheap dips, because buying directly is cheaper there; it only supplies power in more expensive quarter hours and is expected to be empty around {{ at(t_empty_ts) }}. Grid charging does not pay off now: no slot is cheaper after loss than the purchase it would replace.
               {%- else -%}The battery ({{ '%.1f' | format(s_now) }} kWh) supplies power until about {{ at(t_empty_ts) }}. Grid charging does not pay off now: no slot is cheaper after loss than the purchase it would replace.
               {%- endif -%}
@@ -1502,6 +1542,8 @@ template:
           dip_threshold: "{{ dip_threshold }}"
           in_dip: "{{ in_dip }}"
           hold_discharge: "{{ hold_discharge }}"
+          smart_hold: "{{ smart_hold }}"
+          hold_threshold_price: "{{ sh_threshold }}"
           charge_power_used_kw: "{{ p_max_kw | round(2) }}"
           charge_power_measured_w: "{{ p_measured_w if p_measured_w >= c_charge_min_w else none }}"
           charge_power_set_kw: "{{ p_set_kw }}"

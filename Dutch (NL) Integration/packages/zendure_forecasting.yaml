@@ -701,6 +701,7 @@ template:
       c_min_overbrugging_s: 1800         # overbrugging is minstens 30 minuten
       c_laden_start_kwh: 0.3             # vanaf dit netladen (kWh) begint een laadronde
       c_laden_stop_kwh: 0.05             # onder dit restant (kWh) stopt een laadronde
+      c_vasthouden_min_verschil: 0.01    # slim vasthouden: prijs nu minstens zoveel (€/kWh) onder de grensprijs
       c_laden_min_w: 500                 # gemeten laadvermogen onder dit niveau wordt genegeerd
       c_prijs_noemer: 0.02               # ondergrens in prijsvergelijkingen (EUR/kWh)
       c_pad_min_uren: 0.25               # pad-check pas bij een gat van minstens 15 minuten
@@ -1257,8 +1258,46 @@ template:
       # (dal_drempel staat boven de pad-check)
       in_dal: "{{ prijzen_ok and prijs_nu < 999 and prijs_nu <= dal_drempel and prijs_nu < p_dag_gem }}"
       # Alleen vasthouden als er nog uit het net bijgeladen moet worden (accu komt niet vol uit zon)
-      ontladen_vasthouden: >
+      dal_vasthouden: >
         {{ is_state('input_boolean.forecast_dal_ontladen_blokkeren', 'on') and in_dal and netladen_ac >= c_laden_stop_kwh }}
+
+      # ---- Slim vasthouden: de lading die er is naar de duurste kwartieren schuiven ----
+      # Haalt de accu het einde van het gat (zon-dekking of einde overbrugging) niet en is er geen
+      # laadmoment meer gepland, dan krijgt de lading de duurste kwartieren. Vasthouden kost geen
+      # extra verlies (de stroom gaat er later net zo goed uit), dus het loont zodra de prijs nu
+      # lager is dan het goedkoopste kwartier dat de accu dan nog dekt (de grensprijs).
+      vh_kwartieren: >
+        {%- set ns = namespace(l=[]) -%}
+        {%- for x in pad_kand -%}
+          {%- set a = [x.s, nu_ts] | max -%}{%- set b = [x.e, t_gap_eind_ts] | min -%}
+          {%- if b > a -%}
+            {%- set nz = namespace(k=0) -%}
+            {%- for z in zon_detail -%}
+              {%- set pa = [z.s, a] | max -%}{%- set pb = [z.s + c_detail_periode_s, b] | min -%}
+              {%- if pb > pa -%}{%- set nz.k = nz.k + ([z.pv, z.kw] | min) * (pb - pa) / 3600 -%}{%- endif -%}
+            {%- endfor -%}
+            {%- set uu = uur_last | selectattr('s', 'le', a) | list -%}
+            {%- set kw = (uu | last).kw if uu | length > 0 else l_uur -%}
+            {%- set k = [kw * (b - a) / 3600 - nz.k, 0] | max -%}
+            {%- if k > 0 -%}{%- set ns.l = ns.l + [{'s': x.s, 'v': x.v, 'kwh': k | round(4)}] -%}{%- endif -%}
+          {%- endif -%}
+        {%- endfor -%}
+        {{ ns.l }}
+      vh_laden_gepland: "{{ gekozen | selectattr('e', 'gt', nu_ts) | selectattr('s', 'lt', t_gap_eind_ts) | list | length > 0 }}"
+      vh_grens: >
+        {%- set ns = namespace(e=s_nu * eff_out, p=none) -%}
+        {%- set totaal = vh_kwartieren | map(attribute='kwh') | sum -%}
+        {%- if ns.e > 0 and totaal > ns.e -%}
+          {%- for q in vh_kwartieren | sort(attribute='v', reverse=true) -%}
+            {%- if ns.e > 0 -%}{%- set ns.p = q.v -%}{%- set ns.e = ns.e - q.kwh -%}{%- endif -%}
+          {%- endfor -%}
+        {%- endif -%}
+        {{ ns.p }}
+      slim_vasthouden: >
+        {{ is_state('input_boolean.forecast_dal_ontladen_blokkeren', 'on') and prijzen_ok and prijs_nu < 999
+           and not vh_laden_gepland and vh_grens is number and zon_dc <= room
+           and prijs_nu < vh_grens - c_vasthouden_min_verschil }}
+      ontladen_vasthouden: "{{ dal_vasthouden or slim_vasthouden }}"
 
       # ---- Overzicht voor morgen --------------------------------------
       morgen_direct: "{{ direct_morgen_kwh | round(2) }}"
@@ -1470,6 +1509,7 @@ template:
             {%- elif netladen_ac < drempel -%}Geen netladen nodig: accu en verwachte zon zijn genoeg tot {{ tijd(t_end_ts) }}.{{ morgen_zin }}
             {%- elif gekozen | length == 0 -%}
               {%- if leeg -%}De accu is leeg. Het huis neemt nu direct stroom uit het net{% if gap_kwartieren | length > 0 %}, tot {{ tijd(t_gap_eind_ts) }} voor maximaal €{{ '%.3f' | format(gap_kwartieren | map(attribute='v') | max) }}{% endif %}. Er is daarvoor geen laadmoment meer dat na {{ ((1 - eff_rt) * 100) | round(0) | int }}% laad- en ontlaadverlies goedkoper is dan direct inkopen.
+              {%- elif slim_vasthouden -%}De accu ({{ '%.1f' | format(s_nu) }} kWh) houdt het niet vol tot {{ tijd(t_gap_eind_ts) }} en er is geen laadmoment meer. Daarom wordt hij bewaard voor de duurste kwartieren (€{{ '%.3f' | format(vh_grens) }} en hoger); tot dan koopt het huis direct in tegen €{{ '%.3f' | format(prijs_nu) }}. Bijladen uit het net loont nu niet.
               {%- elif dal_blokkade_plan -%}De accu ({{ '%.1f' | format(s_nu) }} kWh) wordt in goedkope dalen gespaard, want direct inkopen is daar goedkoper; hij levert alleen in duurdere kwartieren en is naar verwachting rond {{ tijd(t_leeg_ts) }} leeg. Bijladen uit het net loont nu niet: geen enkel slot is na verlies goedkoper dan de inkoop die het zou vervangen.
               {%- else -%}De accu ({{ '%.1f' | format(s_nu) }} kWh) levert tot ongeveer {{ tijd(t_leeg_ts) }}. Bijladen uit het net loont nu niet: geen enkel slot is na verlies goedkoper dan de inkoop die het zou vervangen.
               {%- endif -%}
@@ -1501,6 +1541,8 @@ template:
           dal_drempel: "{{ dal_drempel }}"
           in_dal: "{{ in_dal }}"
           ontladen_vasthouden: "{{ ontladen_vasthouden }}"
+          slim_vasthouden: "{{ slim_vasthouden }}"
+          vasthouden_grensprijs: "{{ vh_grens }}"
           laadvermogen_gebruikt_kw: "{{ p_max_kw | round(2) }}"
           laadvermogen_gemeten_w: "{{ p_gemeten_w if p_gemeten_w >= c_laden_min_w else none }}"
           laadvermogen_ingesteld_kw: "{{ p_set_kw }}"
