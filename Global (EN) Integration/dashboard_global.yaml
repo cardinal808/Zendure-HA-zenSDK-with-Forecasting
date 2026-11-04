@@ -1,4 +1,4 @@
-# Zendure zenSDK (Gielz) + Forecasting 2026.11.1 | based on Gielz v20261007 | set: public (without HVAC)
+# Zendure zenSDK (Gielz) + Forecasting 2026.11.2 | based on Gielz v20261007 | set: public (without HVAC)
 # Based on Gielz1986/Zendure-HA-zenSDK (Michiel Hofker). See README.md for license and changes.
 views:
   - type: sections
@@ -1572,6 +1572,8 @@ views:
               - Efficiency: charging {{ a.efficiency_charge_pct }}%, discharging {{ a.efficiency_discharge_pct }}%, round trip {{ a.efficiency_round_trip_pct }}% ({{ a.efficiency_source }})
 
               - Usage per hour: **{{ a.usage_per_hour_source }}**, next 24 hours {{ a.usage_next_24h_kwh }} kWh. Profile learned: {{ states('sensor.forecast_usage_profile') }} of 48 hours (workday + weekend){% if state_attr('sensor.forecast_usage_profile', 'last_hour') %}, last measurement {{ state_attr('sensor.forecast_usage_profile', 'last_hour') }}: {{ state_attr('sensor.forecast_usage_profile', 'last_hour_kwh') }} kWh{% endif %}
+
+              - Usage per quarter: **{{ a.usage_per_quarter_source }}**{% if state_attr('sensor.forecast_usage_profile', 'last_quarter_kwh') is not none %}, last quarter {{ state_attr('sensor.forecast_usage_profile', 'last_quarter_kwh') }} kWh{% endif %}
             text_only: false
         visibility:
           - condition: state
@@ -3782,6 +3784,162 @@ views:
             entities:
               - entity: input_boolean.zendure_setting_pv_export_disabled
                 name: PV Export Disabled
+            visibility:
+              - condition: state
+                entity: input_boolean.dashboard_setting_show_pv
+                state: 'on'
+          - type: heading
+            icon: ''
+            heading: Configuration (Negative Price)
+            heading_style: title
+            badges:
+              - type: entity
+                show_state: true
+                show_icon: true
+                entity: sensor.zendure_feedin_price_now
+                name: Feed-in
+                state_content:
+                  - name
+                  - state
+                color: '#01a180'
+                tap_action:
+                  action: more-info
+              - type: entity
+                show_state: false
+                show_icon: true
+                entity: binary_sensor.zendure_export_blocked_negative_price
+                name: Export blocked
+                state_content: name
+                color: '#c53b2c'
+                visibility:
+                  - condition: state
+                    entity: binary_sensor.zendure_export_blocked_negative_price
+                    state: 'on'
+            visibility:
+              - condition: state
+                entity: input_boolean.dashboard_setting_show_pv
+                state: 'on'
+          - type: markdown
+            content: >-
+              <ha-alert alert-type="info">Help text</ha-alert>When the feed-in
+              price is negative, the installation does not export. Feed-in
+              price = market price + bonus % (only when the market price is
+              positive) + feed-in markup, using the values from
+              **Configuration (Savings)**.
+
+
+              **Zendure:** PV Export Disabled is turned on automatically and
+              back off afterwards. Charging from solar and discharging to the
+              house keep working.
+
+
+              **External inverter (optional):** choose the **limit type** and
+              fill in the limiter entity.
+
+              - *Production limit* (SolarEdge, OpenDTU/Hoymiles, APsystems,
+              Fronius Modbus): a number.* such as
+              number.solaredge_modbus_active_power_limit. The module regulates
+              on the grid meter, so the inverter keeps powering the house but
+              does not export. Also fill in the **power sensor** (W, preferably
+              AC, e.g. sensor.solaredge_modbus_ac_power); without a sensor it
+              regulates in steps of 5%.
+
+              - *Export limit* (GoodWe, Growatt): a number.* with the export
+              limit. It goes to 0; the inverter regulates on its own meter.
+
+              - A **switch.*** (e.g. Enphase Production) is turned off and back
+              on afterwards. A **script.*** (e.g. for Huawei or Sofar) is
+              started with the variable block: true or false; an example is at
+              the top of zendure_negative_price_global.yaml.
+
+
+              The production limit only throttles when the Zendure cannot absorb
+              the surplus (battery full or charging at maximum power) and leaves
+              a small export (25 W, while charging 50 W below the charge buffer)
+              to prevent oscillating around 0 W. The other types only act when
+              the battery is full and only release when the price is positive
+              again. Afterwards everything is restored as it was.
+
+
+              **Two inverters:** choose the inverter with a production limit
+              (e.g. SolarEdge) as **primary**; it regulates on the grid meter.
+              The **secondary** goes fully to 0 (number to 0, switch off or
+              script with block: true) as soon as the Zendure cannot absorb the
+              surplus, and is restored when the price is positive again. Not
+              using the secondary's solar costs nothing: with a negative price,
+              power from the grid is free or even pays.
+            text_only: true
+            visibility:
+              - condition: state
+                entity: input_boolean.dashboard_setting_show_help
+                state: 'on'
+              - condition: state
+                entity: input_boolean.dashboard_setting_show_pv
+                state: 'on'
+          - type: entities
+            entities:
+              - entity: input_boolean.negative_price_block_export
+                name: No export at negative price
+            visibility:
+              - condition: state
+                entity: input_boolean.dashboard_setting_show_pv
+                state: 'on'
+          - type: markdown
+            text_only: true
+            content: >-
+              **External inverter (optional)**
+            visibility:
+              - condition: state
+                entity: input_boolean.dashboard_setting_show_pv
+                state: 'on'
+          - type: entities
+            entities:
+              - entity: input_select.negative_price_inverter_count
+                name: Number of external inverters
+              - type: conditional
+                conditions:
+                  - entity: input_select.negative_price_inverter_count
+                    state: '2'
+                row:
+                  type: section
+                  label: Primary inverter (regulates on grid meter)
+              - type: conditional
+                conditions:
+                  - entity: input_select.negative_price_inverter_count
+                    state_not: '0'
+                row:
+                  entity: input_select.negative_price_inverter_type
+                  name: Limit type
+              - type: conditional
+                conditions:
+                  - entity: input_select.negative_price_inverter_count
+                    state_not: '0'
+                row:
+                  entity: input_text.negative_price_inverter_limiter
+                  name: Inverter limiter entity (number.*, switch.* or script.*)
+              - type: conditional
+                conditions:
+                  - entity: input_select.negative_price_inverter_count
+                    state_not: '0'
+                  - entity: input_select.negative_price_inverter_type
+                    state: Production limit (SolarEdge, Hoymiles, APsystems, Fronius)
+                row:
+                  entity: input_text.negative_price_inverter_power_sensor
+                  name: External inverter power sensor (W)
+              - type: conditional
+                conditions:
+                  - entity: input_select.negative_price_inverter_count
+                    state: '2'
+                row:
+                  type: section
+                  label: Secondary inverter (turns off)
+              - type: conditional
+                conditions:
+                  - entity: input_select.negative_price_inverter_count
+                    state: '2'
+                row:
+                  entity: input_text.negative_price_inverter_limiter_secondary
+                  name: Inverter limiter entity (number.*, switch.* or script.*)
             visibility:
               - condition: state
                 entity: input_boolean.dashboard_setting_show_pv

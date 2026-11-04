@@ -1,0 +1,663 @@
+# Zendure zenSDK (Gielz) + Forecasting 2026.11.2 | based on Gielz v20261007 | set: public (without HVAC)
+# Based on Gielz1986/Zendure-HA-zenSDK (Michiel Hofker). See README.md for license and changes.
+# =====================================================================
+# Zendure Negative Price - no export when exporting costs money
+#
+# Place this file next to zendure_gielz1986_global.yaml (same packages folder).
+#
+# Feed-in price (sensor.zendure_feedin_price_now), per quarter hour:
+#   market price + bonus % (only when the market price is positive) + feed-in markup
+#   Market price from Gielz' Nordpool sensor; bonus and markup from Configuration (Savings).
+# binary_sensor.zendure_export_blocked_negative_price is on when the feature is enabled
+# and the feed-in price is negative.
+#
+# Three automations:
+# 1. Zendure PV: turns on Gielz' switch PV Export Disabled while the price is negative
+#    (Gielz then sets the Zendure to gridReverse = forbidden) and turns it off afterwards.
+# 2. External inverter (optional). Choose the limit type; the limiter entity decides the rest:
+#    - number.* + "Production limit" (SolarEdge, OpenDTU/Hoymiles, APsystems, Fronius Modbus):
+#      regulates the inverter every 10 s on the grid meter, so it keeps powering the house
+#      but does not export. Only throttles when the Zendure cannot absorb the surplus
+#      (battery full, already charging at ~maximum power, or the mode does not charge from
+#      solar) and then aims just below Gielz' charge buffer, so the Zendure keeps charging
+#      at full power. Works with a limit in % or in W. Preferably fill in the AC power sensor:
+#      with a % limit it derives from it how many W 1% is.
+#    - number.* + "Export limit" (GoodWe, Growatt): sets the export limit to its minimum (0);
+#      the inverter regulates on its own meter.
+#    - switch.* (e.g. Enphase Production, APsystems inverter_status): off and back on afterwards.
+#    - script.* (e.g. Huawei, Sofar or a Modbus register): the module starts the script with
+#      variable block: true (limit) or false (release). Huawei example (check the fields
+#      in Developer tools > Actions):
+#        script:
+#          huawei_export_negative_price:
+#            sequence:
+#              - if: "{{ block }}"
+#                then:
+#                  - action: huawei_solar.set_maximum_feed_grid_power
+#                    data: { device_id: <your inverter>, power: 0 }
+#                else:
+#                  - action: huawei_solar.reset_maximum_feed_grid_power
+#                    data: { device_id: <your inverter> }
+#    Export limit, switch and script only act when the battery is full (or the Zendure does
+#    not charge from solar) and only release when the price is no longer negative. That way
+#    the inverter and the Zendure do not work against each other and the inverter does not
+#    switch on/off at every % SOC. Afterwards a limit is restored to its previous value.
+# 3. Secondary external inverter (with Number of external inverters = 2): goes fully to its
+#    minimum (number.* to 0, switch.* off, script.* with block: true) as soon as the Zendure
+#    cannot absorb the surplus any more, and is restored when the price is no longer negative.
+#    The primary inverter then regulates on the grid meter alone. Choose the inverter with a
+#    production limit (e.g. SolarEdge) as primary. Not using the secondary's solar costs
+#    nothing: with a negative price, power from the grid is free or even pays.
+# Number of external inverters = 0 disables automations 2 and 3.
+#
+# All automations only restore what they changed themselves.
+# Charging from solar and discharging to the house (Smart Matching) keep working.
+# =====================================================================
+
+input_boolean:
+  negative_price_block_export:
+    name: Negative Price Block Export
+    icon: mdi:transmission-tower-off
+
+  # Internal: this module disabled the Zendure PV export
+  negative_price_export_by_automation:
+    name: Negative Price Export By Automation
+    icon: mdi:robot
+
+  # Internal: this module limits the external inverter
+  negative_price_limiter_by_automation:
+    name: Negative Price Limiter By Automation
+    icon: mdi:robot
+
+  # Internal: this module turned the secondary external inverter down
+  negative_price_secondary_by_automation:
+    name: Negative Price Secondary By Automation
+    icon: mdi:robot
+
+input_select:
+  negative_price_inverter_count:
+    name: Negative Price Number Of External Inverters
+    icon: mdi:numeric
+    options:
+      - '0'
+      - '1'
+      - '2'
+
+  negative_price_inverter_type:
+    name: Negative Price Inverter Type
+    icon: mdi:solar-power-variant
+    options:
+      - Production limit (SolarEdge, Hoymiles, APsystems, Fronius)
+      - Export limit (GoodWe, Growatt)
+
+input_number:
+  # Internal: inverter limit before limiting
+  negative_price_previous_limit:
+    name: Negative Price Previous Limit
+    icon: mdi:history
+    min: 0
+    max: 100000
+    step: 0.1
+    mode: box
+
+  # Internal: secondary inverter limit before limiting
+  negative_price_previous_limit_secondary:
+    name: Negative Price Previous Limit Secondary
+    icon: mdi:history
+    min: 0
+    max: 100000
+    step: 0.1
+    mode: box
+
+input_text:
+  negative_price_inverter_limiter:
+    name: Negative Price Inverter Limiter
+    icon: mdi:tune-vertical
+    max: 250
+    mode: text
+
+  negative_price_inverter_power_sensor:
+    name: Negative Price Inverter Power Sensor
+    icon: mdi:solar-power
+    max: 250
+    mode: text
+
+  negative_price_inverter_limiter_secondary:
+    name: Negative Price Inverter Limiter Secondary
+    icon: mdi:tune-vertical
+    max: 250
+    mode: text
+
+template:
+  - sensor:
+      - name: "Zendure Feedin Price Now"
+        unique_id: zendure_feedin_price_now
+        icon: mdi:transmission-tower-export
+        unit_of_measurement: "€/kWh"
+        state: >
+          {%- set src = states('input_text.dynamic_setting_nordpool_sensor') | trim -%}
+          {%- set ns = namespace(p=none) -%}
+          {%- if src.startswith('sensor.') -%}
+            {%- set now_ts = as_timestamp(now()) -%}
+            {%- for x in (state_attr(src, 'raw_today') or []) -%}
+              {%- if x.value is number and as_timestamp(x.start, 0) <= now_ts < as_timestamp(x.end, 0) -%}
+                {%- set ns.p = x.value -%}
+              {%- endif -%}
+            {%- endfor -%}
+          {%- endif -%}
+          {%- if ns.p is none -%}
+            {%- set ns.p = states('sensor.dynamic_nordpool') | float(none) -%}
+          {%- endif -%}
+          {%- if ns.p is number -%}
+            {%- set markup = states('input_number.savings_setting_dynamic_feedin_markup') | float(0) -%}
+            {%- set bonus = states('input_number.savings_setting_dynamic_feedin_bonus') | float(0) / 100 -%}
+            {{ (ns.p + bonus * ([ns.p, 0] | max) + markup) | round(5) }}
+          {%- else -%}
+            {{ none }}
+          {%- endif -%}
+        attributes:
+          market_price: >
+            {%- set src = states('input_text.dynamic_setting_nordpool_sensor') | trim -%}
+            {%- set ns = namespace(p=none) -%}
+            {%- if src.startswith('sensor.') -%}
+              {%- set now_ts = as_timestamp(now()) -%}
+              {%- for x in (state_attr(src, 'raw_today') or []) -%}
+                {%- if x.value is number and as_timestamp(x.start, 0) <= now_ts < as_timestamp(x.end, 0) -%}
+                  {%- set ns.p = x.value -%}
+                {%- endif -%}
+              {%- endfor -%}
+            {%- endif -%}
+            {{ ns.p if ns.p is not none else states('sensor.dynamic_nordpool') | float(none) }}
+          feedin_markup: "{{ states('input_number.savings_setting_dynamic_feedin_markup') | float(0) }}"
+          feedin_bonus_pct: "{{ states('input_number.savings_setting_dynamic_feedin_bonus') | float(0) }}"
+
+  - binary_sensor:
+      - name: "Zendure Export Blocked (Negative Price)"
+        unique_id: zendure_export_blocked_negative_price
+        icon: mdi:transmission-tower-off
+        state: >
+          {%- set p = states('sensor.zendure_feedin_price_now') | float(none) -%}
+          {{ is_state('input_boolean.negative_price_block_export', 'on')
+             and p is number and p < 0 }}
+
+automation:
+  # -------------------------------------------------------------------
+  # 1. Zendure PV export (via Gielz' switch)
+  # -------------------------------------------------------------------
+  - id: zendure_negative_price_export
+    alias: Zendure Negative Price Export
+    description: >-
+      Forecasting 2026.11.2 - Disables the Zendure PV export (via Gielz' PV Export Disabled)
+      while the feed-in price is negative, and restores it afterwards.
+    mode: queued
+    max: 5
+    triggers:
+      - trigger: state
+        entity_id: binary_sensor.zendure_export_blocked_negative_price
+        to:
+          - 'on'
+          - 'off'
+        for:
+          seconds: 20
+      - trigger: homeassistant
+        event: start
+      - trigger: time_pattern
+        minutes: /5
+    conditions: []
+    actions:
+      - choose:
+          - alias: Negative price - disable PV export
+            conditions:
+              - condition: state
+                entity_id: binary_sensor.zendure_export_blocked_negative_price
+                state: 'on'
+              - condition: state
+                entity_id: input_boolean.zendure_setting_pv_export_disabled
+                state: 'off'
+            sequence:
+              - action: input_boolean.turn_on
+                target:
+                  entity_id: input_boolean.negative_price_export_by_automation
+              - action: input_boolean.turn_on
+                target:
+                  entity_id: input_boolean.zendure_setting_pv_export_disabled
+              - action: logbook.log
+                data:
+                  message: >-
+                    ☀️⛔Negative feed-in price (€{{ '%.3f' | format(states('sensor.zendure_feedin_price_now') | float(0)) }}) —
+                    PV export disabled —
+                  entity_id: input_select.zendure_operation_mode
+                  name: ' '
+          - alias: Price back to normal - restore PV export
+            conditions:
+              - condition: state
+                entity_id: binary_sensor.zendure_export_blocked_negative_price
+                state: 'off'
+              - condition: state
+                entity_id: input_boolean.negative_price_export_by_automation
+                state: 'on'
+            sequence:
+              - action: input_boolean.turn_off
+                target:
+                  entity_id: input_boolean.zendure_setting_pv_export_disabled
+              - action: input_boolean.turn_off
+                target:
+                  entity_id: input_boolean.negative_price_export_by_automation
+              - action: logbook.log
+                data:
+                  message: >-
+                    ☀️✅Feed-in price no longer negative (€{{ '%.3f' | format(states('sensor.zendure_feedin_price_now') | float(0)) }}) —
+                    PV export allowed again —
+                  entity_id: input_select.zendure_operation_mode
+                  name: ' '
+
+  # -------------------------------------------------------------------
+  # 2. External inverter (optional)
+  # -------------------------------------------------------------------
+  - id: zendure_negative_price_limiter
+    alias: Zendure Negative Price External Inverter
+    description: >-
+      Forecasting 2026.11.2 - Limits an external inverter (production limit on the grid meter,
+      export limit to 0, switch off or script) while the feed-in price is negative and the
+      Zendure cannot absorb the surplus.
+    mode: single
+    max_exceeded: silent
+    triggers:
+      - trigger: time_pattern
+        seconds: /10
+    conditions:
+      - alias: At least 1 external inverter, or the primary is still limited
+        condition: template
+        value_template: >-
+          {{ states('input_select.negative_price_inverter_count') | int(0) >= 1
+             or is_state('input_boolean.negative_price_limiter_by_automation', 'on') }}
+      - alias: Limiter filled in (number.*, switch.* or script.*) and available
+        condition: template
+        value_template: >-
+          {% set e = states('input_text.negative_price_inverter_limiter') | trim %}
+          {{ e.split('.')[0] in ['number', 'switch', 'script'] and has_value(e) }}
+    actions:
+      - variables:
+          ent: "{{ states('input_text.negative_price_inverter_limiter') | trim }}"
+          domain: "{{ ent.split('.')[0] }}"
+          export_limit: "{{ 'Export limit' in states('input_select.negative_price_inverter_type') }}"
+          # Production limit: only number.* with type Production limit; regulates on the grid meter
+          production: "{{ domain == 'number' and not export_limit }}"
+          active: "{{ is_state('input_boolean.negative_price_limiter_by_automation', 'on') }}"
+          lmin: "{{ state_attr(ent, 'min') | float(0) }}"
+          lmax: "{{ state_attr(ent, 'max') | float(100) }}"
+          # Limit in W when the maximum is above 100, otherwise in %
+          in_watt: "{{ lmax > 100 }}"
+          current: "{{ states(ent) | float(lmax) }}"
+          p1: "{{ states('sensor.home_energy_meter_power') | float(0) }}"
+          p1_ok: "{{ has_value('sensor.home_energy_meter_power') }}"
+          out_sensor: "{{ states('input_text.negative_price_inverter_power_sensor') | trim }}"
+          out_w: >-
+            {{ states(out_sensor) | float(none) if out_sensor.startswith('sensor.') else none }}
+          # Can the Zendure still absorb the surplus?
+          battery_full: >-
+            {{ states('sensor.zendure_total_state_of_charge') | float(0) >=
+               states('sensor.zendure_maximum_state_of_charge') | float(100)
+               or is_state('sensor.zendure_soc_limit_status', 'Charging Limit Reached') }}
+          charging_max: >-
+            {{ states('sensor.zendure_power') | float(0) >=
+               0.9 * states('input_number.zendure_setting_max_charge_power') | float(2400) }}
+          charges_from_solar: >-
+            {{ states('input_select.zendure_operation_mode') in
+               ['Smart Matching', 'Smart Charge Only', 'Dynamic Smart Matching', 'Dynamic Smart Matching + Forecasting',
+                'Dynamic Smart Matching (Expensive)', 'Dynamic Trading + Smart Matching'] }}
+          negative: >-
+            {{ is_state('binary_sensor.zendure_export_blocked_negative_price', 'on')
+               and states('input_select.negative_price_inverter_count') | int(0) >= 1 }}
+          # Production limit: limit while the Zendure cannot absorb the surplus.
+          # Other types: start when the battery is full (or the Zendure does not charge from
+          # solar), and hold until the price is no longer negative.
+          limit: >-
+            {%- if production -%}
+              {{ negative and p1_ok and (battery_full or charging_max or not charges_from_solar) }}
+            {%- else -%}
+              {{ negative and (battery_full or not charges_from_solar or active) }}
+            {%- endif -%}
+          # Grid meter target with a production limit (negative = export). A small export
+          # prevents oscillating around 0 W. Battery full: -25 W. Zendure still charging: 50 W
+          # below Gielz' charge buffer, so Gielz keeps the Zendure at maximum charge power.
+          target: >-
+            {%- if battery_full or not charges_from_solar -%}
+              -25
+            {%- else -%}
+              {{ -(states('input_number.zendure_setting_charge_buffer') | float(50) + 50) }}
+            {%- endif -%}
+          # New production limit. In W: directly from inverter power + grid meter. In %: W per %
+          # derived from inverter power / current limit (correct when the limit sets the power;
+          # when the sun sets it, the estimate is too low and the next step is right).
+          # Without a power sensor: in W step by step (factor 0.7), in % steps of 5%.
+          new: >-
+            {%- if in_watt -%}
+              {%- if out_w is number -%}
+                {%- set n = out_w + p1 - target -%}
+              {%- else -%}
+                {%- set n = current + (p1 - target) * 0.7 -%}
+              {%- endif -%}
+            {%- elif out_w is number and out_w >= 100 and current >= 5 -%}
+              {%- set n = (out_w + p1 - target) / (out_w / current) -%}
+            {%- else -%}
+              {%- set n = current + (5 if p1 > target else -5) -%}
+            {%- endif -%}
+            {{ ([[n, lmin] | max, lmax] | min) | round(0 if in_watt else 1) }}
+          threshold: "{{ 20 if in_watt else 1 }}"
+          unit: "{{ ' W' if in_watt else '%' }}"
+      - choose:
+          - alias: Start limiting
+            conditions:
+              - condition: template
+                value_template: "{{ limit and not active }}"
+            sequence:
+              - choose:
+                  - alias: Production limit
+                    conditions:
+                      - condition: template
+                        value_template: "{{ production }}"
+                    sequence:
+                      - action: input_number.set_value
+                        target:
+                          entity_id: input_number.negative_price_previous_limit
+                        data:
+                          value: "{{ current }}"
+                      - action: input_boolean.turn_on
+                        target:
+                          entity_id: input_boolean.negative_price_limiter_by_automation
+                      - action: number.set_value
+                        target:
+                          entity_id: "{{ ent }}"
+                        data:
+                          value: "{{ new }}"
+                      - action: logbook.log
+                        data:
+                          message: >-
+                            ☀️⛔Negative feed-in price — inverter limited ({{ ent }}: {{ current }} → {{ new }}{{ unit }}) —
+                          entity_id: input_select.zendure_operation_mode
+                          name: ' '
+                  - alias: Export limit to minimum
+                    conditions:
+                      - condition: template
+                        value_template: "{{ domain == 'number' and export_limit }}"
+                    sequence:
+                      - action: input_number.set_value
+                        target:
+                          entity_id: input_number.negative_price_previous_limit
+                        data:
+                          value: "{{ current }}"
+                      - action: input_boolean.turn_on
+                        target:
+                          entity_id: input_boolean.negative_price_limiter_by_automation
+                      - action: number.set_value
+                        target:
+                          entity_id: "{{ ent }}"
+                        data:
+                          value: "{{ lmin }}"
+                      - action: logbook.log
+                        data:
+                          message: >-
+                            ☀️⛔Negative feed-in price — export limit to {{ lmin }}{{ unit }} ({{ ent }}, was {{ current }}{{ unit }}) —
+                          entity_id: input_select.zendure_operation_mode
+                          name: ' '
+                  - alias: Switch off
+                    conditions:
+                      - condition: template
+                        value_template: "{{ domain == 'switch' and is_state(ent, 'on') }}"
+                    sequence:
+                      - action: input_boolean.turn_on
+                        target:
+                          entity_id: input_boolean.negative_price_limiter_by_automation
+                      - action: switch.turn_off
+                        target:
+                          entity_id: "{{ ent }}"
+                      - action: logbook.log
+                        data:
+                          message: ☀️⛔Negative feed-in price — {{ ent }} turned off —
+                          entity_id: input_select.zendure_operation_mode
+                          name: ' '
+                  - alias: Start script (block)
+                    conditions:
+                      - condition: template
+                        value_template: "{{ domain == 'script' }}"
+                    sequence:
+                      - action: input_boolean.turn_on
+                        target:
+                          entity_id: input_boolean.negative_price_limiter_by_automation
+                      - action: script.turn_on
+                        target:
+                          entity_id: "{{ ent }}"
+                        data:
+                          variables:
+                            block: true
+                      - action: logbook.log
+                        data:
+                          message: ☀️⛔Negative feed-in price — {{ ent }} started (block) —
+                          entity_id: input_select.zendure_operation_mode
+                          name: ' '
+          - alias: Adjust production limit
+            conditions:
+              - condition: template
+                value_template: "{{ limit and active and production and (new - current) | abs >= threshold }}"
+            sequence:
+              - action: number.set_value
+                target:
+                  entity_id: "{{ ent }}"
+                data:
+                  value: "{{ new }}"
+          - alias: Release limit
+            conditions:
+              - condition: template
+                value_template: "{{ not limit and active }}"
+            sequence:
+              - choose:
+                  - alias: Restore limit
+                    conditions:
+                      - condition: template
+                        value_template: "{{ domain == 'number' }}"
+                    sequence:
+                      - variables:
+                          restore: >-
+                            {%- set v = states('input_number.negative_price_previous_limit') | float(0) -%}
+                            {{ v if lmin < v <= lmax else lmax }}
+                      - action: number.set_value
+                        target:
+                          entity_id: "{{ ent }}"
+                        data:
+                          value: "{{ restore }}"
+                      - action: logbook.log
+                        data:
+                          message: >-
+                            ☀️✅External inverter limit released ({{ ent }} → {{ restore }}{{ unit }}) —
+                          entity_id: input_select.zendure_operation_mode
+                          name: ' '
+                  - alias: Switch back on
+                    conditions:
+                      - condition: template
+                        value_template: "{{ domain == 'switch' }}"
+                    sequence:
+                      - action: switch.turn_on
+                        target:
+                          entity_id: "{{ ent }}"
+                      - action: logbook.log
+                        data:
+                          message: ☀️✅Feed-in price no longer negative — {{ ent }} turned back on —
+                          entity_id: input_select.zendure_operation_mode
+                          name: ' '
+                  - alias: Start script (release)
+                    conditions:
+                      - condition: template
+                        value_template: "{{ domain == 'script' }}"
+                    sequence:
+                      - action: script.turn_on
+                        target:
+                          entity_id: "{{ ent }}"
+                        data:
+                          variables:
+                            block: false
+                      - action: logbook.log
+                        data:
+                          message: ☀️✅Feed-in price no longer negative — {{ ent }} started (release) —
+                          entity_id: input_select.zendure_operation_mode
+                          name: ' '
+              - action: input_boolean.turn_off
+                target:
+                  entity_id: input_boolean.negative_price_limiter_by_automation
+
+  # -------------------------------------------------------------------
+  # 3. Secondary external inverter (optional, with 2 external inverters)
+  # -------------------------------------------------------------------
+  - id: zendure_negative_price_secondary
+    alias: Zendure Negative Price Secondary Inverter
+    description: >-
+      Forecasting 2026.11.2 - Sets the secondary external inverter to its minimum (number to 0,
+      switch off, script with block: true) while the feed-in price is negative and the Zendure
+      cannot absorb the surplus. The primary inverter then regulates on the grid meter alone.
+    mode: single
+    max_exceeded: silent
+    triggers:
+      - trigger: time_pattern
+        seconds: /10
+    conditions:
+      - alias: Two external inverters, or the secondary is still limited
+        condition: template
+        value_template: >-
+          {{ states('input_select.negative_price_inverter_count') | int(0) == 2
+             or is_state('input_boolean.negative_price_secondary_by_automation', 'on') }}
+      - alias: Secondary limiter filled in (number.*, switch.* or script.*) and available
+        condition: template
+        value_template: >-
+          {% set e = states('input_text.negative_price_inverter_limiter_secondary') | trim %}
+          {{ e.split('.')[0] in ['number', 'switch', 'script'] and has_value(e) }}
+    actions:
+      - variables:
+          ent: "{{ states('input_text.negative_price_inverter_limiter_secondary') | trim }}"
+          domain: "{{ ent.split('.')[0] }}"
+          active: "{{ is_state('input_boolean.negative_price_secondary_by_automation', 'on') }}"
+          enabled: "{{ states('input_select.negative_price_inverter_count') | int(0) == 2 }}"
+          lmin: "{{ state_attr(ent, 'min') | float(0) }}"
+          lmax: "{{ state_attr(ent, 'max') | float(100) }}"
+          unit: "{{ ' W' if lmax > 100 else '%' }}"
+          current: "{{ states(ent) | float(lmax) }}"
+          battery_full: >-
+            {{ states('sensor.zendure_total_state_of_charge') | float(0) >=
+               states('sensor.zendure_maximum_state_of_charge') | float(100)
+               or is_state('sensor.zendure_soc_limit_status', 'Charging Limit Reached') }}
+          charging_max: >-
+            {{ states('sensor.zendure_power') | float(0) >=
+               0.9 * states('input_number.zendure_setting_max_charge_power') | float(2400) }}
+          charges_from_solar: >-
+            {{ states('input_select.zendure_operation_mode') in
+               ['Smart Matching', 'Smart Charge Only', 'Dynamic Smart Matching', 'Dynamic Smart Matching + Forecasting',
+                'Dynamic Smart Matching (Expensive)', 'Dynamic Trading + Smart Matching'] }}
+          negative: "{{ is_state('binary_sensor.zendure_export_blocked_negative_price', 'on') }}"
+          # Start as soon as the Zendure cannot absorb the surplus; hold until the price is no
+          # longer negative (or the number of inverters is no longer 2).
+          limit: "{{ enabled and negative and (battery_full or charging_max or not charges_from_solar or active) }}"
+      - choose:
+          - alias: Limit secondary
+            conditions:
+              - condition: template
+                value_template: "{{ limit and not active }}"
+            sequence:
+              - choose:
+                  - alias: Limit to minimum
+                    conditions:
+                      - condition: template
+                        value_template: "{{ domain == 'number' }}"
+                    sequence:
+                      - action: input_number.set_value
+                        target:
+                          entity_id: input_number.negative_price_previous_limit_secondary
+                        data:
+                          value: "{{ current }}"
+                      - action: input_boolean.turn_on
+                        target:
+                          entity_id: input_boolean.negative_price_secondary_by_automation
+                      - action: number.set_value
+                        target:
+                          entity_id: "{{ ent }}"
+                        data:
+                          value: "{{ lmin }}"
+                  - alias: Switch off
+                    conditions:
+                      - condition: template
+                        value_template: "{{ domain == 'switch' and is_state(ent, 'on') }}"
+                    sequence:
+                      - action: input_boolean.turn_on
+                        target:
+                          entity_id: input_boolean.negative_price_secondary_by_automation
+                      - action: switch.turn_off
+                        target:
+                          entity_id: "{{ ent }}"
+                  - alias: Start script (block)
+                    conditions:
+                      - condition: template
+                        value_template: "{{ domain == 'script' }}"
+                    sequence:
+                      - action: input_boolean.turn_on
+                        target:
+                          entity_id: input_boolean.negative_price_secondary_by_automation
+                      - action: script.turn_on
+                        target:
+                          entity_id: "{{ ent }}"
+                        data:
+                          variables:
+                            block: true
+              - if:
+                  - condition: state
+                    entity_id: input_boolean.negative_price_secondary_by_automation
+                    state: 'on'
+                then:
+                  - action: logbook.log
+                    data:
+                      message: >-
+                        ☀️⛔Negative feed-in price — secondary inverter limited ({{ ent }}{{ (': ' ~ current ~ ' → ' ~ lmin ~ unit) if domain == 'number' else '' }}) —
+                      entity_id: input_select.zendure_operation_mode
+                      name: ' '
+          - alias: Restore secondary
+            conditions:
+              - condition: template
+                value_template: "{{ not limit and active }}"
+            sequence:
+              - choose:
+                  - alias: Restore limit
+                    conditions:
+                      - condition: template
+                        value_template: "{{ domain == 'number' }}"
+                    sequence:
+                      - action: number.set_value
+                        target:
+                          entity_id: "{{ ent }}"
+                        data:
+                          value: >-
+                            {%- set v = states('input_number.negative_price_previous_limit_secondary') | float(0) -%}
+                            {{ v if lmin < v <= lmax else lmax }}
+                  - alias: Switch back on
+                    conditions:
+                      - condition: template
+                        value_template: "{{ domain == 'switch' }}"
+                    sequence:
+                      - action: switch.turn_on
+                        target:
+                          entity_id: "{{ ent }}"
+                  - alias: Start script (release)
+                    conditions:
+                      - condition: template
+                        value_template: "{{ domain == 'script' }}"
+                    sequence:
+                      - action: script.turn_on
+                        target:
+                          entity_id: "{{ ent }}"
+                        data:
+                          variables:
+                            block: false
+              - action: input_boolean.turn_off
+                target:
+                  entity_id: input_boolean.negative_price_secondary_by_automation
+              - action: logbook.log
+                data:
+                  message: ☀️✅Secondary inverter limit released ({{ ent }}) —
+                  entity_id: input_select.zendure_operation_mode
+                  name: ' '

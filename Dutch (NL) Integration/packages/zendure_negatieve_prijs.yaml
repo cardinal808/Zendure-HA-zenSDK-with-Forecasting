@@ -1,0 +1,663 @@
+# Zendure zenSDK (Gielz) + Forecasting 2026.11.2 | gebaseerd op Gielz v20261007 | set: publiek (zonder HVAC)
+# Gebaseerd op Gielz1986/Zendure-HA-zenSDK (Michiel Hofker). Zie README.md voor licentie en wijzigingen.
+# =====================================================================
+# Zendure Negatieve Prijs - niet terugleveren als teruglevering geld kost
+#
+# Plaats dit bestand naast zendure_gielz1986_nl.yaml (zelfde packages-map).
+#
+# Terugleverprijs (sensor.zendure_terugleverprijs_nu), per kwartier:
+#   marktprijs + bonus % (alleen bij positieve marktprijs) + opslag teruglevering
+#   Marktprijs uit de Nordpool-sensor van Gielz; bonus en opslag uit Configuratie (Besparing).
+# binary_sensor.zendure_export_geblokkeerd_negatieve_prijs staat aan als de functie aanstaat
+# en de terugleverprijs negatief is.
+#
+# Drie automatiseringen:
+# 1. Zendure PV: zet Gielz' schakelaar PV Export Uitgeschakeld aan zolang de prijs negatief is
+#    (Gielz zet de Zendure dan op gridReverse = verboden) en daarna weer uit.
+# 2. Externe omvormer (optioneel). Kies het type begrenzing; de limiter-entiteit bepaalt de rest:
+#    - number.* + "Productielimiet" (SolarEdge, OpenDTU/Hoymiles, APsystems, Fronius Modbus):
+#      regelt de omvormer elke 10 s terug op de P1-meter, zodat hij het huis blijft voeden
+#      maar niet teruglevert. Knijpt alleen als de Zendure het overschot niet kan opnemen
+#      (accu vol, laadt al op ~maximaal vermogen, of modus laadt niet op zon) en mikt dan net
+#      onder Gielz' oplaadmarge, zodat de Zendure op vol vermogen blijft laden.
+#      Werkt met een limiet in % of in W. Vul bij voorkeur de AC-vermogenssensor in: bij een
+#      %-limiet leidt hij daaruit af hoeveel W 1% is.
+#    - number.* + "Exportlimiet" (GoodWe, Growatt): zet de exportlimiet op het minimum (0);
+#      de omvormer regelt zelf op zijn eigen meter.
+#    - switch.* (bv. Enphase Production, APsystems inverter_status): uit en daarna weer aan.
+#    - script.* (bv. Huawei, Sofar of een Modbus-register): de module start het script met
+#      variabele blokkeren: true (begrenzen) of false (opheffen). Voorbeeld Huawei (controleer
+#      de velden in Ontwikkelhulpmiddelen > Acties):
+#        script:
+#          huawei_export_negatieve_prijs:
+#            sequence:
+#              - if: "{{ blokkeren }}"
+#                then:
+#                  - action: huawei_solar.set_maximum_feed_grid_power
+#                    data: { device_id: <jouw omvormer>, power: 0 }
+#                else:
+#                  - action: huawei_solar.reset_maximum_feed_grid_power
+#                    data: { device_id: <jouw omvormer> }
+#    Exportlimiet, schakelaar en script grijpen pas in als de accu vol is (of de Zendure niet
+#    op zon laadt) en heffen pas op als de prijs niet meer negatief is. Zo werken de omvormer
+#    en de Zendure niet tegen elkaar in en gaat de omvormer niet aan/uit bij elke % SOC.
+#    Na afloop zet hij een limiet terug op de waarde van daarvoor.
+# 3. Secundaire externe omvormer (bij Aantal externe omvormers = 2): gaat helemaal naar het
+#    minimum (number.* naar 0, switch.* uit, script.* met blokkeren: true) zodra de Zendure het
+#    overschot niet meer kan opnemen, en gaat terug als de prijs niet meer negatief is.
+#    De primaire omvormer regelt dan alleen op de P1-meter. Kies als primair de omvormer met
+#    een productielimiet (bv. SolarEdge). Dat de secundaire zon dan niet gebruikt wordt, kost
+#    niets: bij een negatieve prijs is stroom uit het net gratis of levert zelfs geld op.
+# Aantal externe omvormers = 0 zet automatisering 2 en 3 uit.
+#
+# Alle automatiseringen zetten alleen terug wat ze zelf hebben omgezet.
+# Laden uit zon en ontladen naar het huis (NOM) blijven gewoon werken.
+# =====================================================================
+
+input_boolean:
+  negatieve_prijs_export_blokkeren:
+    name: Negatieve Prijs Export Blokkeren
+    icon: mdi:transmission-tower-off
+
+  # Intern: deze module heeft de Zendure PV-export uitgeschakeld
+  negatieve_prijs_export_door_automatisering:
+    name: Negatieve Prijs Export Door Automatisering
+    icon: mdi:robot
+
+  # Intern: deze module begrenst de externe omvormer
+  negatieve_prijs_limiter_door_automatisering:
+    name: Negatieve Prijs Limiter Door Automatisering
+    icon: mdi:robot
+
+  # Intern: deze module heeft de secundaire externe omvormer uitgezet
+  negatieve_prijs_secundair_door_automatisering:
+    name: Negatieve Prijs Secundair Door Automatisering
+    icon: mdi:robot
+
+input_select:
+  negatieve_prijs_omvormer_aantal:
+    name: Negatieve Prijs Aantal Externe Omvormers
+    icon: mdi:numeric
+    options:
+      - '0'
+      - '1'
+      - '2'
+
+  negatieve_prijs_omvormer_type:
+    name: Negatieve Prijs Omvormer Type
+    icon: mdi:solar-power-variant
+    options:
+      - Productielimiet (SolarEdge, Hoymiles, APsystems, Fronius)
+      - Exportlimiet (GoodWe, Growatt)
+
+input_number:
+  # Intern: limiet van de omvormer vóór het begrenzen
+  negatieve_prijs_limiet_vorige:
+    name: Negatieve Prijs Limiet Vorige
+    icon: mdi:history
+    min: 0
+    max: 100000
+    step: 0.1
+    mode: box
+
+  # Intern: limiet van de secundaire omvormer vóór het begrenzen
+  negatieve_prijs_limiet_vorige_secundair:
+    name: Negatieve Prijs Limiet Vorige Secundair
+    icon: mdi:history
+    min: 0
+    max: 100000
+    step: 0.1
+    mode: box
+
+input_text:
+  negatieve_prijs_omvormer_limiet:
+    name: Negatieve Prijs Omvormer Limiet
+    icon: mdi:tune-vertical
+    max: 250
+    mode: text
+
+  negatieve_prijs_omvormer_vermogen_sensor:
+    name: Negatieve Prijs Omvormer Vermogen Sensor
+    icon: mdi:solar-power
+    max: 250
+    mode: text
+
+  negatieve_prijs_omvormer_limiet_secundair:
+    name: Negatieve Prijs Omvormer Limiet Secundair
+    icon: mdi:tune-vertical
+    max: 250
+    mode: text
+
+template:
+  - sensor:
+      - name: "Zendure Terugleverprijs Nu"
+        unique_id: zendure_terugleverprijs_nu
+        icon: mdi:transmission-tower-export
+        unit_of_measurement: "€/kWh"
+        state: >
+          {%- set bron = states('input_text.dynamisch_nordpool_sensor') | trim -%}
+          {%- set ns = namespace(p=none) -%}
+          {%- if bron.startswith('sensor.') -%}
+            {%- set nu = as_timestamp(now()) -%}
+            {%- for x in (state_attr(bron, 'raw_today') or []) -%}
+              {%- if x.value is number and as_timestamp(x.start, 0) <= nu < as_timestamp(x.end, 0) -%}
+                {%- set ns.p = x.value -%}
+              {%- endif -%}
+            {%- endfor -%}
+          {%- endif -%}
+          {%- if ns.p is none -%}
+            {%- set ns.p = states('sensor.dynamisch_nordpool') | float(none) -%}
+          {%- endif -%}
+          {%- if ns.p is number -%}
+            {%- set opslag = states('input_number.besparing_dyn_opslag_teruglevering') | float(0) -%}
+            {%- set bonus = states('input_number.besparing_dyn_bonus_teruglevering') | float(0) / 100 -%}
+            {{ (ns.p + bonus * ([ns.p, 0] | max) + opslag) | round(5) }}
+          {%- else -%}
+            {{ none }}
+          {%- endif -%}
+        attributes:
+          marktprijs: >
+            {%- set bron = states('input_text.dynamisch_nordpool_sensor') | trim -%}
+            {%- set ns = namespace(p=none) -%}
+            {%- if bron.startswith('sensor.') -%}
+              {%- set nu = as_timestamp(now()) -%}
+              {%- for x in (state_attr(bron, 'raw_today') or []) -%}
+                {%- if x.value is number and as_timestamp(x.start, 0) <= nu < as_timestamp(x.end, 0) -%}
+                  {%- set ns.p = x.value -%}
+                {%- endif -%}
+              {%- endfor -%}
+            {%- endif -%}
+            {{ ns.p if ns.p is not none else states('sensor.dynamisch_nordpool') | float(none) }}
+          opslag_teruglevering: "{{ states('input_number.besparing_dyn_opslag_teruglevering') | float(0) }}"
+          bonus_teruglevering_pct: "{{ states('input_number.besparing_dyn_bonus_teruglevering') | float(0) }}"
+
+  - binary_sensor:
+      - name: "Zendure Export Geblokkeerd (Negatieve Prijs)"
+        unique_id: zendure_export_geblokkeerd_negatieve_prijs
+        icon: mdi:transmission-tower-off
+        state: >
+          {%- set p = states('sensor.zendure_terugleverprijs_nu') | float(none) -%}
+          {{ is_state('input_boolean.negatieve_prijs_export_blokkeren', 'on')
+             and p is number and p < 0 }}
+
+automation:
+  # -------------------------------------------------------------------
+  # 1. Zendure PV-export (via Gielz' schakelaar)
+  # -------------------------------------------------------------------
+  - id: zendure_negatieve_prijs_export
+    alias: Zendure Negatieve Prijs Export
+    description: >-
+      Forecasting 2026.11.2 - Schakelt de Zendure PV-export uit (via Gielz' PV Export
+      Uitgeschakeld) zolang de terugleverprijs negatief is, en zet hem daarna terug.
+    mode: queued
+    max: 5
+    triggers:
+      - trigger: state
+        entity_id: binary_sensor.zendure_export_geblokkeerd_negatieve_prijs
+        to:
+          - 'on'
+          - 'off'
+        for:
+          seconds: 20
+      - trigger: homeassistant
+        event: start
+      - trigger: time_pattern
+        minutes: /5
+    conditions: []
+    actions:
+      - choose:
+          - alias: Negatieve prijs - PV-export uitschakelen
+            conditions:
+              - condition: state
+                entity_id: binary_sensor.zendure_export_geblokkeerd_negatieve_prijs
+                state: 'on'
+              - condition: state
+                entity_id: input_boolean.zendure_2400_ac_pv_export_uitgeschakeld
+                state: 'off'
+            sequence:
+              - action: input_boolean.turn_on
+                target:
+                  entity_id: input_boolean.negatieve_prijs_export_door_automatisering
+              - action: input_boolean.turn_on
+                target:
+                  entity_id: input_boolean.zendure_2400_ac_pv_export_uitgeschakeld
+              - action: logbook.log
+                data:
+                  message: >-
+                    ☀️⛔Negatieve terugleverprijs (€{{ '%.3f' | format(states('sensor.zendure_terugleverprijs_nu') | float(0)) }}) —
+                    PV export uitgeschakeld —
+                  entity_id: input_select.zendure_2400_ac_modus_selecteren
+                  name: ' '
+          - alias: Prijs weer normaal - PV-export terugzetten
+            conditions:
+              - condition: state
+                entity_id: binary_sensor.zendure_export_geblokkeerd_negatieve_prijs
+                state: 'off'
+              - condition: state
+                entity_id: input_boolean.negatieve_prijs_export_door_automatisering
+                state: 'on'
+            sequence:
+              - action: input_boolean.turn_off
+                target:
+                  entity_id: input_boolean.zendure_2400_ac_pv_export_uitgeschakeld
+              - action: input_boolean.turn_off
+                target:
+                  entity_id: input_boolean.negatieve_prijs_export_door_automatisering
+              - action: logbook.log
+                data:
+                  message: >-
+                    ☀️✅Terugleverprijs niet meer negatief (€{{ '%.3f' | format(states('sensor.zendure_terugleverprijs_nu') | float(0)) }}) —
+                    PV export weer toegestaan —
+                  entity_id: input_select.zendure_2400_ac_modus_selecteren
+                  name: ' '
+
+  # -------------------------------------------------------------------
+  # 2. Externe omvormer (optioneel)
+  # -------------------------------------------------------------------
+  - id: zendure_negatieve_prijs_limiter
+    alias: Zendure Negatieve Prijs Externe Omvormer
+    description: >-
+      Forecasting 2026.11.2 - Begrenst een externe omvormer (productielimiet op de P1-meter,
+      exportlimiet op 0, schakelaar uit of script) zolang de terugleverprijs negatief is en
+      de Zendure het overschot niet kan opnemen.
+    mode: single
+    max_exceeded: silent
+    triggers:
+      - trigger: time_pattern
+        seconds: /10
+    conditions:
+      - alias: Minstens 1 externe omvormer, of primair staat nog begrensd
+        condition: template
+        value_template: >-
+          {{ states('input_select.negatieve_prijs_omvormer_aantal') | int(0) >= 1
+             or is_state('input_boolean.negatieve_prijs_limiter_door_automatisering', 'on') }}
+      - alias: Limiter ingevuld (number.*, switch.* of script.*) en bereikbaar
+        condition: template
+        value_template: >-
+          {% set e = states('input_text.negatieve_prijs_omvormer_limiet') | trim %}
+          {{ e.split('.')[0] in ['number', 'switch', 'script'] and has_value(e) }}
+    actions:
+      - variables:
+          ent: "{{ states('input_text.negatieve_prijs_omvormer_limiet') | trim }}"
+          domein: "{{ ent.split('.')[0] }}"
+          exportlimiet: "{{ 'Exportlimiet' in states('input_select.negatieve_prijs_omvormer_type') }}"
+          # Productielimiet: alleen number.* met type Productielimiet; regelt zelf op P1
+          productie: "{{ domein == 'number' and not exportlimiet }}"
+          actief: "{{ is_state('input_boolean.negatieve_prijs_limiter_door_automatisering', 'on') }}"
+          lmin: "{{ state_attr(ent, 'min') | float(0) }}"
+          lmax: "{{ state_attr(ent, 'max') | float(100) }}"
+          # Limiet in W als het maximum boven 100 ligt, anders in %
+          in_watt: "{{ lmax > 100 }}"
+          huidig: "{{ states(ent) | float(lmax) }}"
+          p1: "{{ states('sensor.p1_aansturing_vermogen') | float(0) }}"
+          p1_ok: "{{ has_value('sensor.p1_aansturing_vermogen') }}"
+          uit_sensor: "{{ states('input_text.negatieve_prijs_omvormer_vermogen_sensor') | trim }}"
+          uit_w: >-
+            {{ states(uit_sensor) | float(none) if uit_sensor.startswith('sensor.') else none }}
+          # Kan de Zendure het overschot nog opnemen?
+          accu_vol: >-
+            {{ states('sensor.zendure_2400_ac_laadpercentage') | float(0) >=
+               states('sensor.zendure_2400_ac_maximale_laadpercentage') | float(100)
+               or is_state('sensor.zendure_2400_ac_soc_limiet_status', 'Laadlimiet bereikt') }}
+          laadt_max: >-
+            {{ states('sensor.zendure_2400_ac_vermogen_aansturing') | float(0) >=
+               0.9 * states('input_number.zendure_2400_ac_max_oplaadvermogen') | float(2400) }}
+          laadt_op_zon: >-
+            {{ states('input_select.zendure_2400_ac_modus_selecteren') in
+               ['Nul op de meter', 'Alleen slim opladen', 'Dynamisch NOM', 'Dynamisch NOM + Forecasting',
+                'Dynamisch NOM (Duur)', 'Dynamisch Handelen + NOM'] }}
+          negatief: >-
+            {{ is_state('binary_sensor.zendure_export_geblokkeerd_negatieve_prijs', 'on')
+               and states('input_select.negatieve_prijs_omvormer_aantal') | int(0) >= 1 }}
+          # Productielimiet: begrenzen zolang de Zendure het overschot niet kan opnemen.
+          # Overige typen: starten als de accu vol is (of de Zendure niet op zon laadt),
+          # en vasthouden tot de prijs niet meer negatief is.
+          begrenzen: >-
+            {%- if productie -%}
+              {{ negatief and p1_ok and (accu_vol or laadt_max or not laadt_op_zon) }}
+            {%- else -%}
+              {{ negatief and (accu_vol or not laadt_op_zon or actief) }}
+            {%- endif -%}
+          # P1-doel bij productielimiet (negatief = export). Een kleine export voorkomt pendelen
+          # rond 0 W. Accu vol: -25 W. Laadt de Zendure nog: 50 W onder Gielz' oplaadmarge,
+          # zodat Gielz de Zendure op maximaal laadvermogen houdt.
+          doel: >-
+            {%- if accu_vol or not laadt_op_zon -%}
+              -25
+            {%- else -%}
+              {{ -(states('input_number.zendure_2400_ac_oplaadmarge') | float(50) + 50) }}
+            {%- endif -%}
+          # Nieuwe productielimiet. In W: direct uit omvormervermogen + P1. In %: W per % afgeleid
+          # uit omvormervermogen / huidige limiet (klopt als de limiet het vermogen bepaalt; als de
+          # zon het bepaalt valt de schatting te laag uit en is de volgende stap wel goed).
+          # Zonder vermogenssensor: in W stapsgewijs (factor 0,7), in % stappen van 5%.
+          nieuw: >-
+            {%- if in_watt -%}
+              {%- if uit_w is number -%}
+                {%- set n = uit_w + p1 - doel -%}
+              {%- else -%}
+                {%- set n = huidig + (p1 - doel) * 0.7 -%}
+              {%- endif -%}
+            {%- elif uit_w is number and uit_w >= 100 and huidig >= 5 -%}
+              {%- set n = (uit_w + p1 - doel) / (uit_w / huidig) -%}
+            {%- else -%}
+              {%- set n = huidig + (5 if p1 > doel else -5) -%}
+            {%- endif -%}
+            {{ ([[n, lmin] | max, lmax] | min) | round(0 if in_watt else 1) }}
+          drempel: "{{ 20 if in_watt else 1 }}"
+          eenheid: "{{ ' W' if in_watt else '%' }}"
+      - choose:
+          - alias: Begrenzen starten
+            conditions:
+              - condition: template
+                value_template: "{{ begrenzen and not actief }}"
+            sequence:
+              - choose:
+                  - alias: Productielimiet
+                    conditions:
+                      - condition: template
+                        value_template: "{{ productie }}"
+                    sequence:
+                      - action: input_number.set_value
+                        target:
+                          entity_id: input_number.negatieve_prijs_limiet_vorige
+                        data:
+                          value: "{{ huidig }}"
+                      - action: input_boolean.turn_on
+                        target:
+                          entity_id: input_boolean.negatieve_prijs_limiter_door_automatisering
+                      - action: number.set_value
+                        target:
+                          entity_id: "{{ ent }}"
+                        data:
+                          value: "{{ nieuw }}"
+                      - action: logbook.log
+                        data:
+                          message: >-
+                            ☀️⛔Negatieve terugleverprijs — omvormer begrensd ({{ ent }}: {{ huidig }} → {{ nieuw }}{{ eenheid }}) —
+                          entity_id: input_select.zendure_2400_ac_modus_selecteren
+                          name: ' '
+                  - alias: Exportlimiet op minimum
+                    conditions:
+                      - condition: template
+                        value_template: "{{ domein == 'number' and exportlimiet }}"
+                    sequence:
+                      - action: input_number.set_value
+                        target:
+                          entity_id: input_number.negatieve_prijs_limiet_vorige
+                        data:
+                          value: "{{ huidig }}"
+                      - action: input_boolean.turn_on
+                        target:
+                          entity_id: input_boolean.negatieve_prijs_limiter_door_automatisering
+                      - action: number.set_value
+                        target:
+                          entity_id: "{{ ent }}"
+                        data:
+                          value: "{{ lmin }}"
+                      - action: logbook.log
+                        data:
+                          message: >-
+                            ☀️⛔Negatieve terugleverprijs — exportlimiet op {{ lmin }}{{ eenheid }} ({{ ent }}, was {{ huidig }}{{ eenheid }}) —
+                          entity_id: input_select.zendure_2400_ac_modus_selecteren
+                          name: ' '
+                  - alias: Schakelaar uit
+                    conditions:
+                      - condition: template
+                        value_template: "{{ domein == 'switch' and is_state(ent, 'on') }}"
+                    sequence:
+                      - action: input_boolean.turn_on
+                        target:
+                          entity_id: input_boolean.negatieve_prijs_limiter_door_automatisering
+                      - action: switch.turn_off
+                        target:
+                          entity_id: "{{ ent }}"
+                      - action: logbook.log
+                        data:
+                          message: ☀️⛔Negatieve terugleverprijs — {{ ent }} uitgeschakeld —
+                          entity_id: input_select.zendure_2400_ac_modus_selecteren
+                          name: ' '
+                  - alias: Script starten (blokkeren)
+                    conditions:
+                      - condition: template
+                        value_template: "{{ domein == 'script' }}"
+                    sequence:
+                      - action: input_boolean.turn_on
+                        target:
+                          entity_id: input_boolean.negatieve_prijs_limiter_door_automatisering
+                      - action: script.turn_on
+                        target:
+                          entity_id: "{{ ent }}"
+                        data:
+                          variables:
+                            blokkeren: true
+                      - action: logbook.log
+                        data:
+                          message: ☀️⛔Negatieve terugleverprijs — {{ ent }} gestart (blokkeren) —
+                          entity_id: input_select.zendure_2400_ac_modus_selecteren
+                          name: ' '
+          - alias: Productielimiet bijregelen
+            conditions:
+              - condition: template
+                value_template: "{{ begrenzen and actief and productie and (nieuw - huidig) | abs >= drempel }}"
+            sequence:
+              - action: number.set_value
+                target:
+                  entity_id: "{{ ent }}"
+                data:
+                  value: "{{ nieuw }}"
+          - alias: Begrenzing opheffen
+            conditions:
+              - condition: template
+                value_template: "{{ not begrenzen and actief }}"
+            sequence:
+              - choose:
+                  - alias: Limiet terugzetten
+                    conditions:
+                      - condition: template
+                        value_template: "{{ domein == 'number' }}"
+                    sequence:
+                      - variables:
+                          terug: >-
+                            {%- set v = states('input_number.negatieve_prijs_limiet_vorige') | float(0) -%}
+                            {{ v if lmin < v <= lmax else lmax }}
+                      - action: number.set_value
+                        target:
+                          entity_id: "{{ ent }}"
+                        data:
+                          value: "{{ terug }}"
+                      - action: logbook.log
+                        data:
+                          message: >-
+                            ☀️✅Begrenzing externe omvormer opgeheven ({{ ent }} → {{ terug }}{{ eenheid }}) —
+                          entity_id: input_select.zendure_2400_ac_modus_selecteren
+                          name: ' '
+                  - alias: Schakelaar weer aan
+                    conditions:
+                      - condition: template
+                        value_template: "{{ domein == 'switch' }}"
+                    sequence:
+                      - action: switch.turn_on
+                        target:
+                          entity_id: "{{ ent }}"
+                      - action: logbook.log
+                        data:
+                          message: ☀️✅Terugleverprijs niet meer negatief — {{ ent }} weer aangezet —
+                          entity_id: input_select.zendure_2400_ac_modus_selecteren
+                          name: ' '
+                  - alias: Script starten (opheffen)
+                    conditions:
+                      - condition: template
+                        value_template: "{{ domein == 'script' }}"
+                    sequence:
+                      - action: script.turn_on
+                        target:
+                          entity_id: "{{ ent }}"
+                        data:
+                          variables:
+                            blokkeren: false
+                      - action: logbook.log
+                        data:
+                          message: ☀️✅Terugleverprijs niet meer negatief — {{ ent }} gestart (opheffen) —
+                          entity_id: input_select.zendure_2400_ac_modus_selecteren
+                          name: ' '
+              - action: input_boolean.turn_off
+                target:
+                  entity_id: input_boolean.negatieve_prijs_limiter_door_automatisering
+
+  # -------------------------------------------------------------------
+  # 3. Secundaire externe omvormer (optioneel, bij 2 externe omvormers)
+  # -------------------------------------------------------------------
+  - id: zendure_negatieve_prijs_secundair
+    alias: Zendure Negatieve Prijs Secundaire Omvormer
+    description: >-
+      Forecasting 2026.11.2 - Zet de secundaire externe omvormer naar het minimum (number op 0,
+      switch uit, script met blokkeren: true) zolang de terugleverprijs negatief is en de Zendure
+      het overschot niet kan opnemen. De primaire omvormer regelt dan alleen op de P1-meter.
+    mode: single
+    max_exceeded: silent
+    triggers:
+      - trigger: time_pattern
+        seconds: /10
+    conditions:
+      - alias: Twee externe omvormers, of secundair staat nog begrensd
+        condition: template
+        value_template: >-
+          {{ states('input_select.negatieve_prijs_omvormer_aantal') | int(0) == 2
+             or is_state('input_boolean.negatieve_prijs_secundair_door_automatisering', 'on') }}
+      - alias: Limiter secundair ingevuld (number.*, switch.* of script.*) en bereikbaar
+        condition: template
+        value_template: >-
+          {% set e = states('input_text.negatieve_prijs_omvormer_limiet_secundair') | trim %}
+          {{ e.split('.')[0] in ['number', 'switch', 'script'] and has_value(e) }}
+    actions:
+      - variables:
+          ent: "{{ states('input_text.negatieve_prijs_omvormer_limiet_secundair') | trim }}"
+          domein: "{{ ent.split('.')[0] }}"
+          actief: "{{ is_state('input_boolean.negatieve_prijs_secundair_door_automatisering', 'on') }}"
+          aan: "{{ states('input_select.negatieve_prijs_omvormer_aantal') | int(0) == 2 }}"
+          lmin: "{{ state_attr(ent, 'min') | float(0) }}"
+          lmax: "{{ state_attr(ent, 'max') | float(100) }}"
+          eenheid: "{{ ' W' if lmax > 100 else '%' }}"
+          huidig: "{{ states(ent) | float(lmax) }}"
+          accu_vol: >-
+            {{ states('sensor.zendure_2400_ac_laadpercentage') | float(0) >=
+               states('sensor.zendure_2400_ac_maximale_laadpercentage') | float(100)
+               or is_state('sensor.zendure_2400_ac_soc_limiet_status', 'Laadlimiet bereikt') }}
+          laadt_max: >-
+            {{ states('sensor.zendure_2400_ac_vermogen_aansturing') | float(0) >=
+               0.9 * states('input_number.zendure_2400_ac_max_oplaadvermogen') | float(2400) }}
+          laadt_op_zon: >-
+            {{ states('input_select.zendure_2400_ac_modus_selecteren') in
+               ['Nul op de meter', 'Alleen slim opladen', 'Dynamisch NOM', 'Dynamisch NOM + Forecasting',
+                'Dynamisch NOM (Duur)', 'Dynamisch Handelen + NOM'] }}
+          negatief: "{{ is_state('binary_sensor.zendure_export_geblokkeerd_negatieve_prijs', 'on') }}"
+          # Starten zodra de Zendure het overschot niet kan opnemen; vasthouden tot de prijs
+          # niet meer negatief is (of het aantal omvormers niet meer 2 is).
+          begrenzen: "{{ aan and negatief and (accu_vol or laadt_max or not laadt_op_zon or actief) }}"
+      - choose:
+          - alias: Secundair begrenzen
+            conditions:
+              - condition: template
+                value_template: "{{ begrenzen and not actief }}"
+            sequence:
+              - choose:
+                  - alias: Limiet op minimum
+                    conditions:
+                      - condition: template
+                        value_template: "{{ domein == 'number' }}"
+                    sequence:
+                      - action: input_number.set_value
+                        target:
+                          entity_id: input_number.negatieve_prijs_limiet_vorige_secundair
+                        data:
+                          value: "{{ huidig }}"
+                      - action: input_boolean.turn_on
+                        target:
+                          entity_id: input_boolean.negatieve_prijs_secundair_door_automatisering
+                      - action: number.set_value
+                        target:
+                          entity_id: "{{ ent }}"
+                        data:
+                          value: "{{ lmin }}"
+                  - alias: Schakelaar uit
+                    conditions:
+                      - condition: template
+                        value_template: "{{ domein == 'switch' and is_state(ent, 'on') }}"
+                    sequence:
+                      - action: input_boolean.turn_on
+                        target:
+                          entity_id: input_boolean.negatieve_prijs_secundair_door_automatisering
+                      - action: switch.turn_off
+                        target:
+                          entity_id: "{{ ent }}"
+                  - alias: Script starten (blokkeren)
+                    conditions:
+                      - condition: template
+                        value_template: "{{ domein == 'script' }}"
+                    sequence:
+                      - action: input_boolean.turn_on
+                        target:
+                          entity_id: input_boolean.negatieve_prijs_secundair_door_automatisering
+                      - action: script.turn_on
+                        target:
+                          entity_id: "{{ ent }}"
+                        data:
+                          variables:
+                            blokkeren: true
+              - if:
+                  - condition: state
+                    entity_id: input_boolean.negatieve_prijs_secundair_door_automatisering
+                    state: 'on'
+                then:
+                  - action: logbook.log
+                    data:
+                      message: >-
+                        ☀️⛔Negatieve terugleverprijs — secundaire omvormer begrensd ({{ ent }}{{ (': ' ~ huidig ~ ' → ' ~ lmin ~ eenheid) if domein == 'number' else '' }}) —
+                      entity_id: input_select.zendure_2400_ac_modus_selecteren
+                      name: ' '
+          - alias: Secundair terugzetten
+            conditions:
+              - condition: template
+                value_template: "{{ not begrenzen and actief }}"
+            sequence:
+              - choose:
+                  - alias: Limiet terugzetten
+                    conditions:
+                      - condition: template
+                        value_template: "{{ domein == 'number' }}"
+                    sequence:
+                      - action: number.set_value
+                        target:
+                          entity_id: "{{ ent }}"
+                        data:
+                          value: >-
+                            {%- set v = states('input_number.negatieve_prijs_limiet_vorige_secundair') | float(0) -%}
+                            {{ v if lmin < v <= lmax else lmax }}
+                  - alias: Schakelaar weer aan
+                    conditions:
+                      - condition: template
+                        value_template: "{{ domein == 'switch' }}"
+                    sequence:
+                      - action: switch.turn_on
+                        target:
+                          entity_id: "{{ ent }}"
+                  - alias: Script starten (opheffen)
+                    conditions:
+                      - condition: template
+                        value_template: "{{ domein == 'script' }}"
+                    sequence:
+                      - action: script.turn_on
+                        target:
+                          entity_id: "{{ ent }}"
+                        data:
+                          variables:
+                            blokkeren: false
+              - action: input_boolean.turn_off
+                target:
+                  entity_id: input_boolean.negatieve_prijs_secundair_door_automatisering
+              - action: logbook.log
+                data:
+                  message: ☀️✅Begrenzing secundaire omvormer opgeheven ({{ ent }}) —
+                  entity_id: input_select.zendure_2400_ac_modus_selecteren
+                  name: ' '

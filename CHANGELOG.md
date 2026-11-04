@@ -2,6 +2,29 @@
 
 Versions follow `year.month.sequence`; the sequence restarts at 1 every month. Each version states which Gielz version it is based on. [Nederlands](CHANGELOG.nl.md)
 
+## 2026.11.2 — based on Gielz v20261007
+
+**New: no export at a negative price** (optional)
+- New package `packages/zendure_negative_price_global.yaml` and a **Configuration (Negative Price)** block on the Settings tab. Feed-in price per quarter hour = market price + bonus % (only when the market price is positive) + feed-in markup, using the tariffs from Configuration (Savings) (`sensor.zendure_feedin_price_now`).
+- When it is negative, the module turns on Gielz' **PV Export Disabled** and back off afterwards. Charging from solar and discharging to the house keep working.
+- **External inverters (0, 1 or 2):** *Production limit* (SolarEdge, OpenDTU/Hoymiles, APsystems, Fronius) regulates every 10 s on the grid meter, only when the Zendure cannot absorb the surplus; *Export limit* (GoodWe, Growatt) goes to 0; a `switch.*` is turned off, a `script.*` gets `block: true/false`. A second inverter goes fully to its minimum. Everything is restored as it was.
+
+**Planner**
+- **Usage per quarter hour:** the usage profile now also learns how usage is spread over the four quarters within each hour (workday and weekend separately, learning slowly). The planner uses that shape for solar coverage, *battery empty*, the path check, smart hold, tomorrow's estimate and the timeline; the total per hour and the energy balance do not change. While the shape has few measurements, it calculates evenly spread as before. New attributes `usage_per_quarter_source` and `shape_quarter_share_pct`; the profile sensor now measures every quarter hour.
+- **Smart hold:** if the battery will not last until the end of the gap and no charge moment is left, it keeps its charge for the most expensive quarter hours (via *Hold discharging in a cheap dip*).
+- **Charge margin in the path check:** the battery counts as empty once only the margin is left, and if the battery holds less than the margin, the shortfall is charged before the expensive quarter hours (when worthwhile).
+- **Usage profile while learning:** hours with too few measurements blend the measurements there are with the day average, so a clear evening peak already counts.
+
+**Dashboard**
+- *Tomorrow's grid charge estimate* mentions that the charge margin is not included yet.
+- *Collected data*: line *Usage per quarter*.
+- Savings tab: *work-in-progress* notice.
+
+**Upgrading**
+- Replace all files and **restart** Home Assistant (new input fields and a sensor that now measures every quarter hour).
+- Optional: put `zendure_negative_price_global.yaml` (Global) or `zendure_negatieve_prijs.yaml` (NL) in the `packages` folder and turn on the switch in **Configuration (Negative Price)**. The block is below Configuration (PV) and shows when *Show PV on dashboard* is on.
+- The usage per quarter learns by itself; during the first weeks the planner calculates as before.
+
 ## 2026.11.1 — based on Gielz v20261007
 
 **New: Savings**

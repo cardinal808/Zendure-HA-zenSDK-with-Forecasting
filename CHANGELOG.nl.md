@@ -2,6 +2,29 @@
 
 Versies volgen `jaar.maand.volgnummer`; het volgnummer begint elke maand bij 1. Elke versie vermeldt op welke Gielz-versie hij is gebaseerd. [English](CHANGELOG.md)
 
+## 2026.11.2 — gebaseerd op Gielz v20261007
+
+**Nieuw: niet terugleveren bij negatieve prijs** (optioneel)
+- Nieuw pakket `packages/zendure_negatieve_prijs.yaml` en een blok **Configuratie (Negatieve Prijs)** op de tab Configuratie. Terugleverprijs per kwartier = marktprijs + bonus % (alleen bij een positieve marktprijs) + opslag teruglevering, met de tarieven uit Configuratie (Besparing) (`sensor.zendure_terugleverprijs_nu`).
+- Is die negatief, dan zet de module Gielz' **PV Export Uitgeschakeld** aan en daarna weer uit. Laden uit zon en ontladen naar het huis blijven werken.
+- **Externe omvormers (0, 1 of 2):** *Productielimiet* (SolarEdge, OpenDTU/Hoymiles, APsystems, Fronius) regelt elke 10 s op de P1-meter, alleen als de Zendure het overschot niet kan opnemen; *Exportlimiet* (GoodWe, Growatt) gaat naar 0; een `switch.*` gaat uit, een `script.*` krijgt `blokkeren: true/false`. Een tweede omvormer gaat helemaal naar het minimum. Alles wordt teruggezet zoals het was.
+
+**Planner**
+- **Verbruik per kwartier:** het verbruiksprofiel leert nu ook hoe het verbruik binnen elk uur over de vier kwartieren verdeeld is (werkdag en weekend apart, langzaam lerend). De planner gebruikt die vorm voor zon-dekking, *accu leeg*, pad-check, slim vasthouden, de indicatie van morgen en de tijdlijn; het totaal per uur en de energiebalans veranderen niet. Zolang de vorm nog weinig metingen heeft, rekent hij gelijk verdeeld zoals voorheen. Nieuwe attributen `verbruik_per_kwartier_bron` en `vorm_kwartier_aandeel_pct`; de profielsensor meet nu elk kwartier.
+- **Slim vasthouden:** haalt de accu het einde van het gat niet en is er geen laadmoment meer, dan bewaart hij de lading voor de duurste kwartieren (via *Niet ontladen in goedkoop dal*). Nieuwe attributen `slim_vasthouden` en `vasthouden_grensprijs`.
+- **Laadmarge in de pad-check:** de accu telt als leeg zodra alleen de marge over is, en is de accu leger dan de marge, dan wordt het tekort vóór de dure kwartieren bijgeladen (als dat loont).
+- **Verbruiksprofiel tijdens het leren:** uren met nog te weinig metingen mengen de metingen die er zijn met het daggemiddelde, zodat een duidelijke avondpiek al meetelt.
+
+**Dashboard**
+- *Indicatie netladen morgen* vermeldt dat de laadmarge er nog niet in zit.
+- *Verzamelde gegevens*: regel *Verbruik per kwartier*.
+- Tab Besparing: melding *work-in-progress*.
+
+**Upgraden**
+- Vervang alle bestanden en **herstart** Home Assistant (nieuwe invoervelden en een sensor die nu elk kwartier meet).
+- Optioneel: zet `zendure_negatieve_prijs.yaml` (NL) of `zendure_negative_price_global.yaml` (Global) in de map `packages` en zet in **Configuratie (Negatieve Prijs)** de schakelaar aan. Het blok staat onder Configuratie (PV) en is zichtbaar als *PV Tonen Op Dashboard* aanstaat.
+- Het verbruik per kwartier leert vanzelf; in de eerste weken rekent de planner zoals voorheen.
+
 ## 2026.11.1 — gebaseerd op Gielz v20261007
 
 **Nieuw: Besparing**

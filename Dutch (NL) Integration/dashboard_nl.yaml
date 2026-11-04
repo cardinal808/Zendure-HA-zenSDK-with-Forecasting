@@ -1,4 +1,4 @@
-# Zendure zenSDK (Gielz) + Forecasting 2026.11.1 | gebaseerd op Gielz v20261007 | set: publiek (zonder HVAC)
+# Zendure zenSDK (Gielz) + Forecasting 2026.11.2 | gebaseerd op Gielz v20261007 | set: publiek (zonder HVAC)
 # Gebaseerd op Gielz1986/Zendure-HA-zenSDK (Michiel Hofker). Zie README.md voor licentie en wijzigingen.
 views:
   - type: sections
@@ -1577,6 +1577,8 @@ views:
               - Rendement: laden {{ a.efficientie_laden_pct }}%, ontladen {{ a.efficientie_ontladen_pct }}%, samen {{ a.rendement_round_trip_pct }}% ({{ a.rendement_bron }})
 
               - Verbruik per uur: **{{ a.verbruik_per_uur_bron }}**, komende 24 uur {{ a.verbruik_komende_24u_kwh }} kWh. Profiel geleerd: {{ states('sensor.forecast_verbruiksprofiel') }} van 48 uren (werkdag + weekend){% if state_attr('sensor.forecast_verbruiksprofiel', 'laatste_uur') %}, laatste meting {{ state_attr('sensor.forecast_verbruiksprofiel', 'laatste_uur') }}: {{ state_attr('sensor.forecast_verbruiksprofiel', 'laatste_uur_kwh') }} kWh{% endif %}
+
+              - Verbruik per kwartier: **{{ a.verbruik_per_kwartier_bron }}**{% if state_attr('sensor.forecast_verbruiksprofiel', 'laatste_kwartier_kwh') is not none %}, laatste kwartier {{ state_attr('sensor.forecast_verbruiksprofiel', 'laatste_kwartier_kwh') }} kWh{% endif %}
             text_only: false
         visibility:
           - condition: state
@@ -3792,6 +3794,163 @@ views:
             entities:
               - entity: input_boolean.zendure_2400_ac_pv_export_uitgeschakeld
                 name: PV Export Uitgeschakeld
+            visibility:
+              - condition: state
+                entity: input_boolean.pv_tonen_op_dashboard
+                state: 'on'
+          - type: heading
+            icon: ''
+            heading: Configuratie (Negatieve Prijs)
+            heading_style: title
+            badges:
+              - type: entity
+                show_state: true
+                show_icon: true
+                entity: sensor.zendure_terugleverprijs_nu
+                name: Teruglevering
+                state_content:
+                  - name
+                  - state
+                color: '#01a180'
+                tap_action:
+                  action: more-info
+              - type: entity
+                show_state: false
+                show_icon: true
+                entity: binary_sensor.zendure_export_geblokkeerd_negatieve_prijs
+                name: Export geblokkeerd
+                state_content: name
+                color: '#c53b2c'
+                visibility:
+                  - condition: state
+                    entity: binary_sensor.zendure_export_geblokkeerd_negatieve_prijs
+                    state: 'on'
+            visibility:
+              - condition: state
+                entity: input_boolean.pv_tonen_op_dashboard
+                state: 'on'
+          - type: markdown
+            content: >-
+              <ha-alert alert-type="info">Helptekst</ha-alert>Is de
+              terugleverprijs negatief, dan levert de installatie niet terug.
+              Terugleverprijs = marktprijs + bonus % (alleen bij een positieve
+              marktprijs) + opslag teruglevering, met de waarden uit
+              **Configuratie (Besparing)**.
+
+
+              **Zendure:** PV Export Uitgeschakeld gaat automatisch aan en daarna
+              weer uit. Laden uit zon en ontladen naar het huis blijven werken.
+
+
+              **Externe omvormer (optioneel):** kies het **type begrenzing** en
+              vul de limiter-entiteit in.
+
+              - *Productielimiet* (SolarEdge, OpenDTU/Hoymiles, APsystems,
+              Fronius Modbus): een number.* zoals
+              number.solaredge_modbus_active_power_limit. De module regelt op de
+              P1-meter, zodat de omvormer het huis blijft voeden maar niet
+              teruglevert. Vul ook de **vermogenssensor** in (W, bij voorkeur
+              AC, bv. sensor.solaredge_modbus_ac_power); zonder sensor regelt hij
+              in stappen van 5%.
+
+              - *Exportlimiet* (GoodWe, Growatt): een number.* met de
+              exportlimiet. Die gaat op 0; de omvormer regelt zelf op zijn eigen
+              meter.
+
+              - Een **switch.*** (bv. Enphase Production) gaat uit en daarna weer
+              aan. Een **script.*** (bv. voor Huawei of Sofar) wordt gestart met
+              de variabele blokkeren: true of false; een voorbeeld staat
+              bovenin zendure_negatieve_prijs.yaml.
+
+
+              De productielimiet knijpt pas als de Zendure het overschot niet
+              kan opnemen (accu vol of laden op maximaal vermogen) en laat een
+              kleine export staan (25 W, tijdens laden 50 W onder de oplaadmarge)
+              om pendelen rond 0 W te voorkomen. De andere typen grijpen pas in
+              als de accu vol is en heffen pas op als de prijs weer positief is.
+              Na afloop zet hij alles terug zoals het was.
+
+
+              **Twee omvormers:** kies als **primair** de omvormer met een
+              productielimiet (bv. SolarEdge); die regelt op de P1-meter. De
+              **secundaire** gaat helemaal naar 0 (number op 0, switch uit of
+              script met blokkeren: true) zodra de Zendure het overschot niet
+              kan opnemen, en gaat terug als de prijs weer positief is. Dat de
+              zon van de secundaire dan niet gebruikt wordt kost niets: bij een
+              negatieve prijs is stroom uit het net gratis of levert zelfs geld
+              op.
+            text_only: true
+            visibility:
+              - condition: state
+                entity: input_boolean.help_tonen_op_dashboard
+                state: 'on'
+              - condition: state
+                entity: input_boolean.pv_tonen_op_dashboard
+                state: 'on'
+          - type: entities
+            entities:
+              - entity: input_boolean.negatieve_prijs_export_blokkeren
+                name: Niet terugleveren bij negatieve prijs
+            visibility:
+              - condition: state
+                entity: input_boolean.pv_tonen_op_dashboard
+                state: 'on'
+          - type: markdown
+            text_only: true
+            content: >-
+              **Externe omvormer (optioneel)**
+            visibility:
+              - condition: state
+                entity: input_boolean.pv_tonen_op_dashboard
+                state: 'on'
+          - type: entities
+            entities:
+              - entity: input_select.negatieve_prijs_omvormer_aantal
+                name: Aantal externe omvormers
+              - type: conditional
+                conditions:
+                  - entity: input_select.negatieve_prijs_omvormer_aantal
+                    state: '2'
+                row:
+                  type: section
+                  label: Primaire omvormer (regelt op P1)
+              - type: conditional
+                conditions:
+                  - entity: input_select.negatieve_prijs_omvormer_aantal
+                    state_not: '0'
+                row:
+                  entity: input_select.negatieve_prijs_omvormer_type
+                  name: Type begrenzing
+              - type: conditional
+                conditions:
+                  - entity: input_select.negatieve_prijs_omvormer_aantal
+                    state_not: '0'
+                row:
+                  entity: input_text.negatieve_prijs_omvormer_limiet
+                  name: Omvormer limiter entiteit (number.*, switch.* of script.*)
+              - type: conditional
+                conditions:
+                  - entity: input_select.negatieve_prijs_omvormer_aantal
+                    state_not: '0'
+                  - entity: input_select.negatieve_prijs_omvormer_type
+                    state: Productielimiet (SolarEdge, Hoymiles, APsystems, Fronius)
+                row:
+                  entity: input_text.negatieve_prijs_omvormer_vermogen_sensor
+                  name: Vermogenssensor externe omvormer (W)
+              - type: conditional
+                conditions:
+                  - entity: input_select.negatieve_prijs_omvormer_aantal
+                    state: '2'
+                row:
+                  type: section
+                  label: Secundaire omvormer (gaat uit)
+              - type: conditional
+                conditions:
+                  - entity: input_select.negatieve_prijs_omvormer_aantal
+                    state: '2'
+                row:
+                  entity: input_text.negatieve_prijs_omvormer_limiet_secundair
+                  name: Omvormer limiter entiteit (number.*, switch.* of script.*)
             visibility:
               - condition: state
                 entity: input_boolean.pv_tonen_op_dashboard
