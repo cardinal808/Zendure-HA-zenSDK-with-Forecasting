@@ -19,7 +19,7 @@ Versies volgen `jaar.maand.volgnummer`; het volgnummer begint elke maand bij 1. 
 - `binary_sensor.hvac_ontladen_geblokkeerd` heeft een attribuut `reden`, ook zichtbaar in Forecasting Configuratie (HVAC).
 
 **Negatieve prijs**
-- Nieuwe schakelaar **Zendure Pro PV-export uitschakelen** (`input_boolean.negatieve_prijs_zendure_pv_export`): kies of de functie bij een negatieve prijs ook de PV-export van de Zendure Pro (zon-ingangen) uitschakelt via Gielz' *PV Export Uitgeschakeld*. Uit = alleen de externe omvormers begrenzen, bv. bij een Zendure zonder zonnepanelen.
+- Nieuwe schakelaar **Zendure Pro PV-export uitschakelen** (`input_boolean.negatieve_prijs_zendure_pv_export`): kies of de functie bij een negatieve prijs ook de PV-export van de Zendure Pro (zon-ingangen) uitschakelt via Gielz' *PV Export Uitgeschakeld*. Gaat vanzelf aan zodra je *Niet terugleveren* aanzet; uit = alleen de externe omvormers begrenzen, bv. bij een Zendure zonder zonnepanelen.
 - De instellingen voor de Zendure Pro en de externe omvormer staan nu samen in één kaart.
 
 **Dashboard**
@@ -31,7 +31,7 @@ Versies volgen `jaar.maand.volgnummer`; het volgnummer begint elke maand bij 1. 
 **Upgraden**
 - Vervang alle bestanden en **herstart** Home Assistant.
 - Optioneel: zet `zendure_ev.yaml` en/of `zendure_hvac.yaml` (NL) of `zendure_ev_global.yaml` en/of `zendure_hvac_global.yaml` (Global) in de map `packages`. Gebruikte je de complete set: `input_boolean.hvac_tonen_op_dashboard` bestaat niet meer en kan weg.
-- Gebruik je *Niet terugleveren bij negatieve prijs*: zet **Zendure Pro PV-export uitschakelen** aan als de Zendure Pro bij een negatieve prijs ook geen PV meer mag terugleveren (de nieuwe schakelaar staat standaard uit).
+- Gebruik je *Niet terugleveren bij negatieve prijs*: **Zendure Pro PV-export uitschakelen** gaat na de herstart vanzelf één keer aan. Zet hem uit als je Zendure geen zonnepanelen heeft.
 - Test eerst of je auto het laden hervat als de stroom terugkomt, voordat je de lader laat schakelen.
 
 ## 2026.11.2 — gebaseerd op Gielz v20261007

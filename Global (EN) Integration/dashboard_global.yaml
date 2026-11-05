@@ -4036,8 +4036,9 @@ views:
 
               **Zendure Pro:** when **Disable Zendure Pro PV export** is on, PV
               Export Disabled is turned on automatically and back off
-              afterwards. Turn it off if your Zendure has no solar panels or
-              if you only want to limit external inverters. Charging from solar and discharging to the
+              afterwards. It turns on by itself when you switch on No export.
+              Turn it off if your Zendure has no solar panels or if you only
+              want to limit external inverters. Charging from solar and discharging to the
               house keep working.
 
 

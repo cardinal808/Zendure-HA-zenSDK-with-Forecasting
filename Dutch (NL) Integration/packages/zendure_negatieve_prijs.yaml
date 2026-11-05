@@ -16,6 +16,8 @@
 #    (Gielz zet de Zendure dan op gridReverse = verboden) en daarna weer uit.
 #    Alleen als Zendure Pro PV-export uitschakelen aanstaat; zet je die uit terwijl de module
 #    de PV-export heeft uitgeschakeld, dan zet hij hem meteen terug.
+#    Die schakelaar gaat vanzelf aan zodra Niet terugleveren bij negatieve prijs aangaat
+#    (en eenmalig na het upgraden als die al aanstond); daarna blijft jouw keuze staan.
 # 2. Externe omvormer (optioneel). Kies het type begrenzing; de limiter-entiteit bepaalt de rest:
 #    - number.* + "Productielimiet" (SolarEdge, OpenDTU/Hoymiles, APsystems, Fronius Modbus):
 #      regelt de omvormer elke 10 s terug op de P1-meter, zodat hij het huis blijft voeden
@@ -65,6 +67,11 @@ input_boolean:
   negatieve_prijs_zendure_pv_export:
     name: Negatieve Prijs Zendure PV Export
     icon: mdi:solar-power-variant
+
+  # Intern: Zendure Pro PV-export uitschakelen is al eens ingesteld (eenmalige standaard)
+  negatieve_prijs_zendure_pv_export_ingesteld:
+    name: Negatieve Prijs Zendure PV Export Ingesteld
+    icon: mdi:robot
 
   # Intern: deze module heeft de Zendure PV-export uitgeschakeld
   negatieve_prijs_export_door_automatisering:
@@ -270,6 +277,65 @@ automation:
                     PV export weer toegestaan —
                   entity_id: input_select.zendure_2400_ac_modus_selecteren
                   name: ' '
+
+  # -------------------------------------------------------------------
+  # 1b. Zendure Pro PV-export: standaard aan zodra Niet terugleveren aangaat
+  # -------------------------------------------------------------------
+  - id: zendure_negatieve_prijs_zendure_pv_export_standaard
+    alias: Zendure Negatieve Prijs Zendure PV Export Standaard
+    description: >-
+      Forecasting 2026.11.3 - Zet Zendure Pro PV-export uitschakelen aan zodra Niet terugleveren bij negatieve prijs aangaat (en eenmalig bij het upgraden als die al aanstaat). Daarna blijft de keuze van de gebruiker staan.
+    mode: queued
+    max: 5
+    triggers:
+      - trigger: state
+        entity_id: input_boolean.negatieve_prijs_export_blokkeren
+        from: 'off'
+        to: 'on'
+        id: hoofd
+      - trigger: homeassistant
+        event: start
+        id: start
+      - trigger: state
+        entity_id: input_boolean.negatieve_prijs_zendure_pv_export
+        not_from:
+          - unknown
+          - unavailable
+        not_to:
+          - unknown
+          - unavailable
+        id: keuze
+    conditions: []
+    actions:
+      - choose:
+          - conditions:
+              - condition: trigger
+                id: keuze
+            sequence:
+              - action: input_boolean.turn_on
+                target:
+                  entity_id: input_boolean.negatieve_prijs_zendure_pv_export_ingesteld
+          - conditions:
+              - condition: or
+                conditions:
+                  - condition: trigger
+                    id: hoofd
+                  - condition: and
+                    conditions:
+                      - condition: trigger
+                        id: start
+                      - condition: state
+                        entity_id: input_boolean.negatieve_prijs_export_blokkeren
+                        state: 'on'
+                      - condition: state
+                        entity_id: input_boolean.negatieve_prijs_zendure_pv_export_ingesteld
+                        state: 'off'
+            sequence:
+              - action: input_boolean.turn_on
+                target:
+                  entity_id:
+                    - input_boolean.negatieve_prijs_zendure_pv_export
+                    - input_boolean.negatieve_prijs_zendure_pv_export_ingesteld
 
   # -------------------------------------------------------------------
   # 2. Externe omvormer (optioneel)

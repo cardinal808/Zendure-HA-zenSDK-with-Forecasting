@@ -16,6 +16,8 @@
 #    (Gielz then sets the Zendure to gridReverse = forbidden) and turns it off afterwards.
 #    Only when Disable Zendure Pro PV export is on; turning that off while the module has
 #    disabled the PV export puts it back right away.
+#    That switch turns on by itself as soon as No export at negative price turns on
+#    (and once after upgrading if that was already on); after that your choice stays.
 # 2. External inverter (optional). Choose the limit type; the limiter entity decides the rest:
 #    - number.* + "Production limit" (SolarEdge, OpenDTU/Hoymiles, APsystems, Fronius Modbus):
 #      regulates the inverter every 10 s on the grid meter, so it keeps powering the house
@@ -65,6 +67,11 @@ input_boolean:
   negative_price_zendure_pv_export:
     name: Negative Price Zendure PV Export
     icon: mdi:solar-power-variant
+
+  # Internal: Disable Zendure Pro PV export has been set once (one-time default)
+  negative_price_zendure_pv_export_set:
+    name: Negative Price Zendure PV Export Set
+    icon: mdi:robot
 
   # Internal: this module disabled the Zendure PV export
   negative_price_export_by_automation:
@@ -270,6 +277,65 @@ automation:
                     PV export allowed again —
                   entity_id: input_select.zendure_operation_mode
                   name: ' '
+
+  # -------------------------------------------------------------------
+  # 1b. Zendure Pro PV export: on by default as soon as No export turns on
+  # -------------------------------------------------------------------
+  - id: zendure_negative_price_zendure_pv_export_default
+    alias: Zendure Negative Price Zendure PV Export Default
+    description: >-
+      Forecasting 2026.11.3 - Turns on Disable Zendure Pro PV export as soon as No export at negative price turns on (and once after upgrading if that is already on). After that the user's choice stays.
+    mode: queued
+    max: 5
+    triggers:
+      - trigger: state
+        entity_id: input_boolean.negative_price_block_export
+        from: 'off'
+        to: 'on'
+        id: main
+      - trigger: homeassistant
+        event: start
+        id: start
+      - trigger: state
+        entity_id: input_boolean.negative_price_zendure_pv_export
+        not_from:
+          - unknown
+          - unavailable
+        not_to:
+          - unknown
+          - unavailable
+        id: choice
+    conditions: []
+    actions:
+      - choose:
+          - conditions:
+              - condition: trigger
+                id: choice
+            sequence:
+              - action: input_boolean.turn_on
+                target:
+                  entity_id: input_boolean.negative_price_zendure_pv_export_set
+          - conditions:
+              - condition: or
+                conditions:
+                  - condition: trigger
+                    id: main
+                  - condition: and
+                    conditions:
+                      - condition: trigger
+                        id: start
+                      - condition: state
+                        entity_id: input_boolean.negative_price_block_export
+                        state: 'on'
+                      - condition: state
+                        entity_id: input_boolean.negative_price_zendure_pv_export_set
+                        state: 'off'
+            sequence:
+              - action: input_boolean.turn_on
+                target:
+                  entity_id:
+                    - input_boolean.negative_price_zendure_pv_export
+                    - input_boolean.negative_price_zendure_pv_export_set
 
   # -------------------------------------------------------------------
   # 2. External inverter (optional)

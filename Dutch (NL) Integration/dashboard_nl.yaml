@@ -4042,8 +4042,9 @@ views:
 
               **Zendure Pro:** staat **Zendure Pro PV-export uitschakelen** aan,
               dan gaat PV Export Uitgeschakeld automatisch aan en daarna weer uit.
-              Zet hem uit als je Zendure geen zonnepanelen heeft of als je alleen
-              externe omvormers wilt begrenzen. Laden uit zon en ontladen naar het huis blijven werken.
+              Hij gaat vanzelf aan als je Niet terugleveren aanzet. Zet hem uit als je
+              Zendure geen zonnepanelen heeft of als je alleen externe omvormers
+              wilt begrenzen. Laden uit zon en ontladen naar het huis blijven werken.
 
 
               **Externe omvormer (optioneel):** kies het **type begrenzing** en

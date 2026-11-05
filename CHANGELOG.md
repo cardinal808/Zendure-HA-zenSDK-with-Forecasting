@@ -18,7 +18,7 @@ Versions follow `year.month.sequence`; the sequence restarts at 1 every month. E
 - `binary_sensor.hvac_discharge_blocked` has a `reason` attribute, also shown in Forecasting Configuration (HVAC).
 
 **Negative price**
-- New switch **Disable Zendure Pro PV export** (`input_boolean.negative_price_zendure_pv_export`): choose whether, at a negative price, the feature also disables the PV export of the Zendure Pro (solar inputs) via Gielz' *PV Export Disabled*. Off = only limit the external inverters, e.g. with a Zendure without solar panels.
+- New switch **Disable Zendure Pro PV export** (`input_boolean.negative_price_zendure_pv_export`): choose whether, at a negative price, the feature also disables the PV export of the Zendure Pro (solar inputs) via Gielz' *PV Export Disabled*. Turns on by itself as soon as you switch on *No export*; off = only limit the external inverters, e.g. with a Zendure without solar panels.
 - The settings for the Zendure Pro and the external inverter are now together in one card.
 
 **Dashboard**
@@ -30,7 +30,7 @@ Versions follow `year.month.sequence`; the sequence restarts at 1 every month. E
 **Upgrading**
 - Replace all files and **restart** Home Assistant.
 - Optional: put `zendure_ev_global.yaml` and/or `zendure_hvac_global.yaml` (Global) or `zendure_ev.yaml` and/or `zendure_hvac.yaml` (NL) in the `packages` folder.
-- If you use *No export at negative price*: switch on **Disable Zendure Pro PV export** if the Zendure Pro should also stop exporting PV at a negative price (the new switch is off by default).
+- If you use *No export at negative price*: **Disable Zendure Pro PV export** turns on by itself once after the restart. Turn it off if your Zendure has no solar panels.
 - First test whether your car resumes charging when power returns, before letting the charger be switched.
 
 ## 2026.11.2 — based on Gielz v20261007
