@@ -4034,8 +4034,10 @@ views:
               **Forecasting Configuration (Savings)**.
 
 
-              **Zendure:** PV Export Disabled is turned on automatically and
-              back off afterwards. Charging from solar and discharging to the
+              **Zendure Pro:** when **Disable Zendure Pro PV export** is on, PV
+              Export Disabled is turned on automatically and back off
+              afterwards. Turn it off if your Zendure has no solar panels or
+              if you only want to limit external inverters. Charging from solar and discharging to the
               house keep working.
 
 
@@ -4089,26 +4091,12 @@ views:
             entities:
               - entity: input_boolean.negative_price_block_export
                 name: No export at negative price
-            visibility:
-              - condition: state
-                entity: input_boolean.negative_price_block_export
-                state_not: unavailable
-              - condition: state
-                entity: input_boolean.dashboard_setting_show_pv
-                state: 'on'
-          - type: markdown
-            text_only: true
-            content: >-
-              **External inverter (optional)**
-            visibility:
-              - condition: state
-                entity: input_boolean.negative_price_block_export
-                state_not: unavailable
-              - condition: state
-                entity: input_boolean.dashboard_setting_show_pv
-                state: 'on'
-          - type: entities
-            entities:
+              - type: section
+                label: Zendure Pro (PV inputs)
+              - entity: input_boolean.negative_price_zendure_pv_export
+                name: Disable Zendure Pro PV export
+              - type: section
+                label: External inverter (optional)
               - entity: input_select.negative_price_inverter_count
                 name: Number of external inverters
               - type: conditional

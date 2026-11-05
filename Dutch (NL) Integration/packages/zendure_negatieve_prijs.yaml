@@ -14,6 +14,8 @@
 # Drie automatiseringen:
 # 1. Zendure PV: zet Gielz' schakelaar PV Export Uitgeschakeld aan zolang de prijs negatief is
 #    (Gielz zet de Zendure dan op gridReverse = verboden) en daarna weer uit.
+#    Alleen als Zendure Pro PV-export uitschakelen aanstaat; zet je die uit terwijl de module
+#    de PV-export heeft uitgeschakeld, dan zet hij hem meteen terug.
 # 2. Externe omvormer (optioneel). Kies het type begrenzing; de limiter-entiteit bepaalt de rest:
 #    - number.* + "Productielimiet" (SolarEdge, OpenDTU/Hoymiles, APsystems, Fronius Modbus):
 #      regelt de omvormer elke 10 s terug op de P1-meter, zodat hij het huis blijft voeden
@@ -58,6 +60,11 @@ input_boolean:
   negatieve_prijs_export_blokkeren:
     name: Negatieve Prijs Export Blokkeren
     icon: mdi:transmission-tower-off
+
+  # PV-export van de Zendure Pro (zon-ingangen) meenemen via Gielz' PV Export Uitgeschakeld
+  negatieve_prijs_zendure_pv_export:
+    name: Negatieve Prijs Zendure PV Export
+    icon: mdi:solar-power-variant
 
   # Intern: deze module heeft de Zendure PV-export uitgeschakeld
   negatieve_prijs_export_door_automatisering:
@@ -199,6 +206,11 @@ automation:
           - 'off'
         for:
           seconds: 20
+      - trigger: state
+        entity_id: input_boolean.negatieve_prijs_zendure_pv_export
+        to:
+          - 'on'
+          - 'off'
       - trigger: homeassistant
         event: start
       - trigger: time_pattern
@@ -214,6 +226,9 @@ automation:
               - condition: state
                 entity_id: input_boolean.zendure_2400_ac_pv_export_uitgeschakeld
                 state: 'off'
+              - condition: state
+                entity_id: input_boolean.negatieve_prijs_zendure_pv_export
+                state: 'on'
             sequence:
               - action: input_boolean.turn_on
                 target:
@@ -230,9 +245,14 @@ automation:
                   name: ' '
           - alias: Prijs weer normaal - PV-export terugzetten
             conditions:
-              - condition: state
-                entity_id: binary_sensor.zendure_export_geblokkeerd_negatieve_prijs
-                state: 'off'
+              - condition: or
+                conditions:
+                  - condition: state
+                    entity_id: binary_sensor.zendure_export_geblokkeerd_negatieve_prijs
+                    state: 'off'
+                  - condition: state
+                    entity_id: input_boolean.negatieve_prijs_zendure_pv_export
+                    state: 'off'
               - condition: state
                 entity_id: input_boolean.negatieve_prijs_export_door_automatisering
                 state: 'on'
@@ -246,7 +266,7 @@ automation:
               - action: logbook.log
                 data:
                   message: >-
-                    ☀️✅Terugleverprijs niet meer negatief (€{{ '%.3f' | format(states('sensor.zendure_terugleverprijs_nu') | float(0)) }}) —
+                    {% if is_state('input_boolean.negatieve_prijs_zendure_pv_export', 'off') %}☀️✅Zendure Pro PV-export uitschakelen uitgezet —{% else %}☀️✅Terugleverprijs niet meer negatief (€{{ '%.3f' | format(states('sensor.zendure_terugleverprijs_nu') | float(0)) }}) —{% endif %}
                     PV export weer toegestaan —
                   entity_id: input_select.zendure_2400_ac_modus_selecteren
                   name: ' '

@@ -14,6 +14,8 @@
 # Three automations:
 # 1. Zendure PV: turns on Gielz' switch PV Export Disabled while the price is negative
 #    (Gielz then sets the Zendure to gridReverse = forbidden) and turns it off afterwards.
+#    Only when Disable Zendure Pro PV export is on; turning that off while the module has
+#    disabled the PV export puts it back right away.
 # 2. External inverter (optional). Choose the limit type; the limiter entity decides the rest:
 #    - number.* + "Production limit" (SolarEdge, OpenDTU/Hoymiles, APsystems, Fronius Modbus):
 #      regulates the inverter every 10 s on the grid meter, so it keeps powering the house
@@ -58,6 +60,11 @@ input_boolean:
   negative_price_block_export:
     name: Negative Price Block Export
     icon: mdi:transmission-tower-off
+
+  # Include the PV export of the Zendure Pro (solar inputs) via Gielz' PV Export Disabled
+  negative_price_zendure_pv_export:
+    name: Negative Price Zendure PV Export
+    icon: mdi:solar-power-variant
 
   # Internal: this module disabled the Zendure PV export
   negative_price_export_by_automation:
@@ -199,6 +206,11 @@ automation:
           - 'off'
         for:
           seconds: 20
+      - trigger: state
+        entity_id: input_boolean.negative_price_zendure_pv_export
+        to:
+          - 'on'
+          - 'off'
       - trigger: homeassistant
         event: start
       - trigger: time_pattern
@@ -214,6 +226,9 @@ automation:
               - condition: state
                 entity_id: input_boolean.zendure_setting_pv_export_disabled
                 state: 'off'
+              - condition: state
+                entity_id: input_boolean.negative_price_zendure_pv_export
+                state: 'on'
             sequence:
               - action: input_boolean.turn_on
                 target:
@@ -230,9 +245,14 @@ automation:
                   name: ' '
           - alias: Price back to normal - restore PV export
             conditions:
-              - condition: state
-                entity_id: binary_sensor.zendure_export_blocked_negative_price
-                state: 'off'
+              - condition: or
+                conditions:
+                  - condition: state
+                    entity_id: binary_sensor.zendure_export_blocked_negative_price
+                    state: 'off'
+                  - condition: state
+                    entity_id: input_boolean.negative_price_zendure_pv_export
+                    state: 'off'
               - condition: state
                 entity_id: input_boolean.negative_price_export_by_automation
                 state: 'on'
@@ -246,7 +266,7 @@ automation:
               - action: logbook.log
                 data:
                   message: >-
-                    ☀️✅Feed-in price no longer negative (€{{ '%.3f' | format(states('sensor.zendure_feedin_price_now') | float(0)) }}) —
+                    {% if is_state('input_boolean.negative_price_zendure_pv_export', 'off') %}☀️✅Disable Zendure Pro PV export turned off —{% else %}☀️✅Feed-in price no longer negative (€{{ '%.3f' | format(states('sensor.zendure_feedin_price_now') | float(0)) }}) —{% endif %}
                     PV export allowed again —
                   entity_id: input_select.zendure_operation_mode
                   name: ' '

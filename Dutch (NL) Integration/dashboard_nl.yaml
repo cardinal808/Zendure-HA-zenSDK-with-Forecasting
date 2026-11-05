@@ -4040,8 +4040,10 @@ views:
               **Forecasting Configuratie (Besparing)**.
 
 
-              **Zendure:** PV Export Uitgeschakeld gaat automatisch aan en daarna
-              weer uit. Laden uit zon en ontladen naar het huis blijven werken.
+              **Zendure Pro:** staat **Zendure Pro PV-export uitschakelen** aan,
+              dan gaat PV Export Uitgeschakeld automatisch aan en daarna weer uit.
+              Zet hem uit als je Zendure geen zonnepanelen heeft of als je alleen
+              externe omvormers wilt begrenzen. Laden uit zon en ontladen naar het huis blijven werken.
 
 
               **Externe omvormer (optioneel):** kies het **type begrenzing** en
@@ -4096,26 +4098,12 @@ views:
             entities:
               - entity: input_boolean.negatieve_prijs_export_blokkeren
                 name: Niet terugleveren bij negatieve prijs
-            visibility:
-              - condition: state
-                entity: input_boolean.negatieve_prijs_export_blokkeren
-                state_not: unavailable
-              - condition: state
-                entity: input_boolean.pv_tonen_op_dashboard
-                state: 'on'
-          - type: markdown
-            text_only: true
-            content: >-
-              **Externe omvormer (optioneel)**
-            visibility:
-              - condition: state
-                entity: input_boolean.negatieve_prijs_export_blokkeren
-                state_not: unavailable
-              - condition: state
-                entity: input_boolean.pv_tonen_op_dashboard
-                state: 'on'
-          - type: entities
-            entities:
+              - type: section
+                label: Zendure Pro (PV-ingangen)
+              - entity: input_boolean.negatieve_prijs_zendure_pv_export
+                name: Zendure Pro PV-export uitschakelen
+              - type: section
+                label: Externe omvormer (optioneel)
               - entity: input_select.negatieve_prijs_omvormer_aantal
                 name: Aantal externe omvormers
               - type: conditional
