@@ -5,7 +5,7 @@
 #
 # Plaats dit bestand naast zendure_forecasting.yaml (zelfde packages-map); het gebruikt
 # de kWh-tellers daaruit (Forecast Teller P1 Import/Export, Zendure laden/ontladen) en
-# de zonnepanelen-sensor uit Configuratie (Forecasting).
+# de zonnepanelen-sensor uit Forecasting Configuratie (Basis).
 #
 # Elk kwartier wordt de energie van dat kwartier verrekend tegen de prijs van precies dat
 # prijsslot (de tellers bevriezen op :00, :15, :30 en :45, gelijk met de 15-minutenprijzen;

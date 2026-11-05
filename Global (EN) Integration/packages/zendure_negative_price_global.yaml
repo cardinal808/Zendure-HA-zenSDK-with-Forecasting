@@ -7,7 +7,7 @@
 #
 # Feed-in price (sensor.zendure_feedin_price_now), per quarter hour:
 #   market price + bonus % (only when the market price is positive) + feed-in markup
-#   Market price from Gielz' Nordpool sensor; bonus and markup from Configuration (Savings).
+#   Market price from Gielz' Nordpool sensor; bonus and markup from Forecasting Configuration (Savings).
 # binary_sensor.zendure_export_blocked_negative_price is on when the feature is enabled
 # and the feed-in price is negative.
 #

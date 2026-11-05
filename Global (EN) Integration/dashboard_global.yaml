@@ -2169,7 +2169,7 @@ views:
               {%- macro kwh(x) -%}{{ '%.1f' | format(x | float(0)) }}{%- endmacro -%}
               {%- macro w(b, k) -%}{{ ((e.get(b) or {}).get(k, 0)) | float(0) }}{%- endmacro -%}
               {% if states('input_number.savings_setting_fixed_supply_price') | float(0) <= 0 %}
-              <ha-alert alert-type="warning">Enter the fixed tariff under Settings, Configuration (Savings).</ha-alert>
+              <ha-alert alert-type="warning">Enter the fixed tariff under Settings, Forecasting Configuration (Savings).</ha-alert>
               {% endif %}
               | | {% for k, n in P %}{{ n }} | {% endfor %}
               |:---|{% for k, n in P %}---:|{% endfor %}
@@ -2391,7 +2391,7 @@ views:
               {%- set pct = [[state_attr(s, 'earned_pct') | float(0), 0] | max, 100] | min -%}
               {%- set n = (pct / 5) | round(0) | int -%}
               {% if price <= 0 -%}
-              Enter the purchase price of the battery under Settings, Configuration (Savings).
+              Enter the purchase price of the battery under Settings, Forecasting Configuration (Savings).
               {%- else -%}
               {% if has_value(s) %}**{{ states(s) }} years** in total{% if state_attr(s, 'still_to_go') | float(0) > 0 %}, **{{ state_attr(s, 'years_left') }} years** to go (around {{ state_attr(s, 'paid_back_around') }}){% else %}, **paid back**{% endif %}{% else %}Not enough data yet: the first estimate follows after a full day of measuring.{% endif %}
 
@@ -2405,7 +2405,7 @@ views:
               {% if has_value(s) %}| <ha-icon icon="mdi:calendar-sync"></ha-icon>Savings by the battery per year | {{ eur(state_attr(s, 'savings_per_year'), 0) }} |
               {% endif %}
               {% if (state_attr(s, 'measured_days') | float(0)) < 365 %}
-              <small>Indication based on {{ state_attr(s, 'measured_days') | float(0) | round(0) | int }} day(s) of measuring. Summer and winter differ a lot (less solar in winter, but often a larger price spread); after a year of measuring the estimate is most reliable. Tariffs and battery price: Settings tab, block Configuration (Savings).</small>
+              <small>Indication based on {{ state_attr(s, 'measured_days') | float(0) | round(0) | int }} day(s) of measuring. Summer and winter differ a lot (less solar in winter, but often a larger price spread); after a year of measuring the estimate is most reliable. Tariffs and battery price: Settings tab, block Forecasting Configuration (Savings).</small>
               {%- endif %}
               {%- endif %}
             grid_options:
@@ -3683,7 +3683,7 @@ views:
               rows: auto
           - type: heading
             icon: ''
-            heading: Configuration (Basic)
+            heading: Gielz Configuration (Basic)
             heading_style: title
             badges:
               - type: button
@@ -3732,7 +3732,7 @@ views:
                 name: Standby Delay
           - type: heading
             icon: ''
-            heading: Configuration (Charging)
+            heading: Gielz Configuration (Charging)
             heading_style: title
             badges:
               - type: entity
@@ -3764,7 +3764,7 @@ views:
                 name: Charge Buffer
           - type: heading
             icon: ''
-            heading: Configuration (Discharging)
+            heading: Gielz Configuration (Discharging)
             heading_style: title
             badges:
               - type: entity
@@ -3794,11 +3794,9 @@ views:
                 name: Start Discharge At
               - entity: input_number.zendure_setting_discharge_buffer
                 name: Discharge Buffer
-      - type: grid
-        cards:
           - type: heading
             icon: ''
-            heading: Configuration (State Of Charge)
+            heading: Gielz Configuration (State Of Charge)
             heading_style: title
             badges:
               - type: entity
@@ -3852,7 +3850,7 @@ views:
                 name: Max. State Of Charge
           - type: heading
             icon: ''
-            heading: Configuration (PV)
+            heading: Gielz Configuration (PV)
             heading_style: title
             badges:
               - type: entity
@@ -3877,7 +3875,125 @@ views:
                 state: 'on'
           - type: heading
             icon: ''
-            heading: Configuration (Negative Price)
+            heading: Gielz Configuration (Optional)
+            heading_style: title
+          - type: markdown
+            content: >-
+              <ha-alert alert-type="info">Help text</ha-alert>If you are not
+              using a HomeWizard P1 but do have a home energy sensor where -watt
+              indicates export and +watt indicates import per second, enter it
+              here under **Home Energy Meter Sensor⚙️**. For example
+              **sensor.my_own_energy_meter**.
+
+
+              You can also set a custom battery order here under **Battery
+              Order⚙️**. This allows you to define a different order of the
+              batteries yourself. The correct order can be determined using
+              **sensor.zendure_battery_serienumbers** and the sticker on the
+              battery(ies). This ensures that the battery temperatures and
+              charge percentages follow the correct order as they are physically
+              stacked.
+            text_only: true
+            visibility:
+              - condition: state
+                entity: input_boolean.dashboard_setting_show_help
+                state: 'on'
+          - type: entities
+            entities:
+              - entity: input_text.home_energy_setting_meter_sensor
+              - entity: input_text.zendure_setting_battery_order
+                name: Battery Order
+          - type: heading
+            icon: ''
+            heading: Gielz Configuration (Dynamic)
+            heading_style: title
+            badges: []
+            visibility:
+              - condition: state
+                entity: input_boolean.dashboard_setting_show_dynamic
+                state: 'on'
+          - type: markdown
+            content: >-
+              <ha-alert alert-type="info">Help text</ha-alert>If you have a
+              dynamic contract, you can enter this under **Dynamic Nordpool
+              Sensor⚙️**. For example **sensor.nordpool_kwh_nl_eur_3_09_0** and
+              this has te be from the Nordpool HACS integration.
+
+
+              Specify the minimum spread required to make use of charging and
+              discharging at low and high tariffs. If you have a 15-minute
+              contract, enable this so that the graphs and prices are set
+              correctly.
+            visibility:
+              - condition: state
+                entity: input_boolean.dashboard_setting_show_help
+                state: 'on'
+              - condition: state
+                entity: input_boolean.dashboard_setting_show_dynamic
+                state: 'on'
+            text_only: true
+          - type: entities
+            entities:
+              - entity: input_text.dynamic_setting_nordpool_sensor
+              - entity: input_number.dynamic_export_correction
+                name: Export Correction
+              - entity: input_number.dynamic_setting_minimal_spread
+                name: Minimal Spread
+              - entity: input_boolean.dynamic_setting_15_minute_interval
+                name: 15 Minute Interval
+            visibility:
+              - condition: state
+                entity: input_boolean.dashboard_setting_show_dynamic
+                state: 'on'
+      - type: grid
+        cards:
+          - type: heading
+            icon: ''
+            heading: Forecasting Configuration (Basic)
+            heading_style: title
+            visibility:
+              - condition: state
+                entity: input_boolean.dashboard_setting_show_forecasting
+                state: 'on'
+          - type: markdown
+            content: >-
+              <ha-alert alert-type="info">Help text</ha-alert>For the mode
+              **Dynamic Smart Matching + Forecasting**. Enter the entity_id of your
+              solar forecast sensors (kWh, e.g. Forecast.Solar or Solcast) and of
+              a total counter (kWh) of your solar panels. Solar self-consumption
+              and daily usage are calculated automatically from day 1 from your own
+              measurements and get more accurate every day (up to 7 days). The
+              charge margin is an extra buffer as a percentage of the battery
+              capacity.
+            text_only: true
+            visibility:
+              - condition: state
+                entity: input_boolean.dashboard_setting_show_help
+                state: 'on'
+              - condition: state
+                entity: input_boolean.dashboard_setting_show_forecasting
+                state: 'on'
+          - type: entities
+            entities:
+              - entity: input_text.forecast_setting_solar_remaining_today_sensor
+                name: Solar remaining today sensor
+              - entity: input_text.forecast_setting_solar_tomorrow_sensor
+                name: Solar tomorrow sensor
+              - entity: input_text.forecast_setting_solar_production_sensor
+                name: Solar panels production sensor (total kWh)
+              - entity: input_number.forecast_setting_charge_margin
+                name: Battery charge margin %
+              - entity: input_number.forecast_setting_solar_reliability
+                name: Solar forecast reliability % (0 = 100%)
+              - entity: input_boolean.forecast_setting_hold_discharge_in_dip
+                name: Hold discharge in cheap dip (save the battery)
+            visibility:
+              - condition: state
+                entity: input_boolean.dashboard_setting_show_forecasting
+                state: 'on'
+          - type: heading
+            icon: ''
+            heading: Forecasting Configuration (Negative Price)
             heading_style: title
             badges:
               - type: entity
@@ -3915,7 +4031,7 @@ views:
               price is negative, the installation does not export. Feed-in
               price = market price + bonus % (only when the market price is
               positive) + feed-in markup, using the values from
-              **Configuration (Savings)**.
+              **Forecasting Configuration (Savings)**.
 
 
               **Zendure:** PV Export Disabled is turned on automatically and
@@ -4048,123 +4164,7 @@ views:
                 state: 'on'
           - type: heading
             icon: ''
-            heading: Configuration (Optional)
-            heading_style: title
-          - type: markdown
-            content: >-
-              <ha-alert alert-type="info">Help text</ha-alert>If you are not
-              using a HomeWizard P1 but do have a home energy sensor where -watt
-              indicates export and +watt indicates import per second, enter it
-              here under **Home Energy Meter Sensor⚙️**. For example
-              **sensor.my_own_energy_meter**.
-
-
-              You can also set a custom battery order here under **Battery
-              Order⚙️**. This allows you to define a different order of the
-              batteries yourself. The correct order can be determined using
-              **sensor.zendure_battery_serienumbers** and the sticker on the
-              battery(ies). This ensures that the battery temperatures and
-              charge percentages follow the correct order as they are physically
-              stacked.
-            text_only: true
-            visibility:
-              - condition: state
-                entity: input_boolean.dashboard_setting_show_help
-                state: 'on'
-          - type: entities
-            entities:
-              - entity: input_text.home_energy_setting_meter_sensor
-              - entity: input_text.zendure_setting_battery_order
-                name: Battery Order
-          - type: heading
-            icon: ''
-            heading: Configuration (Dynamic)
-            heading_style: title
-            badges: []
-            visibility:
-              - condition: state
-                entity: input_boolean.dashboard_setting_show_dynamic
-                state: 'on'
-          - type: markdown
-            content: >-
-              <ha-alert alert-type="info">Help text</ha-alert>If you have a
-              dynamic contract, you can enter this under **Dynamic Nordpool
-              Sensor⚙️**. For example **sensor.nordpool_kwh_nl_eur_3_09_0** and
-              this has te be from the Nordpool HACS integration.
-
-
-              Specify the minimum spread required to make use of charging and
-              discharging at low and high tariffs. If you have a 15-minute
-              contract, enable this so that the graphs and prices are set
-              correctly.
-            visibility:
-              - condition: state
-                entity: input_boolean.dashboard_setting_show_help
-                state: 'on'
-              - condition: state
-                entity: input_boolean.dashboard_setting_show_dynamic
-                state: 'on'
-            text_only: true
-          - type: entities
-            entities:
-              - entity: input_text.dynamic_setting_nordpool_sensor
-              - entity: input_number.dynamic_export_correction
-                name: Export Correction
-              - entity: input_number.dynamic_setting_minimal_spread
-                name: Minimal Spread
-              - entity: input_boolean.dynamic_setting_15_minute_interval
-                name: 15 Minute Interval
-            visibility:
-              - condition: state
-                entity: input_boolean.dashboard_setting_show_dynamic
-                state: 'on'
-          - type: heading
-            icon: ''
-            heading: Configuration (Forecasting)
-            heading_style: title
-            visibility:
-              - condition: state
-                entity: input_boolean.dashboard_setting_show_forecasting
-                state: 'on'
-          - type: markdown
-            content: >-
-              <ha-alert alert-type="info">Help text</ha-alert>For the mode
-              **Dynamic Smart Matching + Forecasting**. Enter the entity_id of your
-              solar forecast sensors (kWh, e.g. Forecast.Solar or Solcast) and of
-              a total counter (kWh) of your solar panels. Solar self-consumption
-              and daily usage are calculated automatically from day 1 from your own
-              measurements and get more accurate every day (up to 7 days). The
-              charge margin is an extra buffer as a percentage of the battery
-              capacity.
-            text_only: true
-            visibility:
-              - condition: state
-                entity: input_boolean.dashboard_setting_show_help
-                state: 'on'
-              - condition: state
-                entity: input_boolean.dashboard_setting_show_forecasting
-                state: 'on'
-          - type: entities
-            entities:
-              - entity: input_text.forecast_setting_solar_remaining_today_sensor
-                name: Solar remaining today sensor
-              - entity: input_text.forecast_setting_solar_tomorrow_sensor
-                name: Solar tomorrow sensor
-              - entity: input_text.forecast_setting_solar_production_sensor
-                name: Solar panels production sensor (total kWh)
-              - entity: input_number.forecast_setting_charge_margin
-                name: Battery charge margin %
-              - entity: input_number.forecast_setting_solar_reliability
-                name: Solar forecast reliability % (0 = 100%)
-              - entity: input_boolean.forecast_setting_hold_discharge_in_dip
-                name: Hold discharge in cheap dip (save the battery)
-            visibility:
-              - condition: state
-                entity: input_boolean.dashboard_setting_show_forecasting
-                state: 'on'
-          - type: heading
-            icon: ''
-            heading: Configuration (Savings)
+            heading: Forecasting Configuration (Savings)
             heading_style: title
             visibility:
               - condition: state
@@ -4232,7 +4232,7 @@ views:
           - type: heading
             icon: ''
             heading_style: title
-            heading: Configuration (EV)
+            heading: Forecasting Configuration (EV)
             badges:
               - type: entity
                 show_state: true
@@ -4343,7 +4343,7 @@ views:
           - type: heading
             icon: ''
             heading_style: title
-            heading: Configuration (HVAC)
+            heading: Forecasting Configuration (HVAC)
             visibility:
               - condition: state
                 entity: input_text.hvac_sensor
@@ -4385,6 +4385,8 @@ views:
               - condition: state
                 entity: input_text.hvac_sensor
                 state_not: unavailable
+      - type: grid
+        cards:
           - type: heading
             icon: ''
             heading_style: title
@@ -4406,8 +4408,6 @@ views:
               - entity: input_boolean.dashboard_setting_show_dynamic
               - entity: input_boolean.dashboard_setting_show_forecasting
                 name: Show Forecasting On Dashboard
-      - type: grid
-        cards:
           - type: heading
             heading: Logbook (last 4 hours)
             heading_style: title

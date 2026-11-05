@@ -4,7 +4,7 @@
 # Zendure HVAC (air conditioning) - no Smart Matching discharge while the AC runs (optional)
 #
 # Put this file next to zendure_gielz1986_global.yaml (same packages folder).
-# Without this file nothing changes. The Configuration (HVAC) block on the Settings tab
+# Without this file nothing changes. The Forecasting Configuration (HVAC) block on the Settings tab
 # appears by itself as soon as this file is loaded.
 # How it works:
 #   - binary_sensor.hvac_active             : is the AC running?

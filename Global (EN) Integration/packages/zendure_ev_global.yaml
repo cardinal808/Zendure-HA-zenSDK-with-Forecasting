@@ -5,7 +5,7 @@
 #
 # Put this file next to zendure_gielz1986_global.yaml (same packages folder).
 # Without this file nothing changes: the automation and the planner then use 0 W.
-# The Configuration (EV) block on the Settings tab appears by itself as soon as this file
+# The Forecasting Configuration (EV) block on the Settings tab appears by itself as soon as this file
 # is loaded.
 #
 # Meant for a charger without its own control (granny charger, or a wallbox behind a smart

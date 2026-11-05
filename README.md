@@ -32,9 +32,9 @@ The battery charges at the cheapest moments, but **only as much as is actually n
 - **No export at a negative price** (new, `packages/zendure_negative_price_global.yaml`, optional): when the feed-in price (market price + bonus + markup) is negative, it disables the Zendure PV export. Optionally it also limits one or two external inverters (production limit on the grid meter, export limit, switch or script). It only restores what it changed itself.
 - **Electric car** (new, `packages/zendure_ev_global.yaml`, optional): for a charger without its own control (granny charger, or a wallbox behind a smart switch) with a power measurement, e.g. a Shelly 1PM. The battery then no longer discharges into the car, and the car's charging does not count in the planner's usage profile, daily usage and self-consumption. With a switch you can also plan a charging session: *Night* charges the required kWh in the cheapest price slots until a set time, *Daytime* charges on solar and the planner then charges the battery extra from the grid at the cheapest moment.
 - **Air conditioning (HVAC)** (new in the public set, `packages/zendure_hvac_global.yaml`, optional): no discharging while the AC runs, within set hours and optionally not in an expensive hour. Charging keeps working.
-- **Optional packages show themselves:** the Configuration (EV), (HVAC), (Negative Price) and (Savings) blocks are only on the dashboard when the matching package is loaded. `sensor.forecasting_version` lists the active optional packages in its `packages` attribute.
+- **Optional packages show themselves:** the Forecasting Configuration (EV), (HVAC), (Negative Price) and (Savings) blocks are only on the dashboard when the matching package is loaded. `sensor.forecasting_version` lists the active optional packages in its `packages` attribute.
 - **Plan Timeline** on the dashboard: for the next 36 hours per price slot in four compact rows the price (colours as in Gielz: green = planned charging, red = expensive), solar and house usage, battery charge and discharge with the expected state of charge, and grid import and export. As one card via `custom:mod-card`, so card-mod (HACS) is needed. Tip: exclude `sensor.zendure_forecast_chart` from the recorder (`recorder: exclude: entities:`), its attributes exceed the recorder's 16 kB limit.
-- Dashboard: a Forecasting section on the Zendure tab (plan for today and tomorrow, usage profile, collected 7-day data, recalculate button), a Savings tab and a Configuration (Forecasting) block with all input fields. Both can be shown or hidden with **Show Forecasting On Dashboard**.
+- Dashboard: a Forecasting section on the Zendure tab (plan for today and tomorrow, usage profile, collected 7-day data, recalculate button), a Savings tab and a Forecasting Configuration (Basic) block with all input fields. Both can be shown or hidden with **Show Forecasting On Dashboard**.
 
 ### What changed compared with the original
 
@@ -47,7 +47,7 @@ The battery charges at the cheapest moments, but **only as much as is actually n
 | `packages/zendure_hvac.yaml` / `packages/zendure_hvac_global.yaml` | **New, optional.** AC helpers and `binary_sensor.hvac_ontladen_geblokkeerd` / `binary_sensor.hvac_discharge_blocked`. |
 | `packages/zendure_gielz1986_nl.yaml` / `packages/zendure_gielz1986_global.yaml` | Only one extra option in the mode selector. |
 | `automation_nl.yaml` / `automation_global.yaml` | The new mode in the mode selection and in the 6 existing Smart Matching lists (zero-on-the-meter, SOC protection, emergency stop), its own charging block that only charges when the plan says *Charge*, a discharge hold for the cheap dip and for the AC, and in the Smart Matching discharge blocks the car's charging power subtracted from the grid meter. Without the optional packages everything works as before. Existing modes are otherwise unchanged. |
-| `dashboard_nl.yaml` / `dashboard_global.yaml` | New Forecasting section, new Savings tab, new Configuration (Forecasting), Configuration (Savings), Configuration (Negative Price), Configuration (EV) and Configuration (HVAC) blocks (only visible when the package is loaded) and a switch in Configuration (Dashboard). |
+| `dashboard_nl.yaml` / `dashboard_global.yaml` | New Forecasting section, new Savings tab, new Forecasting Configuration (Basic), Forecasting Configuration (Savings), Forecasting Configuration (Negative Price), Forecasting Configuration (EV) and Forecasting Configuration (HVAC) blocks (only visible when the package is loaded) and a switch in Configuration (Dashboard). |
 
 Each changed file starts with a two-line header with the version, the Gielz version it is based on and the original author.
 
@@ -58,7 +58,7 @@ First install the original integration as described below (packages file, automa
 1. Put `zendure_forecasting_global.yaml` and `zendure_savings_global.yaml` (Global) or `zendure_forecasting.yaml` and `zendure_besparing.yaml` (NL) in the same `packages` folder as the Gielz package, and replace the Gielz package with the version from this fork. To avoid exporting at a negative price, also add `zendure_negative_price_global.yaml` (Global) or `zendure_negatieve_prijs.yaml` (NL). For an electric car add `zendure_ev_global.yaml` (Global) or `zendure_ev.yaml` (NL), for air conditioning `zendure_hvac_global.yaml` (Global) or `zendure_hvac.yaml` (NL).
 2. Replace the automation and the dashboard with the versions from this fork (or merge the changes into your own version).
 3. Restart Home Assistant.
-4. On the Configuration tab, under **Configuration (Forecasting)**, enter: the sensor for solar remaining today, solar tomorrow (kWh, e.g. Forecast.Solar or Solcast) and a total counter of your solar panels (kWh). Optionally set the charge margin. Under **Configuration (Savings)** enter your tariffs and the purchase price of the battery.
+4. On the Configuration tab, under **Forecasting Configuration (Basic)**, enter: the sensor for solar remaining today, solar tomorrow (kWh, e.g. Forecast.Solar or Solcast) and a total counter of your solar panels (kWh). Optionally set the charge margin. Under **Forecasting Configuration (Savings)** enter your tariffs and the purchase price of the battery.
 5. Select the mode **Dynamic Smart Matching + Forecasting**.
 
 **Requires:** the Gielz package, Nord Pool (as already set up in Gielz), a P1/home energy meter, a solar forecast integration and apexcharts-card for the Gielz dashboard and card-mod (for the Plan Timeline and the table styling on the Savings tab). The planner becomes more accurate after about a week of history.
@@ -161,29 +161,29 @@ homeassistant:
 
 | Explanation per configuration item | |
 |-|-|
-| **Configuration (Basic)** | **Information** |
+| **Gielz Configuration (Basic)** | **Information** |
 | `zendure_setting_ip_address` | **e.g. 192.168.0.172** – Found in the Zendure app under device information. |
 | `homewizard_setting_p1_ip_address` | **e.g. 192.168.0.192** – Enable local API in the Homewizard app |
 | `zendure_setting_standby_delay` | **(Recommended: 15 minutes) 5–30 minutes** – Defines how quickly the inverter goes into full standby at 0 activity. Prevents ~19W idle consumption. |
 | `zendure_setting_set_default_settings` | Once the battery is running, you can use this to apply the recommended settings below. |
-| **Configuration (Charging)** | **Information** |
+| **Gielz Configuration (Charging)** | **Information** |
 | `zendure_setting_max_charge_power` | **400–2400W** – Maximum charging power (up to 7200W with multiple inverters via Node-RED). |
 | `zendure_setting_start_charging_at` | **(Recommended: -300W) -1000 to -80W** – Defines when charging starts. |
 | `zendure_setting_charge_buffer` | **(Recommended: 50W) 0–250W** – Determines how much less to include during charging. In summer you can increase this (e.g. 200W) to prevent daytime grid import. |
-| **Configuration (Discharging)** | **Information** |
+| **Gielz Configuration (Discharging)** | **Information** |
 | `zendure_setting_max_discharge_power` | **400–2400W** – Maximum discharge power (up to 7200W with multiple inverters via Node-RED). |
 | `zendure_setting_start_discharging_at` | **(Recommended: 100W) 80–500W** – Defines when discharging starts. |
 | `zendure_setting_discharge_buffer` | **(Recommended: 5W) 0–250W** – Extra margin for discharging. |
-| **Configuration (State Of Charge)** |**Information**|  
+| **Gielz Configuration (State Of Charge)** |**Information**|  
 | `zendure_setting_soc_protection_disabled`    | Check this to disable the dual SOC protection. When the battery drops below the minimum allowed charge percentage, it will no longer automatically recharge. It will wait until the BMS (Battery Management System) takes action. |  
 | `zendure_setting_minimum_allowed_state_of_charge` | **(Recommended: 10%) 5% to 50%** – Set the minimum allowed state of charge percentage here. | 
 | `zendure_setting_maximum_allowed_state_of_charge` | **(Recommended: 100%) 70% to 100%** – Set the maximum allowed state of charge percentage here. At 100%, an SOC calibration is performed to accurately estimate the state of charge level. | 
-| **Configuration (PV)** |**Information**|  
+| **Gielz Configuration (PV)** |**Information**|  
 | `zendure_setting_pv_export_disabled`    | Check this to disable the pv export. When the battery is full it will no longer export the energy of connected solarpanels. | 
-| **Configuration (Optional)** | **Information** |
+| **Gielz Configuration (Optional)** | **Information** |
 | `home_energy_setting_meter_sensor` | **e.g. sensor.custom_energy** – Add your own home energy sensor (+watt import / -watt export). This will take priority. [Go to WIKI](https://github.com/Gielz1986/Zendure-HA-zenSDK/wiki/Global-and-NL-%E2%80%90-P1-CT-meters-(API's))) for P1/CT API's. |
 | `zendure_setting_battery_order` | **e.g. 1;5;3;4;2** – Manually define battery order based on serial numbers and physical stacking. |
-| **Configuration (Dynamic)** | **Information** |
+| **Gielz Configuration (Dynamic)** | **Information** |
 | `dynamic_setting_nordpool_sensor` | **e.g. sensor.nordpool_kwh_nl_eur_3_09_0** – Your Nordpool (HACS) sensor. |
 | `dynamic_export_correction` | Specify how many cents should be subtracted during export. This value is used in the spread calculation. |
 | `dynamic_setting_minimal_spread` | **e.g. 25%** – Minimum price spread before dynamic charging/discharging activates. |

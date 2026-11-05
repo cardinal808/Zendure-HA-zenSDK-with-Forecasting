@@ -5,7 +5,7 @@
 #
 # Plaats dit bestand naast zendure_gielz1986_nl.yaml (zelfde packages-map).
 # Zonder dit bestand verandert er niets: de automation en de planner rekenen dan met 0 W.
-# Het blok Configuratie (EV) op de tab Configuratie verschijnt vanzelf zodra dit bestand
+# Het blok Forecasting Configuratie (EV) op de tab Configuratie verschijnt vanzelf zodra dit bestand
 # geladen is.
 #
 # Bedoeld voor een lader zonder eigen aansturing (grannylader, of een wallbox achter een

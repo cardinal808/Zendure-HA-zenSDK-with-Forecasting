@@ -5,7 +5,7 @@
 #
 # Place this file next to zendure_forecasting_global.yaml (same packages folder); it uses
 # the kWh counters from it (Forecast Counter Grid Import/Export, Zendure charge/discharge) and
-# the solar panels sensor from Configuration (Forecasting).
+# the solar panels sensor from Forecasting Configuration (Basic).
 #
 # Every quarter hour the energy of that quarter hour is settled against the price of exactly
 # that price slot (the counters freeze at :00, :15, :30 and :45, in step with the 15-minute

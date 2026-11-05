@@ -2174,7 +2174,7 @@ views:
               {%- macro kwh(x) -%}{{ ('%.1f' | format(x | float(0))) | replace('.', ',') }}{%- endmacro -%}
               {%- macro w(b, k) -%}{{ ((e.get(b) or {}).get(k, 0)) | float(0) }}{%- endmacro -%}
               {% if states('input_number.besparing_vast_leveringsprijs') | float(0) <= 0 %}
-              <ha-alert alert-type="warning">Vul het vaste tarief in onder Configuratie (Besparing).</ha-alert>
+              <ha-alert alert-type="warning">Vul het vaste tarief in onder Forecasting Configuratie (Besparing).</ha-alert>
               {% endif %}
               | | {% for k, n in P %}{{ n }} | {% endfor %}
               |:---|{% for k, n in P %}---:|{% endfor %}
@@ -2396,7 +2396,7 @@ views:
               {%- set pct = [[state_attr(s, 'terugverdiend_pct') | float(0), 0] | max, 100] | min -%}
               {%- set n = (pct / 5) | round(0) | int -%}
               {% if prijs <= 0 -%}
-              Vul de aanschafprijs van de accu in onder Configuratie (Besparing).
+              Vul de aanschafprijs van de accu in onder Forecasting Configuratie (Besparing).
               {%- else -%}
               {% if has_value(s) %}**{{ states(s) | replace('.', ',') }} jaar** in totaal{% if state_attr(s, 'nog_te_gaan') | float(0) > 0 %}, nog **{{ state_attr(s, 'nog_jaren') | string | replace('.', ',') }} jaar** (rond {{ state_attr(s, 'terugverdiend_rond') }}){% else %}, **terugverdiend**{% endif %}{% else %}Nog te weinig gegevens: na een volle dag meten volgt de eerste schatting.{% endif %}
 
@@ -2410,7 +2410,7 @@ views:
               {% if has_value(s) %}| <ha-icon icon="mdi:calendar-sync"></ha-icon>Besparing door de accu per jaar | {{ eur(state_attr(s, 'besparing_per_jaar'), 0) }} |
               {% endif %}
               {% if (state_attr(s, 'gemeten_dagen') | float(0)) < 365 %}
-              <small>Indicatie op basis van {{ state_attr(s, 'gemeten_dagen') | float(0) | round(0) | int }} dag(en) meting. Zomer en winter verschillen sterk (in de winter minder zon, maar vaak meer prijsverschil); na een jaar meten is de schatting het betrouwbaarst. Tarieven en accuprijs: tab Configuratie, blok Configuratie (Besparing).</small>
+              <small>Indicatie op basis van {{ state_attr(s, 'gemeten_dagen') | float(0) | round(0) | int }} dag(en) meting. Zomer en winter verschillen sterk (in de winter minder zon, maar vaak meer prijsverschil); na een jaar meten is de schatting het betrouwbaarst. Tarieven en accuprijs: tab Configuratie, blok Forecasting Configuratie (Besparing).</small>
               {%- endif %}
               {%- endif %}
             grid_options:
@@ -3688,7 +3688,7 @@ views:
               rows: auto
           - type: heading
             icon: ''
-            heading: Configuratie (Basis)
+            heading: Gielz Configuratie (Basis)
             heading_style: title
             badges:
               - type: button
@@ -3739,7 +3739,7 @@ views:
                 name: Standby Vertraging
           - type: heading
             icon: ''
-            heading: Configuratie (Opladen)
+            heading: Gielz Configuratie (Opladen)
             heading_style: title
             badges:
               - type: entity
@@ -3772,7 +3772,7 @@ views:
                 name: Oplaadmarge
           - type: heading
             icon: ''
-            heading: Configuratie (Ontladen)
+            heading: Gielz Configuratie (Ontladen)
             heading_style: title
             badges:
               - type: entity
@@ -3803,12 +3803,10 @@ views:
                 name: Ontladen Starten Bij
               - entity: input_number.zendure_2400_ac_ontlaadmarge
                 name: Ontlaadmarge
-      - type: grid
-        cards:
           - type: heading
             icon: ''
             heading_style: title
-            heading: Configuratie (Laadpercentage)
+            heading: Gielz Configuratie (Laadpercentage)
             badges:
               - type: entity
                 show_state: true
@@ -3862,7 +3860,7 @@ views:
                 name: Max. Laadpercentage
           - type: heading
             icon: ''
-            heading: Configuratie (PV)
+            heading: Gielz Configuratie (PV)
             heading_style: title
             badges:
               - type: entity
@@ -3887,7 +3885,121 @@ views:
                 state: 'on'
           - type: heading
             icon: ''
-            heading: Configuratie (Negatieve Prijs)
+            heading: Gielz Configuratie (Optioneel)
+            heading_style: title
+          - type: markdown
+            content: >-
+              <ha-alert alert-type="info">Helptekst</ha-alert>Maak je geen
+              gebruik van een Homewizard P1 maar heb je wel een P1/CT sensor
+              waarbij -watt teruglevering is en +watt import per seconden is vul
+              deze dan hier in onder **Afwijkende P1 Sensor⚙️**.
+
+
+              Ook kun je hier een afwijkende batterij volgorde instellen onder
+              **Batterij Volgorde⚙️**. Hiermee bepaal je zelf een afwijkende
+              volgorde van de batterijen. De juiste volgorde bepaal je mede aan
+              de hand van **sensor.zendure_2400_ac_batterij_serienummers** en de
+              sticker op de batterij(en). Op deze manier zullen de
+              batterijtemperaturen en het laadpercentage de juiste volgorde
+              hanteren zoals die van de batterij(en) in de stapel.
+            text_only: true
+            visibility:
+              - condition: state
+                entity: input_boolean.help_tonen_op_dashboard
+                state: 'on'
+          - type: entities
+            entities:
+              - entity: input_text.afwijkende_p1_sensor
+              - entity: input_text.zendure_2400_ac_batterij_volgorde
+                name: Batterij Volgorde
+          - type: heading
+            icon: ''
+            heading: Gielz Configuratie (Dynamisch)
+            heading_style: title
+            badges: []
+            visibility:
+              - condition: state
+                entity: input_boolean.dynamisch_tonen_op_dashboard
+                state: 'on'
+          - type: markdown
+            content: >-
+              <ha-alert alert-type="info">Helptekst</ha-alert>Heb je een
+              dynamisch contract dan kun je hier de Nordpool HACS sensor
+              invullen en aangeven wat de minimale spread moet zijn om gebruik
+              te maken van het laden en ontladen op lage en hoge tarieven.
+
+
+              Heb je een 15 minuten contract vink dit dan aan zodat de grafieken
+              en de prijzen goed gezet worden.
+            text_only: true
+            visibility:
+              - condition: state
+                entity: input_boolean.help_tonen_op_dashboard
+                state: 'on'
+              - condition: state
+                entity: input_boolean.dynamisch_tonen_op_dashboard
+                state: 'on'
+          - type: entities
+            entities:
+              - entity: input_text.dynamisch_nordpool_sensor
+              - entity: input_number.dynamisch_export_correctie
+                name: Export Correctie
+              - entity: input_number.dynamisch_minimale_spread
+                name: Minimale Spread
+              - entity: input_boolean.dynamisch_15_minuten
+                name: 15 Minuten Tarieven Actief
+            visibility:
+              - condition: state
+                entity: input_boolean.dynamisch_tonen_op_dashboard
+                state: 'on'
+      - type: grid
+        cards:
+          - type: heading
+            icon: ''
+            heading: Forecasting Configuratie (Basis)
+            heading_style: title
+            visibility:
+              - condition: state
+                entity: input_boolean.forecast_tonen_op_dashboard
+                state: 'on'
+          - type: markdown
+            content: >-
+              <ha-alert alert-type="info">Helptekst</ha-alert>Voor de modus
+              **Dynamisch NOM + Forecasting**. Vul de entity_id in van je
+              zon-forecast sensors (kWh, bv. Forecast.Solar of Solcast) en van
+              een totaalteller (kWh) van je zonnepanelen. Zelfverbruik zon en
+              dagverbruik worden vanaf dag 1 automatisch berekend uit je eigen
+              metingen en worden elke dag nauwkeuriger (tot 7 dagen). De laadmarge is een extra buffer als percentage van de
+              batterijcapaciteit.
+            text_only: true
+            visibility:
+              - condition: state
+                entity: input_boolean.help_tonen_op_dashboard
+                state: 'on'
+              - condition: state
+                entity: input_boolean.forecast_tonen_op_dashboard
+                state: 'on'
+          - type: entities
+            entities:
+              - entity: input_text.forecast_zon_resterend_vandaag_sensor
+                name: Zon resterend vandaag sensor
+              - entity: input_text.forecast_zon_morgen_sensor
+                name: Zon morgen sensor
+              - entity: input_text.forecast_zon_productie_sensor
+                name: Zonnepanelen productie sensor (totaal kWh)
+              - entity: input_number.forecast_laad_marge
+                name: Batterij laadmarge %
+              - entity: input_number.forecast_betrouwbaarheid
+                name: Betrouwbaarheid zonvoorspelling % (0 = 100%)
+              - entity: input_boolean.forecast_dal_ontladen_blokkeren
+                name: Niet ontladen in goedkoop dal (accu sparen)
+            visibility:
+              - condition: state
+                entity: input_boolean.forecast_tonen_op_dashboard
+                state: 'on'
+          - type: heading
+            icon: ''
+            heading: Forecasting Configuratie (Negatieve Prijs)
             heading_style: title
             badges:
               - type: entity
@@ -3925,7 +4037,7 @@ views:
               terugleverprijs negatief, dan levert de installatie niet terug.
               Terugleverprijs = marktprijs + bonus % (alleen bij een positieve
               marktprijs) + opslag teruglevering, met de waarden uit
-              **Configuratie (Besparing)**.
+              **Forecasting Configuratie (Besparing)**.
 
 
               **Zendure:** PV Export Uitgeschakeld gaat automatisch aan en daarna
@@ -4059,119 +4171,7 @@ views:
                 state: 'on'
           - type: heading
             icon: ''
-            heading: Configuratie (Optioneel)
-            heading_style: title
-          - type: markdown
-            content: >-
-              <ha-alert alert-type="info">Helptekst</ha-alert>Maak je geen
-              gebruik van een Homewizard P1 maar heb je wel een P1/CT sensor
-              waarbij -watt teruglevering is en +watt import per seconden is vul
-              deze dan hier in onder **Afwijkende P1 Sensor⚙️**.
-
-
-              Ook kun je hier een afwijkende batterij volgorde instellen onder
-              **Batterij Volgorde⚙️**. Hiermee bepaal je zelf een afwijkende
-              volgorde van de batterijen. De juiste volgorde bepaal je mede aan
-              de hand van **sensor.zendure_2400_ac_batterij_serienummers** en de
-              sticker op de batterij(en). Op deze manier zullen de
-              batterijtemperaturen en het laadpercentage de juiste volgorde
-              hanteren zoals die van de batterij(en) in de stapel.
-            text_only: true
-            visibility:
-              - condition: state
-                entity: input_boolean.help_tonen_op_dashboard
-                state: 'on'
-          - type: entities
-            entities:
-              - entity: input_text.afwijkende_p1_sensor
-              - entity: input_text.zendure_2400_ac_batterij_volgorde
-                name: Batterij Volgorde
-          - type: heading
-            icon: ''
-            heading: Configuratie (Dynamisch)
-            heading_style: title
-            badges: []
-            visibility:
-              - condition: state
-                entity: input_boolean.dynamisch_tonen_op_dashboard
-                state: 'on'
-          - type: markdown
-            content: >-
-              <ha-alert alert-type="info">Helptekst</ha-alert>Heb je een
-              dynamisch contract dan kun je hier de Nordpool HACS sensor
-              invullen en aangeven wat de minimale spread moet zijn om gebruik
-              te maken van het laden en ontladen op lage en hoge tarieven.
-
-
-              Heb je een 15 minuten contract vink dit dan aan zodat de grafieken
-              en de prijzen goed gezet worden.
-            text_only: true
-            visibility:
-              - condition: state
-                entity: input_boolean.help_tonen_op_dashboard
-                state: 'on'
-              - condition: state
-                entity: input_boolean.dynamisch_tonen_op_dashboard
-                state: 'on'
-          - type: entities
-            entities:
-              - entity: input_text.dynamisch_nordpool_sensor
-              - entity: input_number.dynamisch_export_correctie
-                name: Export Correctie
-              - entity: input_number.dynamisch_minimale_spread
-                name: Minimale Spread
-              - entity: input_boolean.dynamisch_15_minuten
-                name: 15 Minuten Tarieven Actief
-            visibility:
-              - condition: state
-                entity: input_boolean.dynamisch_tonen_op_dashboard
-                state: 'on'
-          - type: heading
-            icon: ''
-            heading: Configuratie (Forecasting)
-            heading_style: title
-            visibility:
-              - condition: state
-                entity: input_boolean.forecast_tonen_op_dashboard
-                state: 'on'
-          - type: markdown
-            content: >-
-              <ha-alert alert-type="info">Helptekst</ha-alert>Voor de modus
-              **Dynamisch NOM + Forecasting**. Vul de entity_id in van je
-              zon-forecast sensors (kWh, bv. Forecast.Solar of Solcast) en van
-              een totaalteller (kWh) van je zonnepanelen. Zelfverbruik zon en
-              dagverbruik worden vanaf dag 1 automatisch berekend uit je eigen
-              metingen en worden elke dag nauwkeuriger (tot 7 dagen). De laadmarge is een extra buffer als percentage van de
-              batterijcapaciteit.
-            text_only: true
-            visibility:
-              - condition: state
-                entity: input_boolean.help_tonen_op_dashboard
-                state: 'on'
-              - condition: state
-                entity: input_boolean.forecast_tonen_op_dashboard
-                state: 'on'
-          - type: entities
-            entities:
-              - entity: input_text.forecast_zon_resterend_vandaag_sensor
-                name: Zon resterend vandaag sensor
-              - entity: input_text.forecast_zon_morgen_sensor
-                name: Zon morgen sensor
-              - entity: input_text.forecast_zon_productie_sensor
-                name: Zonnepanelen productie sensor (totaal kWh)
-              - entity: input_number.forecast_laad_marge
-                name: Batterij laadmarge %
-              - entity: input_number.forecast_betrouwbaarheid
-                name: Betrouwbaarheid zonvoorspelling % (0 = 100%)
-              - entity: input_boolean.forecast_dal_ontladen_blokkeren
-                name: Niet ontladen in goedkoop dal (accu sparen)
-            visibility:
-              - condition: state
-                entity: input_boolean.forecast_tonen_op_dashboard
-                state: 'on'
-          - type: heading
-            icon: ''
-            heading: Configuratie (Besparing)
+            heading: Forecasting Configuratie (Besparing)
             heading_style: title
             visibility:
               - condition: state
@@ -4238,7 +4238,7 @@ views:
           - type: heading
             icon: ''
             heading_style: title
-            heading: Configuratie (EV)
+            heading: Forecasting Configuratie (EV)
             badges:
               - type: entity
                 show_state: true
@@ -4349,7 +4349,7 @@ views:
           - type: heading
             icon: ''
             heading_style: title
-            heading: Configuratie (HVAC)
+            heading: Forecasting Configuratie (HVAC)
             visibility:
               - condition: state
                 entity: input_text.hvac_sensor
@@ -4391,6 +4391,8 @@ views:
               - condition: state
                 entity: input_text.hvac_sensor
                 state_not: unavailable
+      - type: grid
+        cards:
           - type: heading
             icon: ''
             heading_style: title
@@ -4412,8 +4414,6 @@ views:
               - entity: input_boolean.dynamisch_tonen_op_dashboard
               - entity: input_boolean.forecast_tonen_op_dashboard
                 name: Forecasting Tonen Op Dashboard
-      - type: grid
-        cards:
           - type: heading
             heading: Logboek (afgelopen 4 uur)
             heading_style: title

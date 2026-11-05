@@ -7,7 +7,7 @@
 #
 # Terugleverprijs (sensor.zendure_terugleverprijs_nu), per kwartier:
 #   marktprijs + bonus % (alleen bij positieve marktprijs) + opslag teruglevering
-#   Marktprijs uit de Nordpool-sensor van Gielz; bonus en opslag uit Configuratie (Besparing).
+#   Marktprijs uit de Nordpool-sensor van Gielz; bonus en opslag uit Forecasting Configuratie (Besparing).
 # binary_sensor.zendure_export_geblokkeerd_negatieve_prijs staat aan als de functie aanstaat
 # en de terugleverprijs negatief is.
 #

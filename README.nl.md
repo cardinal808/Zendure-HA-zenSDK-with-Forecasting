@@ -31,9 +31,9 @@ De accu laadt op de goedkoopste momenten, maar **alleen zoveel als nodig is**, r
 - **Niet terugleveren bij negatieve prijs** (nieuw, `packages/zendure_negatieve_prijs.yaml`, optioneel): is de terugleverprijs (marktprijs + bonus + opslag) negatief, dan zet hij PV-export van de Zendure uit. Optioneel begrenst hij ook één of twee externe omvormers (productielimiet op de P1-meter, exportlimiet, schakelaar of script). Zet alleen terug wat hij zelf heeft omgezet.
 - **Elektrische auto** (nieuw, `packages/zendure_ev.yaml`, optioneel): voor een lader zonder eigen aansturing (grannylader, of een wallbox achter een slimme schakelaar) met een vermogensmeting, bv. een Shelly 1PM. De accu ontlaadt dan niet meer in de auto, en het laden van de auto telt niet mee in het verbruiksprofiel, het dagverbruik en het zelfverbruik van de planner. Met een schakelaar kun je ook een laadsessie plannen: *Nacht* laadt de benodigde kWh in de goedkoopste prijsslots tot een ingestelde tijd, *Overdag* laadt op zon en de planner laadt de accu dan extra uit het net op het goedkoopste moment.
 - **Airco (HVAC)** (nieuw in de publieke set, `packages/zendure_hvac.yaml`, optioneel): niet ontladen terwijl de airco draait, binnen ingestelde uren en optioneel niet in een duur uur. Laden blijft werken.
-- **Optionele pakketten tonen zich vanzelf:** de blokken Configuratie (EV), (HVAC), (Negatieve Prijs) en (Besparing) staan alleen op het dashboard als het bijbehorende pakket geladen is. `sensor.forecasting_versie` noemt in het attribuut `pakketten` welke optionele pakketten actief zijn.
+- **Optionele pakketten tonen zich vanzelf:** de blokken Forecasting Configuratie (EV), (HVAC), (Negatieve Prijs) en (Besparing) staan alleen op het dashboard als het bijbehorende pakket geladen is. `sensor.forecasting_versie` noemt in het attribuut `pakketten` welke optionele pakketten actief zijn.
 - **Plan Tijdlijn** op het dashboard: voor de komende 36 uur per prijsslot in vier compacte rijen de prijs (kleuren zoals Gielz: groen = gepland laden, rood = duur), zon en huisverbruik, laden en ontladen van de accu met het verwachte laadpercentage, en net-import en -export. Als één kaart via `custom:mod-card`, dus card-mod (HACS) is nodig. Tip: sluit `sensor.zendure_forecast_grafiek` uit van de recorder (`recorder: exclude: entities:`), de attributen zijn groter dan de 16 kB-limiet van de recorder.
-- Dashboard: sectie Forecasting op tab Zendure (plan vandaag en morgen, verbruiksprofiel, verzamelde 7-daagse gegevens, herbereken-knop), een tab Besparing en een blok Configuratie (Forecasting) met alle invoervelden. Beide zijn te tonen of te verbergen met **Forecasting Tonen Op Dashboard**.
+- Dashboard: sectie Forecasting op tab Zendure (plan vandaag en morgen, verbruiksprofiel, verzamelde 7-daagse gegevens, herbereken-knop), een tab Besparing en een blok Forecasting Configuratie (Basis) met alle invoervelden. Beide zijn te tonen of te verbergen met **Forecasting Tonen Op Dashboard**.
 
 ### Wat er veranderd is ten opzichte van het origineel
 
@@ -46,7 +46,7 @@ De accu laadt op de goedkoopste momenten, maar **alleen zoveel als nodig is**, r
 | `packages/zendure_hvac.yaml` / `packages/zendure_hvac_global.yaml` | **Nieuw, optioneel.** Airco-helpers en `binary_sensor.hvac_ontladen_geblokkeerd` / `binary_sensor.hvac_discharge_blocked`. |
 | `packages/zendure_gielz1986_nl.yaml` / `packages/zendure_gielz1986_global.yaml` | Alleen één extra optie in de modus-keuzelijst. |
 | `automation_nl.yaml` / `automation_global.yaml` | De nieuwe modus in de modus-keuze en in de 6 bestaande NOM-lijsten (nul-op-de-meter, SOC-bescherming, noodstop), een eigen laadblok dat alleen laadt als het plan *Laden* zegt, een ontlaad-blokkade voor het goedkope dal en voor de airco, en in de NOM-ontlaadblokken het laadvermogen van de auto van de P1-meter af. Zonder de optionele pakketten werkt alles zoals voorheen. Bestaande modi zijn verder niet gewijzigd. |
-| `dashboard_nl.yaml` / `dashboard_global.yaml` | Nieuwe sectie Forecasting, nieuwe tab Besparing, nieuwe blokken Configuratie (Forecasting), Configuratie (Besparing), Configuratie (Negatieve Prijs), Configuratie (EV) en Configuratie (HVAC) (alleen zichtbaar als het pakket geladen is) en een schakelaar in Configuratie (Dashboard). |
+| `dashboard_nl.yaml` / `dashboard_global.yaml` | Nieuwe sectie Forecasting, nieuwe tab Besparing, nieuwe blokken Forecasting Configuratie (Basis), Forecasting Configuratie (Besparing), Forecasting Configuratie (Negatieve Prijs), Forecasting Configuratie (EV) en Forecasting Configuratie (HVAC) (alleen zichtbaar als het pakket geladen is) en een schakelaar in Configuratie (Dashboard). |
 
 Elk gewijzigd bestand begint met een kop van twee regels met de versie, de Gielz-versie waarop hij is gebaseerd en de oorspronkelijke auteur.
 
@@ -57,7 +57,7 @@ Installeer eerst de oorspronkelijke integratie zoals hieronder beschreven (packa
 1. Zet `zendure_forecasting.yaml` en `zendure_besparing.yaml` (NL) of `zendure_forecasting_global.yaml` en `zendure_savings_global.yaml` (Global) in dezelfde `packages`-map als het Gielz-pakket, en vervang het Gielz-pakket door de versie uit deze fork. Wil je niet terugleveren bij een negatieve prijs, zet er dan ook `zendure_negatieve_prijs.yaml` (NL) of `zendure_negative_price_global.yaml` (Global) bij. Voor een elektrische auto zet je er `zendure_ev.yaml` (NL) of `zendure_ev_global.yaml` (Global) bij, voor de airco `zendure_hvac.yaml` (NL) of `zendure_hvac_global.yaml` (Global).
 2. Vervang de automation en het dashboard door de versies uit deze fork (of voeg de wijzigingen samen met je eigen versie).
 3. Herstart Home Assistant.
-4. Vul in tab Configuratie bij **Configuratie (Forecasting)** in: de sensor voor zon resterend vandaag, zon morgen (kWh, bijv. Forecast.Solar of Solcast) en een totaalteller van je zonnepanelen (kWh). Zet eventueel de laadmarge. Vul bij **Configuratie (Besparing)** je tarieven en de aanschafprijs van de accu in.
+4. Vul in tab Configuratie bij **Forecasting Configuratie (Basis)** in: de sensor voor zon resterend vandaag, zon morgen (kWh, bijv. Forecast.Solar of Solcast) en een totaalteller van je zonnepanelen (kWh). Zet eventueel de laadmarge. Vul bij **Forecasting Configuratie (Besparing)** je tarieven en de aanschafprijs van de accu in.
 5. Kies de modus **Dynamisch NOM + Forecasting**.
 
 **Vereist:** het Gielz-pakket, Nord Pool (zoals al ingesteld in Gielz), een P1-meter, een zon-forecast integratie en apexcharts-card voor het Gielz-dashboard en card-mod (voor de Plan Tijdlijn en de opmaak van de tabellen op de tab Besparing). De planner wordt na ongeveer een week historie nauwkeuriger.
@@ -160,29 +160,29 @@ homeassistant:
 
 | Uitleg per configuratie item | |  
 |-|-|
-| **Configuratie (Basis)** | **Informatie**|  
+| **Gielz Configuratie (Basis)** | **Informatie**|  
 | `zendure_2400_ac_ip_adres`       | **bijvoorbeeld 192.168.0.172** – In de Zendure app onder device Information. |  
 | `homewizard_p1_ip_adres`    | **(Instellingsadvies: gebruik een Homewizard P1) bijvoorbeeld 192.168.0.192** – In de Homewizard app (lokale API aanzetten).  |  
 | `zendure_2400_ac_standby_vertraging` | **(Instellingsadvies: 15 minuten) 5-30 minuten** – Geef hier aan hoe snel de omvormer 100% in standby gaat bij 0 activiteit. Dit voorkomt sluipverbruik van +/- 19 watt. | 
 | `zendure_2400_ac_advies_instellingen_overnemen` | Zodra de batterij draait kun je met deze knop de onderstaande instellingsadviezen direct overnemen. | 
-| **Configuratie (Opladen)** |**Informatie**|  
+| **Gielz Configuratie (Opladen)** |**Informatie**|  
 | `zendure_2400_ac_max_oplaadvermogen`    | **400 t/m 2400 watt** – Geef hier aan met hoeveel vermogen hij maximaal mag laden. Bij meerdere omvormers via Node-RED kan dit tot 7200 watt.  |  
 | `zendure_2400_ac_opladen_starten_bij` | **(Instellingsadvies: -300 watt) -1000 t/m -80 watt** – hier geef je aan wanneer de batterij exact begint met opladen. Daarna balanceert de batterij naar 0 - de extra oplaadmarge.  | 
 | `zendure_2400_ac_oplaadmarge` | **(Instellingsadvies: 50 watt) 0 t/m 250 watt** – Geef hier aan hoeveel minder je wilt meenemen tijdens opladen. Als je wat minder wilt opladen, in de zomer met voldoende opwek zou je dit zelfs op 200 kunnen zetten om import overdag 100% te voorkomen. (Zendure zelf hanteert hier 50 watt in HEMS).  | 
-| **Configuratie (Ontladen)** |**Informatie**|  
+| **Gielz Configuratie (Ontladen)** |**Informatie**|  
 | `zendure_2400_ac_max_ontlaadvermogen`    | **400 t/m 2400 watt** – Geef hier aan met hoeveel vermogen hij maximaal mag ontladen. Bij meerdere omvormers via Node-RED kan dit tot 7200 watt. |  
 | `zendure_2400_ac_ontladen_starten_bij` | **(Instellingsadvies: 100 watt) 80 t/m 500 watt** – hier geef je aan wanneer de batterij exact begint met ontladen. Daarna balanceert de batterij naar 0 - de extra ontlaadmarge. | 
 | `zendure_2400_ac_ontlaadmarge` | **(Instellingsadvies: 5 watt) 0 t/m 250 watt** – Geef hier aan hoeveel je extra wilt meenemen tijdens ontladen. Als je wat meer wilt ontladen dan noodzakelijk is. |
-| **Configuratie (Laadpercentage)** |**Informatie**|  
+| **Gielz Configuratie (Laadpercentage)** |**Informatie**|  
 | `zendure_2400_ac_soc_bescherming_uitgeschakeld`    | Vink dit aan om de dubbele SOC bescherming uit te schakelen. Wanneer de batterij onder het minimaal toegestaan laadpercentage zakt zal er niet meer automatisch bijgeladen worden. Er word gewacht tot de BMS (batterij management systeem) zelf actie onderneemt. |  
 | `zendure_2400_ac_minimaal_toegestaan_laadpercentage` | **(Instellingsadvies: 10%) 5% t/m 50%** – Geef hier het minimaal toegestaan laadpercentage aan. | 
 | `zendure_2400_ac_maximaal_toegestaan_laadpercentage` | **(Instellingsadvies: 100%) 70% t/m 100%** – Geef hier het maximaal toegestaan laadpercentage aan. Bij 100% vind er een SOC kalibratie plaats om het laadpercentage goed te kunnen inschatten. | 
-| **Configuratie (PV)** |**Informatie**|  
+| **Gielz Configuratie (PV)** |**Informatie**|  
 | `zendure_2400_ac_pv_export_uitgeschakeld` | Vink dit aan om PV export uit te schakelen. Als de batterij vol is zal er niet langer energie geexporteerd worden van de verbonden zonnepanelen. | 
-| **Configuratie (Optioneel)** |**Informatie**|  
+| **Gielz Configuratie (Optioneel)** |**Informatie**|  
 | `afwijkende_p1_sensor` | **bijvoorbeeld `sensor.eigen_P1`** – je eigen afwijkende P1 sensor toevoegen waarbij +watt afname is en -watt teruglevering (vul je hier je eigen sensor in dan is deze altijd leidend). [Ga naar WIKI](https://github.com/Gielz1986/Zendure-HA-zenSDK/wiki/Global-and-NL-%E2%80%90-P1-CT-meters-(API's))) voor afwijkende P1/CT API's. |  
 | `zendure_2400_ac_batterij_volgorde` | **bijvoorbeeld 1;5;3;4;2** – hiermee bepaal je zelf een afwijkende volgorde van de batterijen. De juiste volgorde bepaal je mede aan de hand van `sensor.zendure_2400_ac_batterij_serienummers` en de sticker op de batterij(en). Op deze manier zullen de batterijtemperaturen en het laadpercentage de juiste volgorde hebben zoals die van de batterij(en) in de stapel. | 
-| **Configuratie (Dynamisch)** |**Informatie**|  
+| **Gielz Configuratie (Dynamisch)** |**Informatie**|  
 | `dynamisch_nordpool_sensor` | **bijvoorbeeld `sensor.nordpool_kwh_nl_eur_3_09_0`** – je eigen sensor van Nordpool (HACS) toevoegen. Wanneer je het Dynamisch Nordpool gedeelte in gebruik gaat nemen moet je voor dat je deze in gebruik neemt bij `dynamisch_handmatige_periode` en `dynamisch_handmatige_periode_morgen` even **unknown** weghalen. Hierna zal het dynamisch gedeelte werken. Alles wat in de forecast (morgen) gezet word zal overgenomen worden om 00:00 via de automatisering en verschijnen in vandaag. |  
 | `dynamisch_export_correctie` | Stel het aantal cent in dat tijdens het exporteren wordt afgetrokken. Deze waarde wordt gebruikt in de spreadberekening. |
 | `dynamisch_minimale_spread` | **bijvoorbeeld 25%** - Hiermee geef je aan vanaf hoeveel spread de batterij dynamisch gaat laden en opladen op hoog vermogen.  |  

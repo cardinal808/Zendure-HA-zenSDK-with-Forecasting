@@ -4,7 +4,7 @@
 # Zendure HVAC (airco) - NOM niet laten ontladen terwijl de airco draait (optioneel)
 #
 # Plaats dit bestand naast zendure_gielz1986_nl.yaml (zelfde packages-map).
-# Zonder dit bestand verandert er niets. Het blok Configuratie (HVAC) op de tab Configuratie
+# Zonder dit bestand verandert er niets. Het blok Forecasting Configuratie (HVAC) op de tab Configuratie
 # verschijnt vanzelf zodra dit bestand geladen is.
 # Werking:
 #   - binary_sensor.hvac_actief               : draait de airco?
