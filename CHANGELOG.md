@@ -15,7 +15,7 @@ Versions follow `year.month.sequence`; the sequence restarts at 1 every month. E
 - The automation checks the AC with a template, so everything keeps working without the HVAC package.
 - **Settings per mode instead of per hour:** the *Charge only from/until* times are gone. New `sensor.hvac_mode` (Off, Standby, Heating, Cooling, Drying, Fan, Auto) from the climate entity's mode and `hvac_action`. Per mode you choose whether discharging is still allowed, e.g. Cooling on (summer, plenty of sun) and Heating off (winter, no sun). By default every mode is blocked.
 - **Standby does not count:** when the AC has reached its temperature (`hvac_action` idle), the battery discharges as usual.
-- `binary_sensor.hvac_discharge_blocked` has a `reason` attribute, also shown in Configuration (HVAC).
+- `binary_sensor.hvac_discharge_blocked` has a `reason` attribute, also shown in Forecasting Configuration (HVAC).
 
 **Dashboard**
 - **Optional packages show themselves:** Configuration (EV), (HVAC), (Negative Price) and (Savings) are only on the Settings tab when the package is loaded. Without `zendure_savings_global.yaml` the Savings tab only shows a notice instead of empty cards.
