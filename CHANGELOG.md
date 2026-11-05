@@ -15,7 +15,7 @@ Versions follow `year.month.sequence`; the sequence restarts at 1 every month. E
 - The automation checks the AC with a template, so everything keeps working without the HVAC package.
 
 **Dashboard**
-- **Optional packages show themselves:** Configuration (EV), (HVAC), (Negative Price) and (Savings) are only on the Settings tab when the package is loaded.
+- **Optional packages show themselves:** Configuration (EV), (HVAC), (Negative Price) and (Savings) are only on the Settings tab when the package is loaded. Without `zendure_savings_global.yaml` the Savings tab only shows a notice instead of empty cards.
 - **Plan Timeline** back in the first column below PV, as one card (`custom:mod-card`, needs card-mod), without the separate colour line below it.
 - Plan for today: a line about the kWh the car still asks from the sun during the day.
 - `sensor.forecasting_version`: attribute `packages` (which optional packages are active) replaces `set`.

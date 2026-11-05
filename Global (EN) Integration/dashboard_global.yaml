@@ -2077,6 +2077,23 @@ views:
     sections:
       - type: grid
         column_span: 3
+        visibility:
+          - condition: state
+            entity: input_number.savings_setting_fixed_supply_price
+            state: unavailable
+        cards:
+          - type: markdown
+            text_only: true
+            content: >-
+              <ha-alert alert-type="info">The package <b>zendure_savings_global.yaml</b> is not loaded.</ha-alert>Put the file in your <code>packages</code> folder and restart Home Assistant to see the savings and the battery payback time.
+            grid_options:
+              columns: full
+      - type: grid
+        visibility:
+          - condition: state
+            entity: input_number.savings_setting_fixed_supply_price
+            state_not: unavailable
+        column_span: 3
         cards:
           - type: markdown
             content: >-
@@ -2136,6 +2153,10 @@ views:
             grid_options:
               columns: full
       - type: grid
+        visibility:
+          - condition: state
+            entity: input_number.savings_setting_fixed_supply_price
+            state_not: unavailable
         cards:
           - type: markdown
             title: Overview
@@ -2209,6 +2230,10 @@ views:
                   ha-icon { --mdc-icon-size: 18px; color: var(--secondary-text-color); margin-right: 6px; vertical-align: -3px; }
                   small { color: var(--secondary-text-color); }
       - type: grid
+        visibility:
+          - condition: state
+            entity: input_number.savings_setting_fixed_supply_price
+            state_not: unavailable
         cards:
           - type: heading
             icon: ''
@@ -2342,6 +2367,10 @@ views:
             grid_options:
               columns: full
       - type: grid
+        visibility:
+          - condition: state
+            entity: input_number.savings_setting_fixed_supply_price
+            state_not: unavailable
         cards:
           - type: tile
             entity: sensor.zendure_battery_payback_time
