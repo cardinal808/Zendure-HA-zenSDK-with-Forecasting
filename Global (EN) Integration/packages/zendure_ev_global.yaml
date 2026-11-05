@@ -1,0 +1,495 @@
+# Zendure zenSDK (Gielz) + Forecasting 2026.11.3 | based on Gielz v20261007
+# Based on Gielz1986/Zendure-HA-zenSDK (Michiel Hofker). See README.md for license and changes.
+# =====================================================================
+# Zendure EV - charge an electric car without draining the home battery (optional)
+#
+# Put this file next to zendure_gielz1986_global.yaml (same packages folder).
+# Without this file nothing changes: the automation and the planner then use 0 W.
+# The Configuration (EV) block on the Settings tab appears by itself as soon as this file
+# is loaded.
+#
+# Meant for a charger without its own control (granny charger, or a wallbox behind a smart
+# switch). Needed: a power sensor (W or kW) of the charger, e.g. a Shelly 1PM or Pro 1PM in the
+# charger's circuit. Optional: the switch of that same Shelly to turn the charger on and off.
+#
+# What the package does:
+# 1. No battery discharge into the car (always, also when Charge moment is Off):
+#    sensor.ev_discharge_correction is the car's charging power once it is above the threshold.
+#    The Smart Matching discharge blocks in the automation subtract it from the grid meter, so
+#    the battery only supplies the house and the car charges from the grid (or the sun).
+# 2. Count the car's energy separately (sensor.ev_charged_total, ..._from_solar_total and the
+#    7-day figures). The planner removes it from the usage profile, the daily usage and the
+#    solar self-consumption, so a charging day does not skew the battery forecast.
+# 3. Charging session (Charge moment + Required energy):
+#    - Night (cheapest hours): the charger is only on in the cheapest price slots until
+#      "Ready by" (00:00 = 07:00). While tomorrow's prices are unknown it uses today's pattern
+#      and replans once they arrive. Without prices it charges right away.
+#    - Daytime (solar): the charger is on while the sun is up, until the required energy is
+#      charged or the sun sets. Chosen after sunset: the next day applies.
+#      The planner subtracts the kWh still to charge from the expected solar surplus for the
+#      battery and charges that shortfall from the grid at the cheapest moment.
+#    Done (energy charged or time passed): Charge moment returns to Off and the charger is on again.
+#    Required energy is measured at the socket (so including the car's charging losses).
+#
+# Note: not every car resumes charging by itself when power returns. Test this first.
+# =====================================================================
+
+input_select:
+  ev_charge_moment:
+    name: EV Charge Moment
+    icon: mdi:ev-station
+    options:
+      - 'Off'
+      - Night (cheapest hours)
+      - Daytime (solar)
+
+input_number:
+  ev_required_energy:
+    name: EV Required Energy
+    icon: mdi:car-electric
+    min: 0
+    max: 100
+    step: 1
+    mode: box
+    unit_of_measurement: "kWh"
+
+  # 0 = 2.3 kW (granny charger at 10 A)
+  ev_charger_power:
+    name: EV Charger Power
+    icon: mdi:flash
+    min: 0
+    max: 22
+    step: 0.1
+    mode: box
+    unit_of_measurement: "kW"
+
+  # 0 = 300 W
+  ev_threshold_power:
+    name: EV Threshold Power
+    icon: mdi:flash-alert
+    min: 0
+    max: 2000
+    step: 10
+    mode: box
+    unit_of_measurement: "W"
+
+  # Internal: value of sensor.ev_charged_total at the start of the session
+  ev_session_meter_start:
+    name: EV Session Meter Start
+    icon: mdi:history
+    min: 0
+    max: 10000000
+    step: 0.001
+    mode: box
+    unit_of_measurement: "kWh"
+
+input_datetime:
+  ev_ready_by:
+    name: EV Ready By
+    icon: mdi:clock-end
+    has_date: false
+    has_time: true
+
+  # Internal: end of the running session
+  ev_session_end:
+    name: EV Session End
+    icon: mdi:clock-check-outline
+    has_date: true
+    has_time: true
+
+input_text:
+  ev_power_sensor:
+    name: EV Power Sensor
+    icon: mdi:meter-electric
+    max: 250
+    mode: text
+
+  ev_charger_switch:
+    name: EV Charger Switch
+    icon: mdi:power-socket-eu
+    max: 250
+    mode: text
+
+# ---------------------------------------------------------------------
+# kWh counters of the car (method "left", see zendure_forecasting_global.yaml)
+# ---------------------------------------------------------------------
+sensor:
+  - platform: integration
+    name: "EV Charged Total"
+    unique_id: ev_charged_total
+    source: sensor.ev_charging_power
+    unit_prefix: k
+    round: 3
+    method: left
+
+  - platform: integration
+    name: "EV Charged From Solar Total"
+    unique_id: ev_charged_from_solar_total
+    source: sensor.ev_charging_from_solar_power
+    unit_prefix: k
+    round: 3
+    method: left
+
+  - platform: statistics
+    name: "EV Charged 7 Days"
+    unique_id: ev_charged_7_days
+    entity_id: sensor.ev_counter_charged
+    state_characteristic: change
+    max_age:
+      days: 7
+    sampling_size: 1500
+    precision: 2
+
+  - platform: statistics
+    name: "EV Charged From Solar 7 Days"
+    unique_id: ev_charged_from_solar_7_days
+    entity_id: sensor.ev_counter_charged_from_solar
+    state_characteristic: change
+    max_age:
+      days: 7
+    sampling_size: 1500
+    precision: 2
+
+template:
+  - sensor:
+      # Charging power of the car in W (0 when the sensor is not configured)
+      - name: "EV Charging Power"
+        unique_id: ev_charging_power
+        icon: mdi:car-electric
+        unit_of_measurement: "W"
+        device_class: power
+        state_class: measurement
+        state: >
+          {% set e = states('input_text.ev_power_sensor') | trim %}
+          {% if e | lower | regex_match('^sensor\\..+') and has_value(e) %}
+            {% set u = state_attr(e, 'unit_of_measurement') %}
+            {% set v = states(e) | float(0) %}
+            {{ ([v * 1000 if u == 'kW' else v, 0] | max) | round(0) }}
+          {% else %}0{% endif %}
+
+      # What the Smart Matching discharge blocks subtract from the grid meter: the car's
+      # charging power once it is above the threshold (charger standby does not count).
+      - name: "EV Discharge Correction"
+        unique_id: ev_discharge_correction
+        icon: mdi:battery-minus-outline
+        unit_of_measurement: "W"
+        device_class: power
+        state_class: measurement
+        state: >
+          {% set d = states('input_number.ev_threshold_power') | float(0) %}
+          {% set p = states('sensor.ev_charging_power') | float(0) %}
+          {{ p if p > (d if d > 0 else 300) else 0 }}
+
+      # Part of the charging power that does not come from the grid (so from solar).
+      # The battery does not discharge into the car, so what is not from the grid is from the sun.
+      - name: "EV Charging From Solar Power"
+        unique_id: ev_charging_from_solar_power
+        icon: mdi:solar-power
+        unit_of_measurement: "W"
+        device_class: power
+        state_class: measurement
+        state: >
+          {% set ev = states('sensor.ev_charging_power') | float(0) %}
+          {% set import_w = [states('sensor.home_energy_meter_power') | float(0), 0] | max %}
+          {{ (ev - [import_w, ev] | min) | round(0) }}
+
+      # Charged in the running session (kWh)
+      - name: "EV Session Charged"
+        unique_id: ev_session_charged
+        icon: mdi:battery-charging-medium
+        unit_of_measurement: "kWh"
+        state: >
+          {% if is_state('input_select.ev_charge_moment', 'Off') %}0
+          {% else %}
+            {{ ([states('sensor.ev_charged_total') | float(0)
+                 - states('input_number.ev_session_meter_start') | float(0), 0] | max) | round(2) }}
+          {% endif %}
+
+  # -------------------------------------------------------------------
+  # Freeze the counters every quarter hour (for the 7-day statistics, as in the forecasting package)
+  # -------------------------------------------------------------------
+  - trigger:
+      - trigger: time_pattern
+        minutes: "/15"
+      - trigger: homeassistant
+        event: start
+    sensor:
+      - name: "EV Counter Charged"
+        unique_id: ev_counter_charged
+        unit_of_measurement: "kWh"
+        device_class: energy
+        state_class: total_increasing
+        availability: "{{ has_value('sensor.ev_charged_total') }}"
+        state: "{{ states('sensor.ev_charged_total') | float(0) }}"
+
+      - name: "EV Counter Charged From Solar"
+        unique_id: ev_counter_charged_from_solar
+        unit_of_measurement: "kWh"
+        device_class: energy
+        state_class: total_increasing
+        availability: "{{ has_value('sensor.ev_charged_from_solar_total') }}"
+        state: "{{ states('sensor.ev_charged_from_solar_total') | float(0) }}"
+
+  # -------------------------------------------------------------------
+  # Charge plan
+  #   State: Off | Charging | Waiting | Done
+  #   Attribute charging_now: should the charger be on now?
+  #   Attribute daytime_kwh: what the car still asks from the sun with "Daytime" (for the planner)
+  # -------------------------------------------------------------------
+  - trigger:
+      - trigger: time_pattern
+        minutes: "/1"
+      - trigger: homeassistant
+        event: start
+      - trigger: state
+        entity_id:
+          - input_select.ev_charge_moment
+          - input_number.ev_required_energy
+          - input_number.ev_charger_power
+          - input_number.ev_session_meter_start
+          - input_datetime.ev_session_end
+          - sensor.dynamic_nordpool
+    variables:
+      now_ts: "{{ as_timestamp(now()) }}"
+      moment: "{{ states('input_select.ev_charge_moment') }}"
+      night: "{{ moment.startswith('Night') }}"
+      daytime: "{{ moment.startswith('Daytime') }}"
+      active: "{{ night or daytime }}"
+      kw: >
+        {% set k = states('input_number.ev_charger_power') | float(0) %}
+        {{ k if k > 0 else 2.3 }}
+      needed: "{{ states('input_number.ev_required_energy') | float(0) }}"
+      charged: "{{ states('sensor.ev_session_charged') | float(0) if active else 0 }}"
+      remaining: "{{ ([needed - charged, 0] | max) | round(3) if active else 0 }}"
+      end_ts: "{{ as_timestamp(states('input_datetime.ev_session_end'), 0) }}"
+      raw_today: "{{ state_attr('sensor.dynamic_nordpool', 'raw_today') or [] }}"
+      raw_tomorrow: "{{ state_attr('sensor.dynamic_nordpool', 'raw_tomorrow') or [] }}"
+      tomorrow_known: "{{ raw_tomorrow | length > 0 }}"
+      day_length: "{{ as_timestamp(today_at('00:00') + timedelta(days=1)) - as_timestamp(today_at('00:00')) }}"
+      # Price slots until the end of the session; tomorrow's prices unknown = today's pattern
+      cand: >
+        {%- set ns = namespace(l=[]) -%}
+        {%- set tom = raw_tomorrow if tomorrow_known else raw_today -%}
+        {%- set shift = 0 if tomorrow_known else day_length -%}
+        {%- for p in raw_today + tom -%}
+          {%- set extra = shift if loop.index > raw_today | length else 0 -%}
+          {%- set s = as_timestamp(p.start) + extra -%}
+          {%- set e = as_timestamp(p.end) + extra -%}
+          {%- set a = [s, now_ts] | max -%}
+          {%- set b = [e, end_ts] | min -%}
+          {%- if b > a -%}
+            {%- set ns.l = ns.l + [{'s': s, 'e': e, 'v': p.value | float(0), 'kwh': (kw * (b - a) / 3600) | round(4)}] -%}
+          {%- endif -%}
+        {%- endfor -%}
+        {{ ns.l }}
+      # Cheapest slots until the required energy is covered (the earliest at equal price)
+      chosen: >
+        {%- set ns = namespace(l=[], k=0) -%}
+        {%- for x in cand | sort(attribute='s') | sort(attribute='v') -%}
+          {%- if ns.k < remaining -%}
+            {%- set ns.l = ns.l + [x] -%}{%- set ns.k = ns.k + x.kwh -%}
+          {%- endif -%}
+        {%- endfor -%}
+        {{ ns.l | sort(attribute='s') }}
+      charging_now: >
+        {% if not active or remaining <= 0 or now_ts >= end_ts %}{{ false }}
+        {% elif daytime %}{{ is_state('sun.sun', 'above_horizon') }}
+        {% elif cand | length == 0 %}{{ true }}
+        {% else %}{{ chosen | selectattr('s', 'le', now_ts) | selectattr('e', 'gt', now_ts) | list | length > 0 }}{% endif %}
+    sensor:
+      - name: "EV Charge Plan"
+        unique_id: ev_charge_plan
+        icon: mdi:car-clock
+        state: >
+          {% if not active %}Off
+          {% elif remaining <= 0 %}Done
+          {% elif charging_now %}Charging
+          {% else %}Waiting{% endif %}
+        attributes:
+          charging_now: "{{ charging_now }}"
+          charged_kwh: "{{ charged | round(2) }}"
+          remaining_kwh: "{{ remaining | round(2) }}"
+          daytime_kwh: "{{ remaining | round(2) if daytime else 0 }}"
+          charging_power_kw: "{{ kw }}"
+          end: "{{ (end_ts | timestamp_custom('%Y-%m-%d %H:%M', true)) if active and end_ts > 0 else none }}"
+          tomorrow_prices_known: "{{ tomorrow_known }}"
+          prices_available: "{{ cand | length > 0 }}"
+          # Consecutive planned slots merged: start, end, kWh, average price
+          charge_blocks: >
+            {%- set ns = namespace(l=[], b=none) -%}
+            {%- if night -%}
+              {%- for x in chosen -%}
+                {%- if ns.b is not none and (ns.b.e_ts == x.s) -%}
+                  {%- set ns.b = {'s_ts': ns.b.s_ts, 'e_ts': x.e, 'kwh': ns.b.kwh + x.kwh, 'sum': ns.b.sum + x.v * x.kwh} -%}
+                {%- else -%}
+                  {%- if ns.b is not none -%}{%- set ns.l = ns.l + [ns.b] -%}{%- endif -%}
+                  {%- set ns.b = {'s_ts': x.s, 'e_ts': x.e, 'kwh': x.kwh, 'sum': x.v * x.kwh} -%}
+                {%- endif -%}
+              {%- endfor -%}
+              {%- if ns.b is not none -%}{%- set ns.l = ns.l + [ns.b] -%}{%- endif -%}
+            {%- endif -%}
+            {%- set out = namespace(l=[]) -%}
+            {%- for b in ns.l -%}
+              {%- set out.l = out.l + [{
+                  'day': 'today' if (b.s_ts | timestamp_custom('%Y-%m-%d', true)) == (now().date() | string) else 'tomorrow',
+                  'start': b.s_ts | timestamp_custom('%H:%M', true),
+                  'end': b.e_ts | timestamp_custom('%H:%M', true),
+                  'kwh': b.kwh | round(2),
+                  'price': (b.sum / b.kwh) | round(3) if b.kwh > 0 else 0}] -%}
+            {%- endfor -%}
+            {{ out.l }}
+
+automation:
+  # -------------------------------------------------------------------
+  # Start, change and end the session
+  # -------------------------------------------------------------------
+  - id: zendure_ev_session
+    alias: Zendure EV Session
+    description: >-
+      Forecasting 2026.11.3 - Starts an EV charging session when Charge moment goes to Night or
+      Daytime, ends it when the energy is charged or the time has passed, and turns the charger
+      back on.
+    mode: queued
+    max: 5
+    triggers:
+      - trigger: state
+        entity_id: input_select.ev_charge_moment
+        id: moment
+      - trigger: state
+        entity_id: input_datetime.ev_ready_by
+        id: ready_by
+      - trigger: state
+        entity_id: sensor.ev_charge_plan
+        to: Done
+        for:
+          minutes: 1
+        id: done
+      - trigger: time_pattern
+        minutes: /1
+        id: time
+    variables:
+      moment: "{{ states('input_select.ev_charge_moment') }}"
+      switch: "{{ states('input_text.ev_charger_switch') | trim }}"
+      switch_ok: "{{ switch.split('.')[0] in ['switch', 'input_boolean', 'light'] and has_value(switch) }}"
+      # Next "Ready by" (00:00 = 07:00)
+      ready_by_ts: >
+        {% set t = states('input_datetime.ev_ready_by') %}
+        {% set t = '07:00:00' if t in ['00:00:00', 'unknown', 'unavailable', ''] else t %}
+        {% set d = today_at(t) %}
+        {{ as_timestamp(d + timedelta(days=1) if d <= now() else d) }}
+      sunset_ts: "{{ as_timestamp(state_attr('sun.sun', 'next_setting'), as_timestamp(now()) + 43200) }}"
+      new_end: "{{ ready_by_ts if moment.startswith('Night') else sunset_ts }}"
+    conditions: []
+    actions:
+      - choose:
+          - alias: Session start
+            conditions:
+              - condition: trigger
+                id: moment
+              - condition: template
+                value_template: "{{ trigger.from_state is not none and trigger.from_state.state == 'Off' and moment != 'Off' }}"
+            sequence:
+              - action: input_number.set_value
+                target:
+                  entity_id: input_number.ev_session_meter_start
+                data:
+                  value: "{{ states('sensor.ev_charged_total') | float(0) }}"
+              - action: input_datetime.set_datetime
+                target:
+                  entity_id: input_datetime.ev_session_end
+                data:
+                  timestamp: "{{ new_end }}"
+              - action: logbook.log
+                data:
+                  message: >-
+                    🚗EV charging planned ({{ moment }}) — {{ states('input_number.ev_required_energy') | float(0) | round(0) | int }} kWh
+                    until {{ new_end | timestamp_custom('%H:%M', true) }} —
+                  entity_id: input_select.zendure_operation_mode
+                  name: ' '
+          - alias: Switch between Night and Daytime, or Ready by changed
+            conditions:
+              - condition: or
+                conditions:
+                  - condition: template
+                    value_template: "{{ trigger.id == 'moment' and trigger.from_state is not none and trigger.from_state.state != 'Off' and moment != 'Off' }}"
+                  - condition: template
+                    value_template: "{{ trigger.id == 'ready_by' and moment.startswith('Night') }}"
+            sequence:
+              - action: input_datetime.set_datetime
+                target:
+                  entity_id: input_datetime.ev_session_end
+                data:
+                  timestamp: "{{ new_end }}"
+          - alias: Session done or time passed
+            conditions:
+              - condition: template
+                value_template: "{{ moment != 'Off' }}"
+              - condition: or
+                conditions:
+                  - condition: trigger
+                    id: done
+                  - condition: template
+                    value_template: >-
+                      {{ trigger.id == 'time'
+                         and as_timestamp(now()) >= as_timestamp(states('input_datetime.ev_session_end'), 0) }}
+            sequence:
+              - action: logbook.log
+                data:
+                  message: >-
+                    🚗EV charging session finished — {{ states('sensor.ev_session_charged') | float(0) | round(1) }} kWh charged
+                    ({{ 'energy reached' if is_state('sensor.ev_charge_plan', 'Done') else 'time passed' }}) —
+                  entity_id: input_select.zendure_operation_mode
+                  name: ' '
+              - action: input_select.select_option
+                target:
+                  entity_id: input_select.ev_charge_moment
+                data:
+                  option: 'Off'
+          - alias: Charge moment Off - charger back on
+            conditions:
+              - condition: trigger
+                id: moment
+              - condition: template
+                value_template: "{{ moment == 'Off' and switch_ok and not is_state(switch, 'on') }}"
+            sequence:
+              - action: homeassistant.turn_on
+                target:
+                  entity_id: "{{ switch }}"
+
+  # -------------------------------------------------------------------
+  # Charger on and off following the charge plan (only with a configured switch)
+  # -------------------------------------------------------------------
+  - id: zendure_ev_charger
+    alias: Zendure EV Charger
+    description: >-
+      Forecasting 2026.11.3 - Turns the EV charger on in the planned slots and off in between,
+      while Charge moment is Night or Daytime.
+    mode: queued
+    max: 3
+    triggers:
+      - trigger: state
+        entity_id: sensor.ev_charge_plan
+        attribute: charging_now
+      - trigger: time_pattern
+        minutes: /1
+    variables:
+      switch: "{{ states('input_text.ev_charger_switch') | trim }}"
+      wanted: "{{ is_state_attr('sensor.ev_charge_plan', 'charging_now', true) }}"
+    conditions:
+      - condition: template
+        value_template: >-
+          {{ not is_state('input_select.ev_charge_moment', 'Off')
+             and switch.split('.')[0] in ['switch', 'input_boolean', 'light']
+             and has_value(switch) }}
+      - condition: template
+        value_template: "{{ is_state(switch, 'on') != wanted }}"
+    actions:
+      - action: "homeassistant.turn_{{ 'on' if wanted else 'off' }}"
+        target:
+          entity_id: "{{ switch }}"
+      - action: logbook.log
+        data:
+          message: >-
+            🚗EV charger {{ 'on' if wanted else 'off' }} — {{ state_attr('sensor.ev_charge_plan', 'remaining_kwh') }} kWh to go —
+          entity_id: input_select.zendure_operation_mode
+          name: ' '

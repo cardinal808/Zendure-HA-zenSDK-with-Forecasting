@@ -7,7 +7,7 @@ Choose your preferred language
 
 > **This is a fork of [Gielz1986/Zendure-HA-zenSDK](https://github.com/Gielz1986/Zendure-HA-zenSDK)** by Michiel Hofker (Gielz1986). All credit for the integration, the automation and the dashboard goes to the original project. This fork adds **one extra mode: Dynamic Smart Matching + Forecasting** (Dutch: *Dynamisch NOM + Forecasting*). For everything else (modes, wiki, support, updates), see the original repository. The original README follows below this section.
 
-**Version:** `2026.11.2` · based on Gielz configuration `v20261007` · available in Dutch (NL) and Global (EN) · [Changelog](CHANGELOG.md)
+**Version:** `2026.11.3` · based on Gielz configuration `v20261007` · available in Dutch (NL) and Global (EN) · [Changelog](CHANGELOG.md)
 
 Versions follow `year.month.sequence` (the sequence restarts at 1 every month). In Home Assistant you see the installed version and the latest version on GitHub (`sensor.forecasting_version`, `sensor.forecasting_release_check`) on the Configuration tab, and the release notes under Releasenotes.
 
@@ -30,6 +30,9 @@ The battery charges at the cheapest moments, but **only as much as is actually n
 - **Charge blocks in plain language:** per block when, how long, how many kWh and at what average price, for today and (indicatively) for tomorrow.
 - **Savings** (new, `packages/zendure_savings_global.yaml`): every quarter hour your usage is settled at a fixed and a dynamic tariff, with and without solar and battery. A separate tab shows per day, month, year and total what you save and from what (solar, dynamic tariff, battery and smart charging), plus the battery payback time. The tables look better with [card-mod](https://github.com/thomasloven/lovelace-card-mod) (optional).
 - **No export at a negative price** (new, `packages/zendure_negative_price_global.yaml`, optional): when the feed-in price (market price + bonus + markup) is negative, it disables the Zendure PV export. Optionally it also limits one or two external inverters (production limit on the grid meter, export limit, switch or script). It only restores what it changed itself.
+- **Electric car** (new, `packages/zendure_ev_global.yaml`, optional): for a charger without its own control (granny charger, or a wallbox behind a smart switch) with a power measurement, e.g. a Shelly 1PM. The battery then no longer discharges into the car, and the car's charging does not count in the planner's usage profile, daily usage and self-consumption. With a switch you can also plan a charging session: *Night* charges the required kWh in the cheapest price slots until a set time, *Daytime* charges on solar and the planner then charges the battery extra from the grid at the cheapest moment.
+- **Air conditioning (HVAC)** (new in the public set, `packages/zendure_hvac_global.yaml`, optional): no discharging while the AC runs, within set hours and optionally not in an expensive hour. Charging keeps working.
+- **Optional packages show themselves:** the Configuration (EV), (HVAC), (Negative Price) and (Savings) blocks are only on the dashboard when the matching package is loaded. `sensor.forecasting_version` lists the active optional packages in its `packages` attribute.
 - **Plan Timeline** on the dashboard: for the next 36 hours per price slot in four compact rows the price (colours as in Gielz: green = planned charging, red = expensive), solar and house usage, battery charge and discharge with the expected state of charge, and grid import and export. Only apexcharts-card needed. Tip: exclude `sensor.zendure_forecast_chart` from the recorder (`recorder: exclude: entities:`), its attributes exceed the recorder's 16 kB limit.
 - Dashboard: a Forecasting section on the Zendure tab (plan for today and tomorrow, usage profile, collected 7-day data, recalculate button), a Savings tab and a Configuration (Forecasting) block with all input fields. Both can be shown or hidden with **Show Forecasting On Dashboard**.
 
@@ -40,9 +43,11 @@ The battery charges at the cheapest moments, but **only as much as is actually n
 | `packages/zendure_forecasting.yaml` / `packages/zendure_forecasting_global.yaml` | **New.** Helpers, counters, 7-day statistics, the planner and derived sensors. |
 | `packages/zendure_besparing.yaml` / `packages/zendure_savings_global.yaml` | **New.** Input fields for tariffs and battery price, and the savings and payback sensors. |
 | `packages/zendure_negatieve_prijs.yaml` / `packages/zendure_negative_price_global.yaml` | **New, optional.** Feed-in price, no export at a negative price, limiting external inverters. Uses the tariffs from the savings package. |
+| `packages/zendure_ev.yaml` / `packages/zendure_ev_global.yaml` | **New, optional.** The car's charging power and discharge correction, kWh counters, charge plan (night/daytime) and charger control. |
+| `packages/zendure_hvac.yaml` / `packages/zendure_hvac_global.yaml` | **New, optional.** AC helpers and `binary_sensor.hvac_ontladen_geblokkeerd` / `binary_sensor.hvac_discharge_blocked`. |
 | `packages/zendure_gielz1986_nl.yaml` / `packages/zendure_gielz1986_global.yaml` | Only one extra option in the mode selector. |
-| `automation_nl.yaml` / `automation_global.yaml` | The new mode in the mode selection and in the 6 existing Smart Matching lists (zero-on-the-meter, SOC protection, emergency stop), its own charging block that only charges when the plan says *Charge*, and a discharge hold for the cheap dip. Existing modes are unchanged. |
-| `dashboard_nl.yaml` / `dashboard_global.yaml` | New Forecasting section, new Savings tab, new Configuration (Forecasting), Configuration (Savings) and Configuration (Negative Price) blocks and a switch in Configuration (Dashboard). |
+| `automation_nl.yaml` / `automation_global.yaml` | The new mode in the mode selection and in the 6 existing Smart Matching lists (zero-on-the-meter, SOC protection, emergency stop), its own charging block that only charges when the plan says *Charge*, a discharge hold for the cheap dip and for the AC, and in the Smart Matching discharge blocks the car's charging power subtracted from the grid meter. Without the optional packages everything works as before. Existing modes are otherwise unchanged. |
+| `dashboard_nl.yaml` / `dashboard_global.yaml` | New Forecasting section, new Savings tab, new Configuration (Forecasting), Configuration (Savings), Configuration (Negative Price), Configuration (EV) and Configuration (HVAC) blocks (only visible when the package is loaded) and a switch in Configuration (Dashboard). |
 
 Each changed file starts with a two-line header with the version, the Gielz version it is based on and the original author.
 
@@ -50,7 +55,7 @@ Each changed file starts with a two-line header with the version, the Gielz vers
 
 First install the original integration as described below (packages file, automation, dashboard). Then:
 
-1. Put `zendure_forecasting_global.yaml` and `zendure_savings_global.yaml` (Global) or `zendure_forecasting.yaml` and `zendure_besparing.yaml` (NL) in the same `packages` folder as the Gielz package, and replace the Gielz package with the version from this fork. To avoid exporting at a negative price, also add `zendure_negative_price_global.yaml` (Global) or `zendure_negatieve_prijs.yaml` (NL).
+1. Put `zendure_forecasting_global.yaml` and `zendure_savings_global.yaml` (Global) or `zendure_forecasting.yaml` and `zendure_besparing.yaml` (NL) in the same `packages` folder as the Gielz package, and replace the Gielz package with the version from this fork. To avoid exporting at a negative price, also add `zendure_negative_price_global.yaml` (Global) or `zendure_negatieve_prijs.yaml` (NL). For an electric car add `zendure_ev_global.yaml` (Global) or `zendure_ev.yaml` (NL), for air conditioning `zendure_hvac_global.yaml` (Global) or `zendure_hvac.yaml` (NL).
 2. Replace the automation and the dashboard with the versions from this fork (or merge the changes into your own version).
 3. Restart Home Assistant.
 4. On the Configuration tab, under **Configuration (Forecasting)**, enter: the sensor for solar remaining today, solar tomorrow (kWh, e.g. Forecast.Solar or Solcast) and a total counter of your solar panels (kWh). Optionally set the charge margin. Under **Configuration (Savings)** enter your tariffs and the purchase price of the battery.

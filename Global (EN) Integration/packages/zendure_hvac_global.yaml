@@ -1,0 +1,92 @@
+# Zendure zenSDK (Gielz) + Forecasting 2026.11.3 | based on Gielz v20261007
+# Based on Gielz1986/Zendure-HA-zenSDK (Michiel Hofker). See README.md for license and changes.
+# =====================================================================
+# Zendure HVAC (air conditioning) - no Smart Matching discharge while the AC runs (optional)
+#
+# Put this file next to zendure_gielz1986_global.yaml (same packages folder).
+# Without this file nothing changes. The Configuration (HVAC) block on the Settings tab
+# appears by itself as soon as this file is loaded.
+# How it works:
+#   - binary_sensor.hvac_active             : is the AC running?
+#   - binary_sensor.hvac_discharge_blocked  : AC on, within the configured hours
+#                                             and (optionally) not in an expensive hour
+# The Smart Matching discharge blocks in the automation do not discharge while the latter is "on".
+# Charging (solar or grid) keeps working.
+# Leave the sensor field empty to switch the feature off.
+# =====================================================================
+
+input_text:
+  hvac_sensor:
+    name: HVAC Sensor
+    icon: mdi:air-conditioner
+    max: 250
+    mode: text
+
+input_datetime:
+  hvac_charge_only_from:
+    name: HVAC Charge Only From
+    has_date: false
+    has_time: true
+    icon: mdi:clock-start
+  hvac_charge_only_until:
+    name: HVAC Charge Only Until
+    has_date: false
+    has_time: true
+    icon: mdi:clock-end
+
+input_number:
+  hvac_threshold_power:
+    name: HVAC Threshold Power
+    icon: mdi:flash
+    min: 0
+    max: 2000
+    step: 10
+    mode: box
+    unit_of_measurement: "W"
+
+input_boolean:
+  hvac_allow_discharge_in_expensive_hour:
+    name: HVAC Allow Discharge In Expensive Hour
+    icon: mdi:cash-plus
+
+template:
+  - binary_sensor:
+      # On when the configured entity is "on":
+      #   climate.*                 -> mode is not "off"
+      #   sensor.* (power in W)     -> value above the threshold (0 = 50 W)
+      #   other (switch, binary_sensor, input_boolean, ...) -> state "on"
+      - name: "HVAC Active"
+        unique_id: hvac_active
+        icon: mdi:air-conditioner
+        state: >
+          {% set e = states('input_text.hvac_sensor') | trim %}
+          {% if e == '' or not has_value(e) %}
+            false
+          {% elif e.startswith('climate.') %}
+            {{ states(e) != 'off' }}
+          {% elif e.startswith('sensor.') %}
+            {% set d = states('input_number.hvac_threshold_power') | float(0) %}
+            {{ states(e) | float(0) > (d if d > 0 else 50) }}
+          {% else %}
+            {{ is_state(e, 'on') }}
+          {% endif %}
+
+      - name: "HVAC Discharge Blocked"
+        unique_id: hvac_discharge_blocked
+        icon: mdi:battery-off-outline
+        state: >
+          {% set active = is_state('binary_sensor.hvac_active', 'on') %}
+          {% set s = states('input_datetime.hvac_charge_only_from') %}
+          {% set e = states('input_datetime.hvac_charge_only_until') %}
+          {% set now_t = now().strftime('%H:%M:%S') %}
+          {# same start and end (default 00:00 - 00:00) = the whole day #}
+          {% if s == e %}
+            {% set in_window = true %}
+          {% elif s < e %}
+            {% set in_window = s <= now_t < e %}
+          {% else %}
+            {% set in_window = now_t >= s or now_t < e %}
+          {% endif %}
+          {% set expensive = is_state('input_boolean.hvac_allow_discharge_in_expensive_hour', 'on')
+                             and is_state('sensor.dynamic_highest_price_period', 'Yes') %}
+          {{ active and in_window and not expensive }}

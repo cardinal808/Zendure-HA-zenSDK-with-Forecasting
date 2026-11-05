@@ -1,4 +1,4 @@
-# Zendure zenSDK (Gielz) + Forecasting 2026.11.2 | gebaseerd op Gielz v20261007 | set: publiek (zonder HVAC)
+# Zendure zenSDK (Gielz) + Forecasting 2026.11.3 | gebaseerd op Gielz v20261007
 # Gebaseerd op Gielz1986/Zendure-HA-zenSDK (Michiel Hofker). Zie README.md voor licentie en wijzigingen.
 views:
   - type: sections
@@ -1537,7 +1537,7 @@ views:
               - Batterij nu: **{{ a.batterij_nu_kwh }}** van {{ a.batterij_max_kwh }} kWh bruikbaar
               {% set lb = a.laadblokken | default([]) %}{% set vd = now().strftime('%Y-%m-%d') %}- Plan van vandaag loopt tot **{{ ('morgen ' if (a.overbruggen_tot or '')[:10] != vd else '') ~ (a.overbruggen_tot or '')[11:] }}** ({{ a.overbruggen_uren }} uur), het begin van de goedkope uren van morgen; daarna plant hij opnieuw met de prijzen van morgen
               {% set lb = a.laadblokken | default([]) %}- Verwacht verbruik tot einde overbrugging (na directe zon): **{{ '%.1f' | format(a.verwacht_batterijgebruik_kwh | float(0)) }} kWh**, gedekt door de accu{% if lb | length > 0 %} en het geplande laden{% endif %}{% if a.padcheck_dal_blokkade %} (buiten de goedkope dalen){% endif %}, de rest direct uit het net
-              - Verwachte zon naar batterij: **{{ a.verwachte_zon_naar_batterij_kwh }} kWh** (zon nog te verwachten: {{ a.zon_resterend_vandaag_kwh }} kWh, {{ a.zelfverbruik_pct }}% direct verbruikt)
+              - Verwachte zon naar batterij: **{{ a.verwachte_zon_naar_batterij_kwh }} kWh** (zon nog te verwachten: {{ a.zon_resterend_vandaag_kwh }} kWh, {{ a.zelfverbruik_pct }}% direct verbruikt){% if a.ev_overdag_van_zon_kwh | float(0) > 0 %}; de auto laadt overdag nog {{ '%.1f' | format(a.ev_overdag_van_zon_kwh | float(0)) }} kWh, die gaat eerst van het zon-overschot af{% endif %}
               - Prijs nu: €{{ '%.3f' | format(a.prijs_nu | float(0)) }}{% if a.slim_vasthouden %}: de accu wordt bewaard voor de duurste kwartieren (€{{ '%.3f' | format(a.vasthouden_grensprijs | float(0)) }} en hoger), want hij houdt het niet vol tot het einde van de overbrugging; tot dan koopt het huis direct in{% elif a.in_dal %}, goedkoop dal{% if a.ontladen_vasthouden %}: de accu wordt nu gespaard en het huis koopt direct in, omdat dat goedkoper is dan stroom uit de accu{% endif %}{% endif %}
               {% set lb = a.laadblokken | default([]) %}- **Uit het net laden: {% if lb | length > 0 %}{{ '%.1f' | format(a.gepland_netladen_kwh | float(0)) }} kWh gepland met {{ a.laadvermogen_gebruikt_kw }} kW, geschatte kosten €{{ '%.2f' | format(a.geschatte_kosten) }}**{% else %}niets gepland**{% endif %}{% set rest = (a.netladen_vandaag_kwh | float(0)) - (a.gepland_netladen_kwh | float(0)) %}{% if rest >= 0.3 %} (energiebalans {{ '%.1f' | format(a.netladen_vandaag_kwh | float(0)) }} kWh; de rest wordt niet opgeslagen, want direct uit het net kopen is dan na laad- en ontlaadverlies goedkoper){% endif %}
               {% if a.padcheck_gat_uren | float(0) > 0 %}{% set vd = now().strftime('%Y-%m-%d') %}- Pad-check: accu leeg rond **{{ ('morgen ' if (a.padcheck_accu_leeg_om or '')[:10] != vd else '') ~ (a.padcheck_accu_leeg_om or '')[11:] }}**{% if a.padcheck_dal_blokkade %} (accu levert niet in goedkope dalen){% endif %}, bekeken tot **{{ ('morgen ' if (a.padcheck_gat_eind or '')[:10] != vd else '') ~ (a.padcheck_gat_eind or '')[11:] }}** {% if (a.padcheck_zon_bron or '') is search('niet meer|Geen') %}(zon dekt het verbruik niet vóór het einde van de overbrugging){% else %}(zon dekt het verbruik vanaf {{ ('morgen ' if (a.padcheck_zon_dekt_vanaf or '')[:10] != vd else '') ~ (a.padcheck_zon_dekt_vanaf or '')[11:] }}, {{ a.padcheck_zon_bron }}){% endif %}. {{ a.padcheck_gat_uren }} uur, {{ a.padcheck_tekort_kwh }} kWh inkoop, waarvan {{ a.padcheck_tekort_dure_slots_kwh }} kWh in dure slots{% if a.padcheck_gat_prijs | float(0) > 0 %} (gemiddeld €{{ '%.3f' | format(a.padcheck_gat_prijs | float(0)) }}){% endif %}{% if a.padcheck_extra_slots | int(0) > 0 %}: {{ a.padcheck_extra_slots }} laadslot(s) daarvoor gepland{% endif %}{% endif %}
@@ -3827,6 +3827,9 @@ views:
                     state: 'on'
             visibility:
               - condition: state
+                entity: input_boolean.negatieve_prijs_export_blokkeren
+                state_not: unavailable
+              - condition: state
                 entity: input_boolean.pv_tonen_op_dashboard
                 state: 'on'
           - type: markdown
@@ -3882,6 +3885,9 @@ views:
             text_only: true
             visibility:
               - condition: state
+                entity: input_boolean.negatieve_prijs_export_blokkeren
+                state_not: unavailable
+              - condition: state
                 entity: input_boolean.help_tonen_op_dashboard
                 state: 'on'
               - condition: state
@@ -3893,6 +3899,9 @@ views:
                 name: Niet terugleveren bij negatieve prijs
             visibility:
               - condition: state
+                entity: input_boolean.negatieve_prijs_export_blokkeren
+                state_not: unavailable
+              - condition: state
                 entity: input_boolean.pv_tonen_op_dashboard
                 state: 'on'
           - type: markdown
@@ -3900,6 +3909,9 @@ views:
             content: >-
               **Externe omvormer (optioneel)**
             visibility:
+              - condition: state
+                entity: input_boolean.negatieve_prijs_export_blokkeren
+                state_not: unavailable
               - condition: state
                 entity: input_boolean.pv_tonen_op_dashboard
                 state: 'on'
@@ -3952,6 +3964,9 @@ views:
                   entity: input_text.negatieve_prijs_omvormer_limiet_secundair
                   name: Omvormer limiter entiteit (number.*, switch.* of script.*)
             visibility:
+              - condition: state
+                entity: input_boolean.negatieve_prijs_export_blokkeren
+                state_not: unavailable
               - condition: state
                 entity: input_boolean.pv_tonen_op_dashboard
                 state: 'on'
@@ -4073,6 +4088,9 @@ views:
             heading_style: title
             visibility:
               - condition: state
+                entity: input_number.besparing_vast_leveringsprijs
+                state_not: unavailable
+              - condition: state
                 entity: input_boolean.forecast_tonen_op_dashboard
                 state: 'on'
           - type: markdown
@@ -4096,6 +4114,9 @@ views:
               besparing door accu en slim laden bij een dynamisch contract.
             text_only: true
             visibility:
+              - condition: state
+                entity: input_number.besparing_vast_leveringsprijs
+                state_not: unavailable
               - condition: state
                 entity: input_boolean.help_tonen_op_dashboard
                 state: 'on'
@@ -4122,8 +4143,167 @@ views:
                 name: Totaal opnieuw beginnen
             visibility:
               - condition: state
+                entity: input_number.besparing_vast_leveringsprijs
+                state_not: unavailable
+              - condition: state
                 entity: input_boolean.forecast_tonen_op_dashboard
                 state: 'on'
+          - type: heading
+            icon: ''
+            heading_style: title
+            heading: Configuratie (EV)
+            badges:
+              - type: entity
+                show_state: true
+                show_icon: true
+                entity: sensor.ev_laadplan
+                name: Laadplan
+                state_content:
+                  - name
+                  - state
+                color: '#01a180'
+                tap_action:
+                  action: more-info
+              - type: entity
+                show_state: true
+                show_icon: true
+                entity: sensor.ev_laadvermogen
+                name: Auto
+                state_content:
+                  - name
+                  - state
+                color: '#01a180'
+                tap_action:
+                  action: more-info
+                visibility:
+                  - condition: numeric_state
+                    entity: sensor.ev_laadvermogen
+                    above: 0
+            visibility:
+              - condition: state
+                entity: input_select.ev_laadmoment
+                state_not: unavailable
+          - type: markdown
+            content: >-
+              <ha-alert alert-type="info">Helptekst</ha-alert>Voor een lader
+              zonder eigen aansturing (grannylader, of een wallbox achter een
+              slimme schakelaar). Vul de **vermogenssensor** van de lader in
+              (W of kW, bv. van een Shelly 1PM in de groep van de lader). Vanaf
+              dan ontlaadt de accu niet meer in de auto: de NOM-modussen trekken
+              het laadvermogen van de auto af van de P1-meter. Het laden van de
+              auto telt ook niet mee in het verbruiksprofiel en het dagverbruik
+              van de planner.
+
+
+              **Laadsessie** (alleen met een ingevulde **schakelaar**): kies het
+              **laadmoment** en de **benodigde energie** (kWh aan het
+              stopcontact). *Nacht* laadt in de goedkoopste prijsslots tot
+              **Klaar om** (00:00 = 07:00). *Overdag* laadt zolang de zon op is;
+              de planner haalt die kWh van het zon-overschot voor de accu af en
+              laadt het tekort op het goedkoopste moment uit het net. Is de
+              energie geladen of de tijd voorbij, dan gaat het laadmoment terug
+              naar Uit en de lader weer aan. Let op: niet elke auto hervat het
+              laden vanzelf als de stroom terugkomt.
+            text_only: true
+            visibility:
+              - condition: state
+                entity: input_boolean.help_tonen_op_dashboard
+                state: 'on'
+              - condition: state
+                entity: input_select.ev_laadmoment
+                state_not: unavailable
+          - type: entities
+            entities:
+              - entity: input_select.ev_laadmoment
+                name: Laadmoment
+              - entity: input_number.ev_benodigde_kwh
+                name: Benodigde energie (kWh aan het stopcontact)
+              - type: conditional
+                conditions:
+                  - entity: input_select.ev_laadmoment
+                    state: Nacht (goedkoopste uren)
+                row:
+                  entity: input_datetime.ev_klaar_om
+                  name: Klaar om (00:00 = 07:00)
+              - type: section
+                label: Lader
+              - entity: input_text.ev_vermogen_sensor
+                name: Vermogenssensor lader (W of kW)
+              - entity: input_text.ev_schakelaar
+                name: Schakelaar lader (optioneel, bv. switch.shelly_lader)
+              - entity: input_number.ev_laadvermogen_kw
+                name: Laadvermogen kW (0 = 2,3 kW)
+              - entity: input_number.ev_drempel_vermogen
+                name: Drempel W (0 = 300 W)
+            visibility:
+              - condition: state
+                entity: input_select.ev_laadmoment
+                state_not: unavailable
+          - type: markdown
+            text_only: true
+            content: |-
+              {%- set p = 'sensor.ev_laadplan' -%}
+              {%- set c = states('sensor.ev_ontlaad_correctie') | float(0) -%}
+              {% if not is_state('input_select.ev_laadmoment', 'Uit') %}**Laadsessie:** {{ states(p) }} · geladen {{ '%.1f' | format(state_attr(p, 'geladen_kwh') | float(0)) }} van {{ states('input_number.ev_benodigde_kwh') | float(0) | round(0) | int }} kWh{% if state_attr(p, 'eind') %} · tot {{ (state_attr(p, 'eind') or '')[11:] }}{% endif %}
+              {% for b in state_attr(p, 'laadblokken') or [] %}
+              - Laden {{ b.dag }} {{ b.start }}–{{ b.eind }}: ongeveer {{ '%.1f' | format(b.kwh) }} kWh, gemiddeld €{{ '%.3f' | format(b.prijs) }}
+              {%- endfor %}
+              {% if is_state('input_select.ev_laadmoment', 'Nacht (goedkoopste uren)') and not state_attr(p, 'prijzen_morgen_bekend') %}
+              <small>Prijzen van morgen nog niet bekend: gepland met het patroon van vandaag, rond 14:00 opnieuw.</small>
+              {% endif %}{% if states('input_text.ev_schakelaar') | trim == '' %}
+              <ha-alert alert-type="warning">Geen schakelaar ingevuld: de lader wordt niet aan- en uitgezet, alleen het plan wordt berekend.</ha-alert>
+              {% endif %}{% else %}Geen laadsessie. Kies een laadmoment om de auto gepland te laden.{% endif %}
+              {% if c > 0 %}
+              De auto laadt met {{ c | round(0) | int }} W: de accu ontlaadt daar niet in.{% endif %}
+            visibility:
+              - condition: state
+                entity: input_select.ev_laadmoment
+                state_not: unavailable
+          - type: heading
+            icon: ''
+            heading_style: title
+            heading: Configuratie (HVAC)
+            visibility:
+              - condition: state
+                entity: input_text.hvac_sensor
+                state_not: unavailable
+          - type: markdown
+            content: >-
+              <ha-alert alert-type="info">Helptekst</ha-alert>Zolang de airco
+              draait, ontladen de NOM-modussen niet (laden uit zon of net blijft
+              werken). Vul de entiteit van je airco in (bv.
+              climate.airco_woonkamer; een vermogenssensor in W kan ook en is
+              vaak nauwkeuriger). Stel optioneel de uren in waarin dit geldt;
+              dezelfde tijd bij Vanaf en Tot betekent de hele dag. Laat de
+              sensor leeg om de functie uit te zetten.
+            text_only: true
+            visibility:
+              - condition: state
+                entity: input_boolean.help_tonen_op_dashboard
+                state: 'on'
+              - condition: state
+                entity: input_text.hvac_sensor
+                state_not: unavailable
+          - type: entities
+            entities:
+              - entity: input_text.hvac_sensor
+                name: HVAC sensor (bv. climate.airco_woonkamer)
+              - entity: input_datetime.hvac_start
+                name: Alleen laden vanaf
+              - entity: input_datetime.hvac_eind
+                name: Alleen laden tot
+              - entity: input_boolean.hvac_ontladen_bij_duur_uur
+                name: Ontladen toestaan tijdens duur uur
+              - entity: input_number.hvac_drempel_vermogen
+                name: Drempel vermogen W (alleen bij vermogenssensor, 0 = 50 W)
+              - entity: binary_sensor.hvac_actief
+                name: Airco actief
+              - entity: binary_sensor.hvac_ontladen_geblokkeerd
+                name: Ontladen geblokkeerd
+            visibility:
+              - condition: state
+                entity: input_text.hvac_sensor
+                state_not: unavailable
           - type: heading
             icon: ''
             heading_style: title

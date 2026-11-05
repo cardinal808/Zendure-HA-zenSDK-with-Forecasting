@@ -2,6 +2,29 @@
 
 Versies volgen `jaar.maand.volgnummer`; het volgnummer begint elke maand bij 1. Elke versie vermeldt op welke Gielz-versie hij is gebaseerd. [English](CHANGELOG.md)
 
+## 2026.11.3 — gebaseerd op Gielz v20261007
+
+**Nieuw: elektrische auto** (optioneel)
+- Nieuw pakket `packages/zendure_ev.yaml` en een blok **Configuratie (EV)** op de tab Configuratie. Voor een lader zonder eigen aansturing (grannylader, of een wallbox achter een slimme schakelaar) met een vermogensmeting, bv. een Shelly 1PM of Pro 1PM in de groep van de lader.
+- **Accu niet in de auto ontladen:** de NOM-ontlaadblokken trekken het laadvermogen van de auto (`sensor.ev_ontlaad_correctie`, boven een drempel van standaard 300 W) af van de P1-meter. De accu voedt dan alleen het huis; de auto laadt uit het net of de zon. Geldt altijd, ook zonder laadsessie.
+- **Planner:** het laden van de auto telt niet meer mee in het verbruiksprofiel (per uur en per kwartier), het gemiddelde dagverbruik en het zelfverbruik van de zon. Een laaddag trekt de verwachting voor de accu dus niet scheef.
+- **Laadsessie** (met een ingevulde schakelaar): kies het laadmoment en de benodigde kWh. *Nacht (goedkoopste uren)* zet de lader alleen aan in de goedkoopste prijsslots tot *Klaar om* (prijzen van morgen nog onbekend: patroon van vandaag, rond 14:00 opnieuw gepland). *Overdag (zon)* laadt zolang de zon op is; de planner haalt die kWh van het zon-overschot voor de accu af en laadt het tekort op het goedkoopste moment uit het net. Klaar of tijd voorbij: laadmoment terug naar Uit en de lader weer aan.
+
+**HVAC nu in de publieke set** (optioneel)
+- `packages/zendure_hvac.yaml` (en `zendure_hvac_global.yaml`) staat nu ook in de publieke set: niet ontladen terwijl de airco draait. Er is geen aparte complete set meer.
+- De automation controleert de airco met een template, zodat alles ook zonder het HVAC-pakket blijft werken.
+- De schakelaar *HVAC Instellingen Tonen* is vervallen (zie hieronder).
+
+**Dashboard**
+- **Optionele pakketten tonen zich vanzelf:** Configuratie (EV), (HVAC), (Negatieve Prijs) en (Besparing) staan alleen op de tab Configuratie als het pakket geladen is.
+- Plan vandaag: regel over de kWh die de auto overdag nog van de zon vraagt.
+- `sensor.forecasting_versie`: attribuut `pakketten` (welke optionele pakketten actief zijn) vervangt `set`.
+
+**Upgraden**
+- Vervang alle bestanden en **herstart** Home Assistant.
+- Optioneel: zet `zendure_ev.yaml` en/of `zendure_hvac.yaml` (NL) of `zendure_ev_global.yaml` en/of `zendure_hvac_global.yaml` (Global) in de map `packages`. Gebruikte je de complete set: `input_boolean.hvac_tonen_op_dashboard` bestaat niet meer en kan weg.
+- Test eerst of je auto het laden hervat als de stroom terugkomt, voordat je de lader laat schakelen.
+
 ## 2026.11.2 — gebaseerd op Gielz v20261007
 
 **Nieuw: niet terugleveren bij negatieve prijs** (optioneel)

@@ -1,4 +1,4 @@
-# Zendure zenSDK (Gielz) + Forecasting 2026.11.2 | based on Gielz v20261007 | set: public (without HVAC)
+# Zendure zenSDK (Gielz) + Forecasting 2026.11.3 | based on Gielz v20261007
 # Based on Gielz1986/Zendure-HA-zenSDK (Michiel Hofker). See README.md for license and changes.
 # =====================================================================
 # Zendure Negative Price - no export when exporting costs money
@@ -187,7 +187,7 @@ automation:
   - id: zendure_negative_price_export
     alias: Zendure Negative Price Export
     description: >-
-      Forecasting 2026.11.2 - Disables the Zendure PV export (via Gielz' PV Export Disabled)
+      Forecasting 2026.11.3 - Disables the Zendure PV export (via Gielz' PV Export Disabled)
       while the feed-in price is negative, and restores it afterwards.
     mode: queued
     max: 5
@@ -257,7 +257,7 @@ automation:
   - id: zendure_negative_price_limiter
     alias: Zendure Negative Price External Inverter
     description: >-
-      Forecasting 2026.11.2 - Limits an external inverter (production limit on the grid meter,
+      Forecasting 2026.11.3 - Limits an external inverter (production limit on the grid meter,
       export limit to 0, switch off or script) while the feed-in price is negative and the
       Zendure cannot absorb the surplus.
     mode: single
@@ -511,7 +511,7 @@ automation:
   - id: zendure_negative_price_secondary
     alias: Zendure Negative Price Secondary Inverter
     description: >-
-      Forecasting 2026.11.2 - Sets the secondary external inverter to its minimum (number to 0,
+      Forecasting 2026.11.3 - Sets the secondary external inverter to its minimum (number to 0,
       switch off, script with block: true) while the feed-in price is negative and the Zendure
       cannot absorb the surplus. The primary inverter then regulates on the grid meter alone.
     mode: single

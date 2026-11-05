@@ -2,6 +2,28 @@
 
 Versions follow `year.month.sequence`; the sequence restarts at 1 every month. Each version states which Gielz version it is based on. [Nederlands](CHANGELOG.nl.md)
 
+## 2026.11.3 — based on Gielz v20261007
+
+**New: electric car** (optional)
+- New package `packages/zendure_ev_global.yaml` and a **Configuration (EV)** block on the Settings tab. For a charger without its own control (granny charger, or a wallbox behind a smart switch) with a power measurement, e.g. a Shelly 1PM or Pro 1PM in the charger's circuit.
+- **No battery discharge into the car:** the Smart Matching discharge blocks subtract the car's charging power (`sensor.ev_discharge_correction`, above a threshold of 300 W by default) from the grid meter. The battery then only supplies the house; the car charges from the grid or the sun. Always applies, also without a charging session.
+- **Planner:** the car's charging no longer counts in the usage profile (per hour and per quarter), the average daily usage and the solar self-consumption. A charging day does not skew the battery forecast.
+- **Charging session** (with a configured switch): choose the charge moment and the required kWh. *Night (cheapest hours)* only turns the charger on in the cheapest price slots until *Ready by* (tomorrow's prices unknown: today's pattern, replanned around 14:00). *Daytime (solar)* charges while the sun is up; the planner subtracts those kWh from the solar surplus for the battery and charges the shortfall from the grid at the cheapest moment. Done or time passed: charge moment back to Off and the charger on again.
+
+**HVAC now in the public set** (optional)
+- `packages/zendure_hvac_global.yaml` (and `zendure_hvac.yaml`) is now part of the public set: no discharging while the AC runs. There is no separate complete set any more.
+- The automation checks the AC with a template, so everything keeps working without the HVAC package.
+
+**Dashboard**
+- **Optional packages show themselves:** Configuration (EV), (HVAC), (Negative Price) and (Savings) are only on the Settings tab when the package is loaded.
+- Plan for today: a line about the kWh the car still asks from the sun during the day.
+- `sensor.forecasting_version`: attribute `packages` (which optional packages are active) replaces `set`.
+
+**Upgrading**
+- Replace all files and **restart** Home Assistant.
+- Optional: put `zendure_ev_global.yaml` and/or `zendure_hvac_global.yaml` (Global) or `zendure_ev.yaml` and/or `zendure_hvac.yaml` (NL) in the `packages` folder.
+- First test whether your car resumes charging when power returns, before letting the charger be switched.
+
 ## 2026.11.2 — based on Gielz v20261007
 
 **New: no export at a negative price** (optional)

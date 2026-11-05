@@ -1,7 +1,7 @@
-# Zendure zenSDK (Gielz) + Forecasting 2026.11.2 | gebaseerd op Gielz v20261007 | set: publiek (zonder HVAC)
+# Zendure zenSDK (Gielz) + Forecasting 2026.11.3 | gebaseerd op Gielz v20261007
 # Gebaseerd op Gielz1986/Zendure-HA-zenSDK (Michiel Hofker). Zie README.md voor licentie en wijzigingen.
 alias: Zendure zenSDK (Gielz)
-description: Configuratie Versie (v20261007) + Forecasting 2026.11.2
+description: Configuratie Versie (v20261007) + Forecasting 2026.11.3
 triggers:
   - seconds: /5
     id: aansturing_trigger
@@ -923,18 +923,21 @@ actions:
           - condition: trigger
             id:
               - aansturing_trigger
-          - alias: Ontladen niet geblokkeerd (goedkoop dal)
+          - alias: Ontladen niet geblokkeerd (goedkoop dal of HVAC aan)
             condition: not
             conditions:
               - condition: state
                 entity_id: binary_sensor.forecast_dal_ontladen_geblokkeerd
                 state: 'on'
+              - alias: Werkt ook zonder het HVAC-pakket (template i.p.v. state)
+                condition: template
+                value_template: "{{ is_state('binary_sensor.hvac_ontladen_geblokkeerd', 'on') }}"
           - alias: >-
-              sensor.p1_aansturing_vermogen groter dan
+              sensor.p1_aansturing_vermogen (min laadvermogen auto) groter dan
               input_number.zendure_2400_ac_start_ontladen_bij
             condition: template
             value_template: |
-              {{ states('sensor.p1_aansturing_vermogen') | float(0)
+              {{ states('sensor.p1_aansturing_vermogen') | float(0) - states('sensor.ev_ontlaad_correctie') | float(0)
                  > states('input_number.zendure_2400_ac_ontladen_starten_bij') | float(0) }}
           - condition: state
             entity_id: sensor.zendure_2400_ac_soc_limiet_status
@@ -1029,8 +1032,7 @@ actions:
                 states('input_number.zendure_2400_ac_max_ontlaadvermogen') |
                 float(0) %} {% set correctie = -1 *
                 (states('input_number.zendure_2400_ac_ontlaadmarge') | float(0))
-                %} {% set p1 = states('sensor.p1_aansturing_vermogen') |
-                float(0) %}  {% set zendure =
+                %} {% set p1 = states('sensor.p1_aansturing_vermogen') | float(0) - states('sensor.ev_ontlaad_correctie') | float(0) %}  {% set zendure =
                 states('sensor.zendure_2400_ac_vermogen_aansturing') | float(0)
                 %}
 
@@ -1046,7 +1048,7 @@ actions:
                 %} 
                   {% set cap = states('input_number.zendure_2400_ac_max_ontlaadvermogen') | float(0) %}
                   {% set correctie = -1 * (states('input_number.zendure_2400_ac_ontlaadmarge') | float(0)) %}
-                  {% set p1 = states('sensor.p1_aansturing_vermogen') | float(0) %} 
+                  {% set p1 = states('sensor.p1_aansturing_vermogen') | float(0) - states('sensor.ev_ontlaad_correctie') | float(0) %} 
                   {% set zendure = states('sensor.zendure_2400_ac_vermogen_aansturing') | float(0) %}
 
                   {% set totaal = (p1 - zendure - correctie) * factor %} {% set beperkt = [
@@ -1058,12 +1060,15 @@ actions:
           - condition: trigger
             id:
               - aansturing_trigger
-          - alias: Ontladen niet geblokkeerd (goedkoop dal)
+          - alias: Ontladen niet geblokkeerd (goedkoop dal of HVAC aan)
             condition: not
             conditions:
               - condition: state
                 entity_id: binary_sensor.forecast_dal_ontladen_geblokkeerd
                 state: 'on'
+              - alias: Werkt ook zonder het HVAC-pakket (template i.p.v. state)
+                condition: template
+                value_template: "{{ is_state('binary_sensor.hvac_ontladen_geblokkeerd', 'on') }}"
           - condition: state
             entity_id: sensor.zendure_2400_ac_soc_limiet_status
             state:
@@ -1081,7 +1086,7 @@ actions:
             condition: template
             value_template: |-
               {% set factor = 1.00 %} {% set cap =
-                states('input_number.zendure_2400_ac_max_ontlaadvermogen') | float(0) %} {% set correctie = -1 * (states('input_number.zendure_2400_ac_ontlaadmarge') | float(0)) %} {% set p1 = states('sensor.p1_aansturing_vermogen') | float(0) %} {% set zendure = states('sensor.zendure_2400_ac_vermogen_aansturing') | float(0) %} {% set totaal = (p1 - zendure - correctie) * factor %} {% set beperkt = [ [totaal, 0] | max, cap ] | min %} {% set target = beperkt | int %} {% set huidig = states('sensor.zendure_2400_ac_ingesteld_ontlaadvermogen') | int(0) %} {{ huidig != target }}
+                states('input_number.zendure_2400_ac_max_ontlaadvermogen') | float(0) %} {% set correctie = -1 * (states('input_number.zendure_2400_ac_ontlaadmarge') | float(0)) %} {% set p1 = states('sensor.p1_aansturing_vermogen') | float(0) - states('sensor.ev_ontlaad_correctie') | float(0) %} {% set zendure = states('sensor.zendure_2400_ac_vermogen_aansturing') | float(0) %} {% set totaal = (p1 - zendure - correctie) * factor %} {% set beperkt = [ [totaal, 0] | max, cap ] | min %} {% set target = beperkt | int %} {% set huidig = states('sensor.zendure_2400_ac_ingesteld_ontlaadvermogen') | int(0) %} {{ huidig != target }}
           - condition: numeric_state
             entity_id: sensor.zendure_2400_ac_vermogen_aansturing
             below: 0
@@ -1147,8 +1152,7 @@ actions:
                 states('input_number.zendure_2400_ac_max_ontlaadvermogen') |
                 float(0) %} {% set correctie = -1 *
                 (states('input_number.zendure_2400_ac_ontlaadmarge') | float(0))
-                %} {% set p1 = states('sensor.p1_aansturing_vermogen') |
-                float(0) %}  {% set zendure =
+                %} {% set p1 = states('sensor.p1_aansturing_vermogen') | float(0) - states('sensor.ev_ontlaad_correctie') | float(0) %}  {% set zendure =
                 states('sensor.zendure_2400_ac_vermogen_aansturing') | float(0)
                 %}
 
@@ -1163,7 +1167,7 @@ actions:
                 1.00 %} 
                   {% set cap = states('input_number.zendure_2400_ac_max_ontlaadvermogen') | float(0) %}
                   {% set correctie = -1 * (states('input_number.zendure_2400_ac_ontlaadmarge') | float(0)) %}
-                  {% set p1 = states('sensor.p1_aansturing_vermogen') | float(0) %} 
+                  {% set p1 = states('sensor.p1_aansturing_vermogen') | float(0) - states('sensor.ev_ontlaad_correctie') | float(0) %} 
                   {% set zendure = states('sensor.zendure_2400_ac_vermogen_aansturing') | float(0) %}
 
                   {% set totaal = (p1 - zendure - correctie) * factor %} {% set beperkt = [
@@ -1409,14 +1413,21 @@ actions:
           - condition: trigger
             id:
               - aansturing_trigger
-          - alias: Ontladen geblokkeerd (goedkoop dal)
-            condition: state
-            entity_id: binary_sensor.forecast_dal_ontladen_geblokkeerd
-            state: 'on'
-            for:
-              hours: 0
-              minutes: 0
-              seconds: 10
+          - alias: Ontladen geblokkeerd (goedkoop dal of HVAC aan)
+            condition: or
+            conditions:
+              - condition: state
+                entity_id: binary_sensor.forecast_dal_ontladen_geblokkeerd
+                state: 'on'
+                for:
+                  hours: 0
+                  minutes: 0
+                  seconds: 10
+              - alias: Werkt ook zonder het HVAC-pakket (template i.p.v. state, 10 s)
+                condition: template
+                value_template: >-
+                  {{ is_state('binary_sensor.hvac_ontladen_geblokkeerd', 'on')
+                     and (now() - states.binary_sensor.hvac_ontladen_geblokkeerd.last_changed).total_seconds() >= 10 }}
           - condition: state
             entity_id: sensor.zendure_2400_ac_modus
             state: Ontladen
@@ -1439,10 +1450,10 @@ actions:
               sn: '{{ states(''sensor.zendure_2400_ac_serienummer'') }}'
           - action: logbook.log
             data:
-              message: 🌀Ontladen gestopt (goedkoop dal, alleen laden toegestaan) —
+              message: 🌀Ontladen gestopt (goedkoop dal of HVAC aan, alleen laden toegestaan) —
               entity_id: input_select.zendure_2400_ac_modus_selecteren
               name: ' '
-        alias: Ontladen stoppen (goedkoop dal, alleen laden toegestaan)
+        alias: Ontladen stoppen (goedkoop dal of HVAC aan, alleen laden toegestaan)
   - alias: Handmatige Aansturing
     choose:
       - conditions:

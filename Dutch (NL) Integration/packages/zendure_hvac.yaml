@@ -1,0 +1,92 @@
+# Zendure zenSDK (Gielz) + Forecasting 2026.11.3 | gebaseerd op Gielz v20261007
+# Gebaseerd op Gielz1986/Zendure-HA-zenSDK (Michiel Hofker). Zie README.md voor licentie en wijzigingen.
+# =====================================================================
+# Zendure HVAC (airco) - NOM niet laten ontladen terwijl de airco draait (optioneel)
+#
+# Plaats dit bestand naast zendure_gielz1986_nl.yaml (zelfde packages-map).
+# Zonder dit bestand verandert er niets. Het blok Configuratie (HVAC) op de tab Configuratie
+# verschijnt vanzelf zodra dit bestand geladen is.
+# Werking:
+#   - binary_sensor.hvac_actief               : draait de airco?
+#   - binary_sensor.hvac_ontladen_geblokkeerd : airco aan, binnen de ingestelde uren
+#                                               en (optioneel) niet in een duur uur
+# De NOM-ontlaadblokken in de automation ontladen niet zolang de laatste "aan" staat.
+# Laden (zon of net) blijft gewoon werken.
+# Laat het sensorveld leeg om de functie uit te zetten.
+# =====================================================================
+
+input_text:
+  hvac_sensor:
+    name: HVAC Sensor
+    icon: mdi:air-conditioner
+    max: 250
+    mode: text
+
+input_datetime:
+  hvac_start:
+    name: HVAC Alleen Laden Vanaf
+    has_date: false
+    has_time: true
+    icon: mdi:clock-start
+  hvac_eind:
+    name: HVAC Alleen Laden Tot
+    has_date: false
+    has_time: true
+    icon: mdi:clock-end
+
+input_number:
+  hvac_drempel_vermogen:
+    name: HVAC Drempel Vermogen
+    icon: mdi:flash
+    min: 0
+    max: 2000
+    step: 10
+    mode: box
+    unit_of_measurement: "W"
+
+input_boolean:
+  hvac_ontladen_bij_duur_uur:
+    name: HVAC Ontladen Toestaan Tijdens Duur Uur
+    icon: mdi:cash-plus
+
+template:
+  - binary_sensor:
+      # Aan als de ingevulde entiteit "aan" is:
+      #   climate.*                    -> modus is niet "off"
+      #   sensor.* (vermogen in W)     -> waarde boven de drempel (0 = 50 W)
+      #   overige (switch, binary_sensor, input_boolean, ...) -> state "on"
+      - name: "HVAC Actief"
+        unique_id: hvac_actief
+        icon: mdi:air-conditioner
+        state: >
+          {% set e = states('input_text.hvac_sensor') | trim %}
+          {% if e == '' or not has_value(e) %}
+            false
+          {% elif e.startswith('climate.') %}
+            {{ states(e) != 'off' }}
+          {% elif e.startswith('sensor.') %}
+            {% set d = states('input_number.hvac_drempel_vermogen') | float(0) %}
+            {{ states(e) | float(0) > (d if d > 0 else 50) }}
+          {% else %}
+            {{ is_state(e, 'on') }}
+          {% endif %}
+
+      - name: "HVAC Ontladen Geblokkeerd"
+        unique_id: hvac_ontladen_geblokkeerd
+        icon: mdi:battery-off-outline
+        state: >
+          {% set actief = is_state('binary_sensor.hvac_actief', 'on') %}
+          {% set s = states('input_datetime.hvac_start') %}
+          {% set e = states('input_datetime.hvac_eind') %}
+          {% set nu = now().strftime('%H:%M:%S') %}
+          {# zelfde start en eind (standaard 00:00 - 00:00) = de hele dag #}
+          {% if s == e %}
+            {% set in_venster = true %}
+          {% elif s < e %}
+            {% set in_venster = s <= nu < e %}
+          {% else %}
+            {% set in_venster = nu >= s or nu < e %}
+          {% endif %}
+          {% set duur_uur = is_state('input_boolean.hvac_ontladen_bij_duur_uur', 'on')
+                            and is_state('sensor.dynamisch_duurste_periode', 'Ja') %}
+          {{ actief and in_venster and not duur_uur }}

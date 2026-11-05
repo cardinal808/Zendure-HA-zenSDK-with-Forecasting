@@ -1,7 +1,7 @@
-# Zendure zenSDK (Gielz) + Forecasting 2026.11.2 | based on Gielz v20261007 | set: public (without HVAC)
+# Zendure zenSDK (Gielz) + Forecasting 2026.11.3 | based on Gielz v20261007
 # Based on Gielz1986/Zendure-HA-zenSDK (Michiel Hofker). See README.md for license and changes.
 alias: Zendure zenSDK (Gielz) Global
-description: Configuration Version (v20261007) + Forecasting 2026.11.2
+description: Configuration Version (v20261007) + Forecasting 2026.11.3
 triggers:
   - seconds: /5
     id: aansturing_trigger
@@ -911,18 +911,21 @@ actions:
           - condition: trigger
             id:
               - aansturing_trigger
-          - alias: Discharging not held (cheap dip)
+          - alias: Discharging not held (cheap dip or HVAC on)
             condition: not
             conditions:
               - condition: state
                 entity_id: binary_sensor.forecast_discharge_held_in_dip
                 state: 'on'
+              - alias: Also works without the HVAC package (template instead of state)
+                condition: template
+                value_template: "{{ is_state('binary_sensor.hvac_discharge_blocked', 'on') }}"
           - alias: >-
-              sensor.home_energy_meter_power bigger then
+              sensor.home_energy_meter_power (minus car charging power) bigger then
               input_number.zendure_setting_start_discharging_at
             condition: template
             value_template: |
-              {{ states('sensor.home_energy_meter_power') | float(0)
+              {{ states('sensor.home_energy_meter_power') | float(0) - states('sensor.ev_discharge_correction') | float(0)
                  > states('input_number.zendure_setting_start_discharging_at') | float(0) }}
           - condition: state
             entity_id: sensor.zendure_soc_limit_status
@@ -1017,8 +1020,7 @@ actions:
                 states('input_number.zendure_setting_max_discharge_power') |
                 float(0) %} {% set correctie = -1 *
                 (states('input_number.zendure_setting_discharge_buffer') |
-                float(0)) %} {% set p1 =
-                states('sensor.home_energy_meter_power') | float(0) %}  {% set
+                float(0)) %} {% set p1 = states('sensor.home_energy_meter_power') | float(0) - states('sensor.ev_discharge_correction') | float(0) %}  {% set
                 zendure = states('sensor.zendure_power') | float(0) %}
 
                 {% set totaal = (p1 - zendure - correctie) * factor %} {% set
@@ -1032,7 +1034,7 @@ actions:
                 🔋Discharging (Starting) — Power set to {% set factor = 0.75 %} 
                   {% set cap = states('input_number.zendure_setting_max_discharge_power') | float(0) %}
                   {% set correctie = -1 * (states('input_number.zendure_setting_discharge_buffer') | float(0)) %}
-                  {% set p1 = states('sensor.home_energy_meter_power') | float(0) %} 
+                  {% set p1 = states('sensor.home_energy_meter_power') | float(0) - states('sensor.ev_discharge_correction') | float(0) %} 
                   {% set zendure = states('sensor.zendure_power') | float(0) %}
 
                   {% set totaal = (p1 - zendure - correctie) * factor %} {% set beperkt = [
@@ -1044,12 +1046,15 @@ actions:
           - condition: trigger
             id:
               - aansturing_trigger
-          - alias: Discharging not held (cheap dip)
+          - alias: Discharging not held (cheap dip or HVAC on)
             condition: not
             conditions:
               - condition: state
                 entity_id: binary_sensor.forecast_discharge_held_in_dip
                 state: 'on'
+              - alias: Also works without the HVAC package (template instead of state)
+                condition: template
+                value_template: "{{ is_state('binary_sensor.hvac_discharge_blocked', 'on') }}"
           - condition: state
             entity_id: sensor.zendure_soc_limit_status
             state:
@@ -1067,7 +1072,7 @@ actions:
             condition: template
             value_template: |-
               {% set factor = 1.00 %} {% set cap =
-                states('input_number.zendure_setting_max_discharge_power') | float(0) %} {% set correctie = -1 * (states('input_number.zendure_setting_discharge_buffer') | float(0)) %} {% set p1 = states('sensor.home_energy_meter_power') | float(0) %} {% set zendure = states('sensor.zendure_power') | float(0) %} {% set totaal = (p1 - zendure - correctie) * factor %} {% set beperkt = [ [totaal, 0] | max, cap ] | min %} {% set target = beperkt | int %} {% set huidig = states('sensor.zendure_set_discharge_power') | int(0) %} {{ huidig != target }}
+                states('input_number.zendure_setting_max_discharge_power') | float(0) %} {% set correctie = -1 * (states('input_number.zendure_setting_discharge_buffer') | float(0)) %} {% set p1 = states('sensor.home_energy_meter_power') | float(0) - states('sensor.ev_discharge_correction') | float(0) %} {% set zendure = states('sensor.zendure_power') | float(0) %} {% set totaal = (p1 - zendure - correctie) * factor %} {% set beperkt = [ [totaal, 0] | max, cap ] | min %} {% set target = beperkt | int %} {% set huidig = states('sensor.zendure_set_discharge_power') | int(0) %} {{ huidig != target }}
           - condition: numeric_state
             entity_id: sensor.zendure_power
             below: 0
@@ -1133,8 +1138,7 @@ actions:
                 states('input_number.zendure_setting_max_discharge_power') |
                 float(0) %} {% set correctie = -1 *
                 (states('input_number.zendure_setting_discharge_buffer') |
-                float(0)) %} {% set p1 =
-                states('sensor.home_energy_meter_power') | float(0) %}  {% set
+                float(0)) %} {% set p1 = states('sensor.home_energy_meter_power') | float(0) - states('sensor.ev_discharge_correction') | float(0) %}  {% set
                 zendure = states('sensor.zendure_power') | float(0) %}
 
                 {% set totaal = (p1 - zendure - correctie) * factor %} {% set
@@ -1147,7 +1151,7 @@ actions:
                 ⚡Discharging (Balancing) — Power set to {% set factor = 1.00 %} 
                   {% set cap = states('input_number.zendure_setting_max_discharge_power') | float(0) %}
                   {% set correctie = -1 * (states('input_number.zendure_setting_discharge_buffer') | float(0)) %}
-                  {% set p1 = states('sensor.home_energy_meter_power') | float(0) %} 
+                  {% set p1 = states('sensor.home_energy_meter_power') | float(0) - states('sensor.ev_discharge_correction') | float(0) %} 
                   {% set zendure = states('sensor.zendure_power') | float(0) %}
 
                   {% set totaal = (p1 - zendure - correctie) * factor %} {% set beperkt = [
@@ -1389,14 +1393,21 @@ actions:
           - condition: trigger
             id:
               - aansturing_trigger
-          - alias: Discharging held (cheap dip)
-            condition: state
-            entity_id: binary_sensor.forecast_discharge_held_in_dip
-            state: 'on'
-            for:
-              hours: 0
-              minutes: 0
-              seconds: 10
+          - alias: Discharging held (cheap dip or HVAC on)
+            condition: or
+            conditions:
+              - condition: state
+                entity_id: binary_sensor.forecast_discharge_held_in_dip
+                state: 'on'
+                for:
+                  hours: 0
+                  minutes: 0
+                  seconds: 10
+              - alias: Also works without the HVAC package (template instead of state, 10 s)
+                condition: template
+                value_template: >-
+                  {{ is_state('binary_sensor.hvac_discharge_blocked', 'on')
+                     and (now() - states.binary_sensor.hvac_discharge_blocked.last_changed).total_seconds() >= 10 }}
           - condition: state
             entity_id: sensor.zendure_charging_mode
             state: Discharging
@@ -1419,10 +1430,10 @@ actions:
               sn: '{{ states(''sensor.zendure_serial_number'') }}'
           - action: logbook.log
             data:
-              message: 🌀Discharging stopped (cheap dip, charging only) —
+              message: 🌀Discharging stopped (cheap dip or HVAC on, charging only) —
               entity_id: input_select.zendure_operation_mode
               name: ' '
-        alias: Stop discharging (cheap dip, charging only)
+        alias: Stop discharging (cheap dip or HVAC on, charging only)
   - alias: Manual Control
     choose:
       - conditions:

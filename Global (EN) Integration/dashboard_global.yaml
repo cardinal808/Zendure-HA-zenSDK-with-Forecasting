@@ -1,4 +1,4 @@
-# Zendure zenSDK (Gielz) + Forecasting 2026.11.2 | based on Gielz v20261007 | set: public (without HVAC)
+# Zendure zenSDK (Gielz) + Forecasting 2026.11.3 | based on Gielz v20261007
 # Based on Gielz1986/Zendure-HA-zenSDK (Michiel Hofker). See README.md for license and changes.
 views:
   - type: sections
@@ -1532,7 +1532,7 @@ views:
               - Battery now: **{{ a.battery_now_kwh }}** of {{ a.battery_max_kwh }} kWh usable
               {% set td = now().strftime('%Y-%m-%d') %}- Today's plan runs until **{{ ('tomorrow ' if (a.bridge_until or '')[:10] != td else '') ~ (a.bridge_until or '')[11:] }}** ({{ a.bridge_hours }} hours), the start of tomorrow's cheap hours; after that it plans again with tomorrow's prices
               {% set lb = a.charge_blocks | default([]) %}- Expected usage until end of bridge (after direct solar): **{{ '%.1f' | format(a.expected_battery_usage_kwh | float(0)) }} kWh**, covered by the battery{% if lb | length > 0 %} and the planned charging{% endif %}{% if a.pathcheck_dip_hold %} (outside the cheap dips){% endif %}, the rest directly from the grid
-              - Expected solar to battery: **{{ a.expected_solar_to_battery_kwh }} kWh** (solar still expected: {{ a.solar_remaining_today_kwh }} kWh, {{ a.self_consumption_pct }}% used directly)
+              - Expected solar to battery: **{{ a.expected_solar_to_battery_kwh }} kWh** (solar still expected: {{ a.solar_remaining_today_kwh }} kWh, {{ a.self_consumption_pct }}% used directly){% if a.ev_daytime_from_solar_kwh | float(0) > 0 %}; the car still charges {{ '%.1f' | format(a.ev_daytime_from_solar_kwh | float(0)) }} kWh during the day, which comes off the solar surplus first{% endif %}
               - Price now: €{{ '%.3f' | format(a.price_now | float(0)) }}{% if a.smart_hold %}: the battery is saved for the most expensive quarters (€{{ '%.3f' | format(a.hold_threshold_price | float(0)) }} and up), because it does not last until the end of the bridge; until then the house buys directly{% elif a.in_dip %}, cheap dip{% if a.hold_discharge %}: the battery is being saved and the house buys directly from the grid, because that is cheaper than power from the battery{% endif %}{% endif %}
               {% set lb = a.charge_blocks | default([]) %}- **Charge from the grid: {% if lb | length > 0 %}{{ '%.1f' | format(a.planned_grid_charge_kwh | float(0)) }} kWh planned at {{ a.charge_power_used_kw }} kW, estimated cost €{{ '%.2f' | format(a.estimated_cost) }}**{% else %}nothing planned**{% endif %}{% set rest = (a.grid_charge_today_kwh | float(0)) - (a.planned_grid_charge_kwh | float(0)) %}{% if rest >= 0.3 %} (energy balance {{ '%.1f' | format(a.grid_charge_today_kwh | float(0)) }} kWh; the rest is not stored, because buying directly from the grid is then cheaper after charge and discharge losses){% endif %}
               {% if a.pathcheck_gap_hours | float(0) > 0 %}{% set td = now().strftime('%Y-%m-%d') %}- Path check: battery empty around **{{ ('tomorrow ' if (a.pathcheck_battery_empty_at or '')[:10] != td else '') ~ (a.pathcheck_battery_empty_at or '')[11:] }}**{% if a.pathcheck_dip_hold %} (the battery does not supply in cheap dips){% endif %}, checked until **{{ ('tomorrow ' if (a.pathcheck_gap_end or '')[:10] != td else '') ~ (a.pathcheck_gap_end or '')[11:] }}** {% if (a.pathcheck_solar_source or '') is search('no longer|None') %}(solar does not cover usage before the end of the bridge){% else %}(solar covers usage from {{ ('tomorrow ' if (a.pathcheck_solar_covers_from or '')[:10] != td else '') ~ (a.pathcheck_solar_covers_from or '')[11:] }}, {{ a.pathcheck_solar_source }}){% endif %}. {{ a.pathcheck_gap_hours }} hours, {{ a.pathcheck_shortfall_kwh }} kWh bought from the grid, of which {{ a.pathcheck_shortfall_expensive_slots_kwh }} kWh in expensive slots{% if a.pathcheck_gap_price | float(0) > 0 %} (average €{{ '%.3f' | format(a.pathcheck_gap_price | float(0)) }}){% endif %}{% if a.pathcheck_extra_slots | int(0) > 0 %}: {{ a.pathcheck_extra_slots }} charge slot(s) planned for it{% endif %}{% endif %}
@@ -3817,6 +3817,9 @@ views:
                     state: 'on'
             visibility:
               - condition: state
+                entity: input_boolean.negative_price_block_export
+                state_not: unavailable
+              - condition: state
                 entity: input_boolean.dashboard_setting_show_pv
                 state: 'on'
           - type: markdown
@@ -3871,6 +3874,9 @@ views:
             text_only: true
             visibility:
               - condition: state
+                entity: input_boolean.negative_price_block_export
+                state_not: unavailable
+              - condition: state
                 entity: input_boolean.dashboard_setting_show_help
                 state: 'on'
               - condition: state
@@ -3882,6 +3888,9 @@ views:
                 name: No export at negative price
             visibility:
               - condition: state
+                entity: input_boolean.negative_price_block_export
+                state_not: unavailable
+              - condition: state
                 entity: input_boolean.dashboard_setting_show_pv
                 state: 'on'
           - type: markdown
@@ -3889,6 +3898,9 @@ views:
             content: >-
               **External inverter (optional)**
             visibility:
+              - condition: state
+                entity: input_boolean.negative_price_block_export
+                state_not: unavailable
               - condition: state
                 entity: input_boolean.dashboard_setting_show_pv
                 state: 'on'
@@ -3941,6 +3953,9 @@ views:
                   entity: input_text.negative_price_inverter_limiter_secondary
                   name: Inverter limiter entity (number.*, switch.* or script.*)
             visibility:
+              - condition: state
+                entity: input_boolean.negative_price_block_export
+                state_not: unavailable
               - condition: state
                 entity: input_boolean.dashboard_setting_show_pv
                 state: 'on'
@@ -4066,6 +4081,9 @@ views:
             heading_style: title
             visibility:
               - condition: state
+                entity: input_number.savings_setting_fixed_supply_price
+                state_not: unavailable
+              - condition: state
                 entity: input_boolean.dashboard_setting_show_forecasting
                 state: 'on'
           - type: markdown
@@ -4090,6 +4108,9 @@ views:
               a dynamic contract.
             text_only: true
             visibility:
+              - condition: state
+                entity: input_number.savings_setting_fixed_supply_price
+                state_not: unavailable
               - condition: state
                 entity: input_boolean.dashboard_setting_show_help
                 state: 'on'
@@ -4116,8 +4137,167 @@ views:
                 name: Restart total
             visibility:
               - condition: state
+                entity: input_number.savings_setting_fixed_supply_price
+                state_not: unavailable
+              - condition: state
                 entity: input_boolean.dashboard_setting_show_forecasting
                 state: 'on'
+          - type: heading
+            icon: ''
+            heading_style: title
+            heading: Configuration (EV)
+            badges:
+              - type: entity
+                show_state: true
+                show_icon: true
+                entity: sensor.ev_charge_plan
+                name: Plan
+                state_content:
+                  - name
+                  - state
+                color: '#01a180'
+                tap_action:
+                  action: more-info
+              - type: entity
+                show_state: true
+                show_icon: true
+                entity: sensor.ev_charging_power
+                name: Car
+                state_content:
+                  - name
+                  - state
+                color: '#01a180'
+                tap_action:
+                  action: more-info
+                visibility:
+                  - condition: numeric_state
+                    entity: sensor.ev_charging_power
+                    above: 0
+            visibility:
+              - condition: state
+                entity: input_select.ev_charge_moment
+                state_not: unavailable
+          - type: markdown
+            content: >-
+              <ha-alert alert-type="info">Help text</ha-alert>For a charger
+              without its own control (granny charger, or a wallbox behind a
+              smart switch). Enter the charger's **power sensor** (W or kW, e.g.
+              from a Shelly 1PM in the charger's circuit). From then on the
+              battery no longer discharges into the car: the Smart Matching
+              modes subtract the car's charging power from the grid meter. The
+              car's charging also no longer counts in the planner's usage
+              profile and daily usage.
+
+
+              **Charging session** (only with a configured **switch**): choose
+              the **charge moment** and the **required energy** (kWh at the
+              socket). *Night* charges in the cheapest price slots until **Ready
+              by** (00:00 = 07:00). *Daytime* charges while the sun is up; the
+              planner subtracts those kWh from the solar surplus for the battery
+              and charges the shortfall from the grid at the cheapest moment.
+              Once the energy is charged or the time has passed, the charge
+              moment returns to Off and the charger is switched on again. Note:
+              not every car resumes charging by itself when power returns.
+            text_only: true
+            visibility:
+              - condition: state
+                entity: input_boolean.dashboard_setting_show_help
+                state: 'on'
+              - condition: state
+                entity: input_select.ev_charge_moment
+                state_not: unavailable
+          - type: entities
+            entities:
+              - entity: input_select.ev_charge_moment
+                name: Charge moment
+              - entity: input_number.ev_required_energy
+                name: Required energy (kWh at the socket)
+              - type: conditional
+                conditions:
+                  - entity: input_select.ev_charge_moment
+                    state: Night (cheapest hours)
+                row:
+                  entity: input_datetime.ev_ready_by
+                  name: Ready by (00:00 = 07:00)
+              - type: section
+                label: Charger
+              - entity: input_text.ev_power_sensor
+                name: Charger power sensor (W or kW)
+              - entity: input_text.ev_charger_switch
+                name: Charger switch (optional, e.g. switch.shelly_charger)
+              - entity: input_number.ev_charger_power
+                name: Charging power kW (0 = 2.3 kW)
+              - entity: input_number.ev_threshold_power
+                name: Threshold W (0 = 300 W)
+            visibility:
+              - condition: state
+                entity: input_select.ev_charge_moment
+                state_not: unavailable
+          - type: markdown
+            text_only: true
+            content: |-
+              {%- set p = 'sensor.ev_charge_plan' -%}
+              {%- set c = states('sensor.ev_discharge_correction') | float(0) -%}
+              {% if not is_state('input_select.ev_charge_moment', 'Off') %}**Charging session:** {{ states(p) }} · charged {{ '%.1f' | format(state_attr(p, 'charged_kwh') | float(0)) }} of {{ states('input_number.ev_required_energy') | float(0) | round(0) | int }} kWh{% if state_attr(p, 'end') %} · until {{ (state_attr(p, 'end') or '')[11:] }}{% endif %}
+              {% for b in state_attr(p, 'charge_blocks') or [] %}
+              - Charge {{ b.day }} {{ b.start }}–{{ b.end }}: about {{ '%.1f' | format(b.kwh) }} kWh, average €{{ '%.3f' | format(b.price) }}
+              {%- endfor %}
+              {% if is_state('input_select.ev_charge_moment', 'Night (cheapest hours)') and not state_attr(p, 'tomorrow_prices_known') %}
+              <small>Tomorrow's prices not known yet: planned with today's pattern, replanned around 14:00.</small>
+              {% endif %}{% if states('input_text.ev_charger_switch') | trim == '' %}
+              <ha-alert alert-type="warning">No switch configured: the charger is not switched on and off, only the plan is calculated.</ha-alert>
+              {% endif %}{% else %}No charging session. Choose a charge moment to charge the car on a plan.{% endif %}
+              {% if c > 0 %}
+              The car is charging at {{ c | round(0) | int }} W: the battery does not discharge into it.{% endif %}
+            visibility:
+              - condition: state
+                entity: input_select.ev_charge_moment
+                state_not: unavailable
+          - type: heading
+            icon: ''
+            heading_style: title
+            heading: Configuration (HVAC)
+            visibility:
+              - condition: state
+                entity: input_text.hvac_sensor
+                state_not: unavailable
+          - type: markdown
+            content: >-
+              <ha-alert alert-type="info">Help text</ha-alert>While the AC
+              runs, the Smart Matching modes do not discharge (charging from
+              solar or grid keeps working). Enter your AC entity (e.g.
+              climate.living_room; a power sensor in W also works and is often
+              more accurate). Optionally set the hours in which this applies;
+              the same time for From and Until means the whole day. Leave the
+              sensor empty to switch the feature off.
+            text_only: true
+            visibility:
+              - condition: state
+                entity: input_boolean.dashboard_setting_show_help
+                state: 'on'
+              - condition: state
+                entity: input_text.hvac_sensor
+                state_not: unavailable
+          - type: entities
+            entities:
+              - entity: input_text.hvac_sensor
+                name: HVAC sensor (e.g. climate.living_room)
+              - entity: input_datetime.hvac_charge_only_from
+                name: Charge only from
+              - entity: input_datetime.hvac_charge_only_until
+                name: Charge only until
+              - entity: input_boolean.hvac_allow_discharge_in_expensive_hour
+                name: Allow discharge in an expensive hour
+              - entity: input_number.hvac_threshold_power
+                name: Threshold power W (power sensor only, 0 = 50 W)
+              - entity: binary_sensor.hvac_active
+                name: AC active
+              - entity: binary_sensor.hvac_discharge_blocked
+                name: Discharge blocked
+            visibility:
+              - condition: state
+                entity: input_text.hvac_sensor
+                state_not: unavailable
           - type: heading
             icon: ''
             heading_style: title

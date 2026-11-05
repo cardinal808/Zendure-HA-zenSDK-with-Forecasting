@@ -1,4 +1,4 @@
-# Zendure zenSDK (Gielz) + Forecasting 2026.11.2 | gebaseerd op Gielz v20261007 | set: publiek (zonder HVAC)
+# Zendure zenSDK (Gielz) + Forecasting 2026.11.3 | gebaseerd op Gielz v20261007
 # Gebaseerd op Gielz1986/Zendure-HA-zenSDK (Michiel Hofker). Zie README.md voor licentie en wijzigingen.
 # =====================================================================
 # Zendure Negatieve Prijs - niet terugleveren als teruglevering geld kost
@@ -187,7 +187,7 @@ automation:
   - id: zendure_negatieve_prijs_export
     alias: Zendure Negatieve Prijs Export
     description: >-
-      Forecasting 2026.11.2 - Schakelt de Zendure PV-export uit (via Gielz' PV Export
+      Forecasting 2026.11.3 - Schakelt de Zendure PV-export uit (via Gielz' PV Export
       Uitgeschakeld) zolang de terugleverprijs negatief is, en zet hem daarna terug.
     mode: queued
     max: 5
@@ -257,7 +257,7 @@ automation:
   - id: zendure_negatieve_prijs_limiter
     alias: Zendure Negatieve Prijs Externe Omvormer
     description: >-
-      Forecasting 2026.11.2 - Begrenst een externe omvormer (productielimiet op de P1-meter,
+      Forecasting 2026.11.3 - Begrenst een externe omvormer (productielimiet op de P1-meter,
       exportlimiet op 0, schakelaar uit of script) zolang de terugleverprijs negatief is en
       de Zendure het overschot niet kan opnemen.
     mode: single
@@ -511,7 +511,7 @@ automation:
   - id: zendure_negatieve_prijs_secundair
     alias: Zendure Negatieve Prijs Secundaire Omvormer
     description: >-
-      Forecasting 2026.11.2 - Zet de secundaire externe omvormer naar het minimum (number op 0,
+      Forecasting 2026.11.3 - Zet de secundaire externe omvormer naar het minimum (number op 0,
       switch uit, script met blokkeren: true) zolang de terugleverprijs negatief is en de Zendure
       het overschot niet kan opnemen. De primaire omvormer regelt dan alleen op de P1-meter.
     mode: single
