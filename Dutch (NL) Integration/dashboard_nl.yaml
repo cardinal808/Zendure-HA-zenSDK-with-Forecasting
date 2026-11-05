@@ -768,6 +768,487 @@ views:
               - condition: state
                 entity: input_boolean.pv_tonen_op_dashboard
                 state: 'on'
+          - type: heading
+            icon: ''
+            heading: Plan Tijdlijn
+            heading_style: title
+            visibility:
+              - condition: state
+                entity: input_boolean.forecast_tonen_op_dashboard
+                state: 'on'
+          - type: markdown
+            content: >-
+              <ha-alert alert-type="info">Helptekst</ha-alert>Voorspelling per prijsslot voor de komende 36 uur. Prijs (kleuren zoals Gielz): groen = gepland laden, rood = duur (duurste periodes van Gielz), grijs = overig, lichtgrijs = prijs nog onbekend. Het laden van morgen is indicatief; de dal-blokkade zit niet in deze voorspelling. Zon alleen met een Solcast-detailvoorspelling.
+
+
+              Let op: mod-card (card-mod, HACS) benodigd.
+            text_only: true
+            visibility:
+              - condition: state
+                entity: input_boolean.help_tonen_op_dashboard
+                state: 'on'
+              - condition: state
+                entity: input_boolean.forecast_tonen_op_dashboard
+                state: 'on'
+          - type: custom:mod-card
+            card_mod:
+              style: |
+                ha-card {
+                  --vertical-stack-card-gap: 0px;
+                  --stack-card-gap: 0px;
+                  background: var(--ha-card-background, var(--card-background-color, white)) !important;
+                  border: var(--ha-card-border-width, 1px) solid var(--ha-card-border-color, var(--divider-color, #e0e0e0)) !important;
+                  border-radius: var(--ha-card-border-radius, 12px) !important;
+                  padding: 4px 6px 2px 6px;
+                  overflow: hidden;
+                }
+            card:
+              type: vertical-stack
+              cards:
+                - type: custom:apexcharts-card
+                  graph_span: 36h
+                  span:
+                    start: hour
+                  now:
+                    show: true
+                    color: var(--primary-text-color)
+                  update_interval: 5min
+                  header:
+                    show: false
+                  apex_config:
+                    yaxis:
+                      - show: false
+                    chart:
+                      height: 80px
+                      sparkline:
+                        enabled: false
+                    legend:
+                      show: false
+                    plotOptions:
+                      bar:
+                        columnWidth: 100%
+                    dataLabels:
+                      enabled: false
+                    annotations:
+                      texts:
+                        - x: 4
+                          'y': 11
+                          text: 'Prijs €/kWh'
+                          fontSize: 10px
+                          foreColor: grey
+                          textAnchor: start
+                    grid:
+                      show: true
+                      borderColor: color-mix(in srgb, var(--divider-color) 40%, transparent)
+                      strokeDashArray: 0
+                      padding:
+                        top: -10
+                        bottom: -28
+                        left: 6
+                        right: 4
+                    tooltip:
+                      shared: true
+                      intersect: false
+                      followCursor: true
+                      custom: >-
+                        EVAL:function({ series, dataPointIndex, w }) {
+                          const t = w.globals.seriesX[0][dataPointIndex];
+                          const d = new Date(t);
+                          const tijd = d.toLocaleString(navigator.language, { weekday: 'short', hour: '2-digit', minute: '2-digit' });
+                          const delen = [];
+                          w.globals.seriesNames.forEach((naam, i) => {
+                            const v = series[i] ? series[i][dataPointIndex] : null;
+                            if (v === null || v === undefined || Number.isNaN(v)) return;
+                            const n = naam.toLowerCase();
+                            const txt = (n.startsWith('prijs') || n.startsWith('price')) ? v.toFixed(3) + ' €'
+                              : ((n.startsWith('laadperc') || n.startsWith('state')) ? Math.round(v) + '%' : v.toFixed(2) + ' kW');
+                            delen.push('<span style="color:' + w.globals.colors[i] + '">●</span> ' + naam + ' ' + txt);
+                          });
+                          return '<div style="padding:1px 6px;font-size:11px;line-height:16px;white-space:nowrap;background:var(--card-background-color,#1c1f26);color:var(--primary-text-color,#e1e1e1);border:1px solid var(--divider-color,#444);border-radius:4px">' + tijd + ' · ' + delen.join(' · ') + '</div>';
+                        }
+                    xaxis:
+                      tooltip:
+                        enabled: false
+                      labels:
+                        show: false
+                        datetimeUTC: false
+                        format: HH:mm
+                        style:
+                          fontSize: 10px
+                          colors: grey
+                      axisTicks:
+                        show: false
+                      axisBorder:
+                        show: false
+                  series:
+                    - entity: sensor.zendure_forecast_grafiek
+                      name: Prijs
+                      type: column
+                      color: '#01a180'
+                      float_precision: 3
+                      show:
+                        in_header: false
+                      data_generator: |
+                        const d = entity.attributes.tijdlijn;
+                        if (!d || !d.t) return [];
+                        // Kleuren zoals Gielz (Dynamisch Vandaag/Morgen): groen = laden (hier: gepland
+                        // door de planner), rood = duur (de duurste periodes van Gielz), grijs = overig.
+                        // Lichtgrijs = prijs nog onbekend (patroon van vandaag aangehouden).
+                        const g = hass.states['sensor.dynamisch_goedkoopste_periode'];
+                        const duur = new Set();
+                        if (g) {
+                          [...(g.attributes.raw_today || []), ...(g.attributes.raw_tomorrow || [])]
+                            .forEach((p) => { if (p.duur === 'ja') duur.add(new Date(p.start).getTime()); });
+                        }
+                        return d.t.map((t, i) => {
+                          const v = d.prijs[i];
+                          let c = 'rgba(162,162,163,1)';
+                          if (duur.has(t * 1000)) c = 'rgba(197,59,44,1)';
+                          if (!d.bekend[i]) c = 'rgba(162,162,163,0.4)';
+                          if (d.laden[i]) c = 'rgba(1,161,128,1)';
+                          return { x: t * 1000, y: v, fillColor: c };
+                        });
+                  card_mod:
+                    style: |
+                      ha-card {
+                        background: none !important;
+                        border: none !important;
+                        border-radius: 0 !important;
+                        box-shadow: none !important;
+                      }
+                - type: custom:apexcharts-card
+                  graph_span: 36h
+                  span:
+                    start: hour
+                  now:
+                    show: true
+                    color: var(--primary-text-color)
+                  update_interval: 5min
+                  header:
+                    show: false
+                  apex_config:
+                    yaxis:
+                      - show: false
+                    chart:
+                      height: 80px
+                      sparkline:
+                        enabled: false
+                    legend:
+                      show: false
+                    plotOptions:
+                      bar:
+                        columnWidth: 100%
+                    dataLabels:
+                      enabled: false
+                    annotations:
+                      texts:
+                        - x: 4
+                          'y': 11
+                          text: 'Zon (geel) en verbruik (lijn), kW'
+                          fontSize: 10px
+                          foreColor: grey
+                          textAnchor: start
+                    grid:
+                      show: true
+                      borderColor: color-mix(in srgb, var(--divider-color) 40%, transparent)
+                      strokeDashArray: 0
+                      padding:
+                        top: -10
+                        bottom: -28
+                        left: 6
+                        right: 4
+                    tooltip:
+                      shared: true
+                      intersect: false
+                      followCursor: true
+                      custom: >-
+                        EVAL:function({ series, dataPointIndex, w }) {
+                          const t = w.globals.seriesX[0][dataPointIndex];
+                          const d = new Date(t);
+                          const tijd = d.toLocaleString(navigator.language, { weekday: 'short', hour: '2-digit', minute: '2-digit' });
+                          const delen = [];
+                          w.globals.seriesNames.forEach((naam, i) => {
+                            const v = series[i] ? series[i][dataPointIndex] : null;
+                            if (v === null || v === undefined || Number.isNaN(v)) return;
+                            const n = naam.toLowerCase();
+                            const txt = (n.startsWith('prijs') || n.startsWith('price')) ? v.toFixed(3) + ' €'
+                              : ((n.startsWith('laadperc') || n.startsWith('state')) ? Math.round(v) + '%' : v.toFixed(2) + ' kW');
+                            delen.push('<span style="color:' + w.globals.colors[i] + '">●</span> ' + naam + ' ' + txt);
+                          });
+                          return '<div style="padding:1px 6px;font-size:11px;line-height:16px;white-space:nowrap;background:var(--card-background-color,#1c1f26);color:var(--primary-text-color,#e1e1e1);border:1px solid var(--divider-color,#444);border-radius:4px">' + tijd + ' · ' + delen.join(' · ') + '</div>';
+                        }
+                    xaxis:
+                      tooltip:
+                        enabled: false
+                      labels:
+                        show: false
+                        datetimeUTC: false
+                        format: HH:mm
+                        style:
+                          fontSize: 10px
+                          colors: grey
+                      axisTicks:
+                        show: false
+                      axisBorder:
+                        show: false
+                  series:
+                    - entity: sensor.zendure_forecast_grafiek
+                      name: Zon
+                      type: column
+                      color: '#f2c037'
+                      opacity: 0.7
+                      float_precision: 2
+                      show:
+                        in_header: false
+                      data_generator: |
+                        const d = entity.attributes.tijdlijn;
+                        if (!d || !d.t) return [];
+                        return d.t.map((t, i) => ({ x: t * 1000, y: d.zon_kw[i] }));
+                    - entity: sensor.zendure_forecast_grafiek
+                      name: Verbruik
+                      type: line
+                      color: '#4fb3bf'
+                      stroke_width: 1.5
+                      curve: stepline
+                      float_precision: 2
+                      show:
+                        in_header: false
+                      data_generator: |
+                        const d = entity.attributes.tijdlijn;
+                        if (!d || !d.t) return [];
+                        return d.t.map((t, i) => ({ x: t * 1000, y: d.verbruik_kw[i] }));
+                  card_mod:
+                    style: |
+                      ha-card {
+                        background: none !important;
+                        border: none !important;
+                        border-radius: 0 !important;
+                        box-shadow: none !important;
+                        border-top: 1px solid var(--divider-color) !important;
+                      }
+                - type: custom:apexcharts-card
+                  graph_span: 36h
+                  span:
+                    start: hour
+                  now:
+                    show: true
+                    color: var(--primary-text-color)
+                  update_interval: 5min
+                  header:
+                    show: false
+                  apex_config:
+                    yaxis:
+                      - seriesName: Accu
+                        show: false
+                      - seriesName: Laadpercentage
+                        opposite: true
+                        min: 0
+                        max: 100
+                        show: false
+                    chart:
+                      height: 80px
+                      sparkline:
+                        enabled: false
+                    legend:
+                      show: false
+                    plotOptions:
+                      bar:
+                        columnWidth: 100%
+                    dataLabels:
+                      enabled: false
+                    annotations:
+                      texts:
+                        - x: 4
+                          'y': 11
+                          text: 'Accu kW en laadpercentage'
+                          fontSize: 10px
+                          foreColor: grey
+                          textAnchor: start
+                    grid:
+                      show: true
+                      borderColor: color-mix(in srgb, var(--divider-color) 40%, transparent)
+                      strokeDashArray: 0
+                      padding:
+                        top: -10
+                        bottom: -28
+                        left: 6
+                        right: 4
+                    tooltip:
+                      shared: true
+                      intersect: false
+                      followCursor: true
+                      custom: >-
+                        EVAL:function({ series, dataPointIndex, w }) {
+                          const t = w.globals.seriesX[0][dataPointIndex];
+                          const d = new Date(t);
+                          const tijd = d.toLocaleString(navigator.language, { weekday: 'short', hour: '2-digit', minute: '2-digit' });
+                          const delen = [];
+                          w.globals.seriesNames.forEach((naam, i) => {
+                            const v = series[i] ? series[i][dataPointIndex] : null;
+                            if (v === null || v === undefined || Number.isNaN(v)) return;
+                            const n = naam.toLowerCase();
+                            const txt = (n.startsWith('prijs') || n.startsWith('price')) ? v.toFixed(3) + ' €'
+                              : ((n.startsWith('laadperc') || n.startsWith('state')) ? Math.round(v) + '%' : v.toFixed(2) + ' kW');
+                            delen.push('<span style="color:' + w.globals.colors[i] + '">●</span> ' + naam + ' ' + txt);
+                          });
+                          return '<div style="padding:1px 6px;font-size:11px;line-height:16px;white-space:nowrap;background:var(--card-background-color,#1c1f26);color:var(--primary-text-color,#e1e1e1);border:1px solid var(--divider-color,#444);border-radius:4px">' + tijd + ' · ' + delen.join(' · ') + '</div>';
+                        }
+                    xaxis:
+                      tooltip:
+                        enabled: false
+                      labels:
+                        show: false
+                        datetimeUTC: false
+                        format: HH:mm
+                        style:
+                          fontSize: 10px
+                          colors: grey
+                      axisTicks:
+                        show: false
+                      axisBorder:
+                        show: false
+                  series:
+                    - entity: sensor.zendure_forecast_grafiek
+                      name: Accu
+                      type: column
+                      color: '#01a180'
+                      float_precision: 2
+                      show:
+                        in_header: false
+                      data_generator: |
+                        const d = entity.attributes.tijdlijn;
+                        if (!d || !d.t) return [];
+                        return d.t.map((t, i) => {
+                          const v = d.accu_kw[i];
+                          const c = v < 0 ? '#e8743b' : (d.laden[i] ? '#2e7dd7' : '#f2c037');
+                          return { x: t * 1000, y: v, fillColor: c };
+                        });
+                    - entity: sensor.zendure_forecast_grafiek
+                      name: Laadpercentage
+                      type: line
+                      color: '#e1e1e1'
+                      stroke_width: 1.5
+                      curve: straight
+                      float_precision: 0
+                      show:
+                        in_header: false
+                      data_generator: |
+                        const d = entity.attributes.tijdlijn;
+                        if (!d || !d.t) return [];
+                        // laadpercentage aan het begin van elk slot (zelfde tijdstippen als de kolommen)
+                        return d.t.map((t, i) => ({ x: t * 1000, y: i === 0 ? d.soc_nu_pct : d.soc_pct[i - 1] }));
+                  card_mod:
+                    style: |
+                      ha-card {
+                        background: none !important;
+                        border: none !important;
+                        border-radius: 0 !important;
+                        box-shadow: none !important;
+                        border-top: 1px solid var(--divider-color) !important;
+                      }
+                - type: custom:apexcharts-card
+                  graph_span: 36h
+                  span:
+                    start: hour
+                  now:
+                    show: true
+                    color: var(--primary-text-color)
+                  update_interval: 5min
+                  header:
+                    show: false
+                  apex_config:
+                    yaxis:
+                      - show: false
+                    chart:
+                      height: 100px
+                      sparkline:
+                        enabled: false
+                    legend:
+                      show: false
+                    plotOptions:
+                      bar:
+                        columnWidth: 100%
+                    dataLabels:
+                      enabled: false
+                    annotations:
+                      texts:
+                        - x: 4
+                          'y': 11
+                          text: 'Net kW'
+                          fontSize: 10px
+                          foreColor: grey
+                          textAnchor: start
+                    grid:
+                      show: true
+                      borderColor: color-mix(in srgb, var(--divider-color) 40%, transparent)
+                      strokeDashArray: 0
+                      padding:
+                        top: -10
+                        bottom: -4
+                        left: 6
+                        right: 4
+                    tooltip:
+                      shared: true
+                      intersect: false
+                      followCursor: true
+                      custom: >-
+                        EVAL:function({ series, dataPointIndex, w }) {
+                          const t = w.globals.seriesX[0][dataPointIndex];
+                          const d = new Date(t);
+                          const tijd = d.toLocaleString(navigator.language, { weekday: 'short', hour: '2-digit', minute: '2-digit' });
+                          const delen = [];
+                          w.globals.seriesNames.forEach((naam, i) => {
+                            const v = series[i] ? series[i][dataPointIndex] : null;
+                            if (v === null || v === undefined || Number.isNaN(v)) return;
+                            const n = naam.toLowerCase();
+                            const txt = (n.startsWith('prijs') || n.startsWith('price')) ? v.toFixed(3) + ' €'
+                              : ((n.startsWith('laadperc') || n.startsWith('state')) ? Math.round(v) + '%' : v.toFixed(2) + ' kW');
+                            delen.push('<span style="color:' + w.globals.colors[i] + '">●</span> ' + naam + ' ' + txt);
+                          });
+                          return '<div style="padding:1px 6px;font-size:11px;line-height:16px;white-space:nowrap;background:var(--card-background-color,#1c1f26);color:var(--primary-text-color,#e1e1e1);border:1px solid var(--divider-color,#444);border-radius:4px">' + tijd + ' · ' + delen.join(' · ') + '</div>';
+                        }
+                    xaxis:
+                      tooltip:
+                        enabled: false
+                      labels:
+                        show: true
+                        datetimeUTC: false
+                        format: HH:mm
+                        style:
+                          fontSize: 10px
+                          colors: grey
+                      axisTicks:
+                        show: false
+                      axisBorder:
+                        show: false
+                  series:
+                    - entity: sensor.zendure_forecast_grafiek
+                      name: Net
+                      type: column
+                      color: '#8e7cc3'
+                      float_precision: 2
+                      show:
+                        in_header: false
+                      data_generator: |
+                        const d = entity.attributes.tijdlijn;
+                        if (!d || !d.t) return [];
+                        return d.t.map((t, i) => {
+                          const v = d.net_kw[i];
+                          return { x: t * 1000, y: v, fillColor: v >= 0 ? '#8e7cc3' : '#a2a2a3' };
+                        });
+                  card_mod:
+                    style: |
+                      ha-card {
+                        background: none !important;
+                        border: none !important;
+                        border-radius: 0 !important;
+                        box-shadow: none !important;
+                        border-top: 1px solid var(--divider-color) !important;
+                      }
+            visibility:
+              - condition: state
+                entity: input_boolean.forecast_tonen_op_dashboard
+                state: 'on'
       - type: grid
         cards:
           - type: heading
@@ -1584,431 +2065,8 @@ views:
           - condition: state
             entity: input_boolean.forecast_tonen_op_dashboard
             state: 'on'
-      - type: grid
-        column_span: 2
-        cards:
-          - type: heading
-            icon: ''
-            heading: Plan Tijdlijn
-            heading_style: title
-          - type: markdown
-            content: >-
-              <ha-alert alert-type="info">Helptekst</ha-alert>Voorspelling per prijsslot voor de komende 36 uur. Prijs (kleuren zoals Gielz): groen = gepland laden, rood = duur (duurste periodes van Gielz), grijs = overig, lichtgrijs = prijs nog onbekend. Het laden van morgen is indicatief; de dal-blokkade zit niet in deze voorspelling. Zon alleen met een Solcast-detailvoorspelling.
-            text_only: true
-            visibility:
-              - condition: state
-                entity: input_boolean.help_tonen_op_dashboard
-                state: 'on'
-          - type: vertical-stack
-            cards:
-              - type: custom:apexcharts-card
-                graph_span: 36h
-                span:
-                  start: hour
-                now:
-                  show: true
-                  color: var(--primary-text-color)
-                update_interval: 5min
-                header:
-                  show: false
-                apex_config:
-                  yaxis:
-                    - show: false
-                  chart:
-                    height: 80px
-                    sparkline:
-                      enabled: false
-                  legend:
-                    show: false
-                  plotOptions:
-                    bar:
-                      columnWidth: 100%
-                  dataLabels:
-                    enabled: false
-                  annotations:
-                    texts:
-                      - x: 4
-                        'y': 11
-                        text: 'Prijs €/kWh'
-                        fontSize: 10px
-                        foreColor: grey
-                        textAnchor: start
-                  grid:
-                    show: true
-                    borderColor: color-mix(in srgb, var(--divider-color) 40%, transparent)
-                    strokeDashArray: 0
-                    padding:
-                      top: -10
-                      bottom: -28
-                      left: 6
-                      right: 4
-                  tooltip:
-                    shared: true
-                    intersect: false
-                    followCursor: true
-                    custom: >-
-                      EVAL:function({ series, dataPointIndex, w }) {
-                        const t = w.globals.seriesX[0][dataPointIndex];
-                        const d = new Date(t);
-                        const tijd = d.toLocaleString(navigator.language, { weekday: 'short', hour: '2-digit', minute: '2-digit' });
-                        const delen = [];
-                        w.globals.seriesNames.forEach((naam, i) => {
-                          const v = series[i] ? series[i][dataPointIndex] : null;
-                          if (v === null || v === undefined || Number.isNaN(v)) return;
-                          const n = naam.toLowerCase();
-                          const txt = (n.startsWith('prijs') || n.startsWith('price')) ? v.toFixed(3) + ' €'
-                            : ((n.startsWith('laadperc') || n.startsWith('state')) ? Math.round(v) + '%' : v.toFixed(2) + ' kW');
-                          delen.push('<span style="color:' + w.globals.colors[i] + '">●</span> ' + naam + ' ' + txt);
-                        });
-                        return '<div style="padding:1px 6px;font-size:11px;line-height:16px;white-space:nowrap;background:var(--card-background-color,#1c1f26);color:var(--primary-text-color,#e1e1e1);border:1px solid var(--divider-color,#444);border-radius:4px">' + tijd + ' · ' + delen.join(' · ') + '</div>';
-                      }
-                  xaxis:
-                    tooltip:
-                      enabled: false
-                    labels:
-                      show: false
-                      datetimeUTC: false
-                      format: HH:mm
-                      style:
-                        fontSize: 10px
-                        colors: grey
-                    axisTicks:
-                      show: false
-                    axisBorder:
-                      show: false
-                series:
-                  - entity: sensor.zendure_forecast_grafiek
-                    name: Prijs
-                    type: column
-                    color: '#01a180'
-                    float_precision: 3
-                    show:
-                      in_header: false
-                    data_generator: |
-                      const d = entity.attributes.tijdlijn;
-                      if (!d || !d.t) return [];
-                      // Kleuren zoals Gielz (Dynamisch Vandaag/Morgen): groen = laden (hier: gepland
-                      // door de planner), rood = duur (de duurste periodes van Gielz), grijs = overig.
-                      // Lichtgrijs = prijs nog onbekend (patroon van vandaag aangehouden).
-                      const g = hass.states['sensor.dynamisch_goedkoopste_periode'];
-                      const duur = new Set();
-                      if (g) {
-                        [...(g.attributes.raw_today || []), ...(g.attributes.raw_tomorrow || [])]
-                          .forEach((p) => { if (p.duur === 'ja') duur.add(new Date(p.start).getTime()); });
-                      }
-                      return d.t.map((t, i) => {
-                        const v = d.prijs[i];
-                        let c = 'rgba(162,162,163,1)';
-                        if (duur.has(t * 1000)) c = 'rgba(197,59,44,1)';
-                        if (!d.bekend[i]) c = 'rgba(162,162,163,0.4)';
-                        if (d.laden[i]) c = 'rgba(1,161,128,1)';
-                        return { x: t * 1000, y: v, fillColor: c };
-                      });
-              - type: custom:apexcharts-card
-                graph_span: 36h
-                span:
-                  start: hour
-                now:
-                  show: true
-                  color: var(--primary-text-color)
-                update_interval: 5min
-                header:
-                  show: false
-                apex_config:
-                  yaxis:
-                    - show: false
-                  chart:
-                    height: 80px
-                    sparkline:
-                      enabled: false
-                  legend:
-                    show: false
-                  plotOptions:
-                    bar:
-                      columnWidth: 100%
-                  dataLabels:
-                    enabled: false
-                  annotations:
-                    texts:
-                      - x: 4
-                        'y': 11
-                        text: 'Zon (geel) en verbruik (lijn), kW'
-                        fontSize: 10px
-                        foreColor: grey
-                        textAnchor: start
-                  grid:
-                    show: true
-                    borderColor: color-mix(in srgb, var(--divider-color) 40%, transparent)
-                    strokeDashArray: 0
-                    padding:
-                      top: -10
-                      bottom: -28
-                      left: 6
-                      right: 4
-                  tooltip:
-                    shared: true
-                    intersect: false
-                    followCursor: true
-                    custom: >-
-                      EVAL:function({ series, dataPointIndex, w }) {
-                        const t = w.globals.seriesX[0][dataPointIndex];
-                        const d = new Date(t);
-                        const tijd = d.toLocaleString(navigator.language, { weekday: 'short', hour: '2-digit', minute: '2-digit' });
-                        const delen = [];
-                        w.globals.seriesNames.forEach((naam, i) => {
-                          const v = series[i] ? series[i][dataPointIndex] : null;
-                          if (v === null || v === undefined || Number.isNaN(v)) return;
-                          const n = naam.toLowerCase();
-                          const txt = (n.startsWith('prijs') || n.startsWith('price')) ? v.toFixed(3) + ' €'
-                            : ((n.startsWith('laadperc') || n.startsWith('state')) ? Math.round(v) + '%' : v.toFixed(2) + ' kW');
-                          delen.push('<span style="color:' + w.globals.colors[i] + '">●</span> ' + naam + ' ' + txt);
-                        });
-                        return '<div style="padding:1px 6px;font-size:11px;line-height:16px;white-space:nowrap;background:var(--card-background-color,#1c1f26);color:var(--primary-text-color,#e1e1e1);border:1px solid var(--divider-color,#444);border-radius:4px">' + tijd + ' · ' + delen.join(' · ') + '</div>';
-                      }
-                  xaxis:
-                    tooltip:
-                      enabled: false
-                    labels:
-                      show: false
-                      datetimeUTC: false
-                      format: HH:mm
-                      style:
-                        fontSize: 10px
-                        colors: grey
-                    axisTicks:
-                      show: false
-                    axisBorder:
-                      show: false
-                series:
-                  - entity: sensor.zendure_forecast_grafiek
-                    name: Zon
-                    type: column
-                    color: '#f2c037'
-                    opacity: 0.7
-                    float_precision: 2
-                    show:
-                      in_header: false
-                    data_generator: |
-                      const d = entity.attributes.tijdlijn;
-                      if (!d || !d.t) return [];
-                      return d.t.map((t, i) => ({ x: t * 1000, y: d.zon_kw[i] }));
-                  - entity: sensor.zendure_forecast_grafiek
-                    name: Verbruik
-                    type: line
-                    color: '#4fb3bf'
-                    stroke_width: 1.5
-                    curve: stepline
-                    float_precision: 2
-                    show:
-                      in_header: false
-                    data_generator: |
-                      const d = entity.attributes.tijdlijn;
-                      if (!d || !d.t) return [];
-                      return d.t.map((t, i) => ({ x: t * 1000, y: d.verbruik_kw[i] }));
-              - type: custom:apexcharts-card
-                graph_span: 36h
-                span:
-                  start: hour
-                now:
-                  show: true
-                  color: var(--primary-text-color)
-                update_interval: 5min
-                header:
-                  show: false
-                apex_config:
-                  yaxis:
-                    - seriesName: Accu
-                      show: false
-                    - seriesName: Laadpercentage
-                      opposite: true
-                      min: 0
-                      max: 100
-                      show: false
-                  chart:
-                    height: 80px
-                    sparkline:
-                      enabled: false
-                  legend:
-                    show: false
-                  plotOptions:
-                    bar:
-                      columnWidth: 100%
-                  dataLabels:
-                    enabled: false
-                  annotations:
-                    texts:
-                      - x: 4
-                        'y': 11
-                        text: 'Accu kW en laadpercentage'
-                        fontSize: 10px
-                        foreColor: grey
-                        textAnchor: start
-                  grid:
-                    show: true
-                    borderColor: color-mix(in srgb, var(--divider-color) 40%, transparent)
-                    strokeDashArray: 0
-                    padding:
-                      top: -10
-                      bottom: -28
-                      left: 6
-                      right: 4
-                  tooltip:
-                    shared: true
-                    intersect: false
-                    followCursor: true
-                    custom: >-
-                      EVAL:function({ series, dataPointIndex, w }) {
-                        const t = w.globals.seriesX[0][dataPointIndex];
-                        const d = new Date(t);
-                        const tijd = d.toLocaleString(navigator.language, { weekday: 'short', hour: '2-digit', minute: '2-digit' });
-                        const delen = [];
-                        w.globals.seriesNames.forEach((naam, i) => {
-                          const v = series[i] ? series[i][dataPointIndex] : null;
-                          if (v === null || v === undefined || Number.isNaN(v)) return;
-                          const n = naam.toLowerCase();
-                          const txt = (n.startsWith('prijs') || n.startsWith('price')) ? v.toFixed(3) + ' €'
-                            : ((n.startsWith('laadperc') || n.startsWith('state')) ? Math.round(v) + '%' : v.toFixed(2) + ' kW');
-                          delen.push('<span style="color:' + w.globals.colors[i] + '">●</span> ' + naam + ' ' + txt);
-                        });
-                        return '<div style="padding:1px 6px;font-size:11px;line-height:16px;white-space:nowrap;background:var(--card-background-color,#1c1f26);color:var(--primary-text-color,#e1e1e1);border:1px solid var(--divider-color,#444);border-radius:4px">' + tijd + ' · ' + delen.join(' · ') + '</div>';
-                      }
-                  xaxis:
-                    tooltip:
-                      enabled: false
-                    labels:
-                      show: false
-                      datetimeUTC: false
-                      format: HH:mm
-                      style:
-                        fontSize: 10px
-                        colors: grey
-                    axisTicks:
-                      show: false
-                    axisBorder:
-                      show: false
-                series:
-                  - entity: sensor.zendure_forecast_grafiek
-                    name: Accu
-                    type: column
-                    color: '#01a180'
-                    float_precision: 2
-                    show:
-                      in_header: false
-                    data_generator: |
-                      const d = entity.attributes.tijdlijn;
-                      if (!d || !d.t) return [];
-                      return d.t.map((t, i) => {
-                        const v = d.accu_kw[i];
-                        const c = v < 0 ? '#e8743b' : (d.laden[i] ? '#2e7dd7' : '#f2c037');
-                        return { x: t * 1000, y: v, fillColor: c };
-                      });
-                  - entity: sensor.zendure_forecast_grafiek
-                    name: Laadpercentage
-                    type: line
-                    color: '#e1e1e1'
-                    stroke_width: 1.5
-                    curve: straight
-                    float_precision: 0
-                    show:
-                      in_header: false
-                    data_generator: |
-                      const d = entity.attributes.tijdlijn;
-                      if (!d || !d.t) return [];
-                      // laadpercentage aan het begin van elk slot (zelfde tijdstippen als de kolommen)
-                      return d.t.map((t, i) => ({ x: t * 1000, y: i === 0 ? d.soc_nu_pct : d.soc_pct[i - 1] }));
-              - type: custom:apexcharts-card
-                graph_span: 36h
-                span:
-                  start: hour
-                now:
-                  show: true
-                  color: var(--primary-text-color)
-                update_interval: 5min
-                header:
-                  show: false
-                apex_config:
-                  yaxis:
-                    - show: false
-                  chart:
-                    height: 100px
-                    sparkline:
-                      enabled: false
-                  legend:
-                    show: false
-                  plotOptions:
-                    bar:
-                      columnWidth: 100%
-                  dataLabels:
-                    enabled: false
-                  annotations:
-                    texts:
-                      - x: 4
-                        'y': 11
-                        text: 'Net kW'
-                        fontSize: 10px
-                        foreColor: grey
-                        textAnchor: start
-                  grid:
-                    show: true
-                    borderColor: color-mix(in srgb, var(--divider-color) 40%, transparent)
-                    strokeDashArray: 0
-                    padding:
-                      top: -10
-                      bottom: -4
-                      left: 6
-                      right: 4
-                  tooltip:
-                    shared: true
-                    intersect: false
-                    followCursor: true
-                    custom: >-
-                      EVAL:function({ series, dataPointIndex, w }) {
-                        const t = w.globals.seriesX[0][dataPointIndex];
-                        const d = new Date(t);
-                        const tijd = d.toLocaleString(navigator.language, { weekday: 'short', hour: '2-digit', minute: '2-digit' });
-                        const delen = [];
-                        w.globals.seriesNames.forEach((naam, i) => {
-                          const v = series[i] ? series[i][dataPointIndex] : null;
-                          if (v === null || v === undefined || Number.isNaN(v)) return;
-                          const n = naam.toLowerCase();
-                          const txt = (n.startsWith('prijs') || n.startsWith('price')) ? v.toFixed(3) + ' €'
-                            : ((n.startsWith('laadperc') || n.startsWith('state')) ? Math.round(v) + '%' : v.toFixed(2) + ' kW');
-                          delen.push('<span style="color:' + w.globals.colors[i] + '">●</span> ' + naam + ' ' + txt);
-                        });
-                        return '<div style="padding:1px 6px;font-size:11px;line-height:16px;white-space:nowrap;background:var(--card-background-color,#1c1f26);color:var(--primary-text-color,#e1e1e1);border:1px solid var(--divider-color,#444);border-radius:4px">' + tijd + ' · ' + delen.join(' · ') + '</div>';
-                      }
-                  xaxis:
-                    tooltip:
-                      enabled: false
-                    labels:
-                      show: true
-                      datetimeUTC: false
-                      format: HH:mm
-                      style:
-                        fontSize: 10px
-                        colors: grey
-                    axisTicks:
-                      show: false
-                    axisBorder:
-                      show: false
-                series:
-                  - entity: sensor.zendure_forecast_grafiek
-                    name: Net
-                    type: column
-                    color: '#8e7cc3'
-                    float_precision: 2
-                    show:
-                      in_header: false
-                    data_generator: |
-                      const d = entity.attributes.tijdlijn;
-                      if (!d || !d.t) return [];
-                      return d.t.map((t, i) => {
-                        const v = d.net_kw[i];
-                        return { x: t * 1000, y: v, fillColor: v >= 0 ? '#8e7cc3' : '#a2a2a3' };
-                      });
-          - type: markdown
-            text_only: true
-            content: <small>blauw = laden uit net · geel = zon · oranje = ontladen · witte lijn = laadpercentage (0-100%) · paars = import, grijs = export</small>
+      - column_span: 2
+        cards: []
         visibility:
           - condition: state
             entity: input_boolean.forecast_tonen_op_dashboard

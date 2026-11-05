@@ -17,6 +17,7 @@ Versies volgen `jaar.maand.volgnummer`; het volgnummer begint elke maand bij 1. 
 
 **Dashboard**
 - **Optionele pakketten tonen zich vanzelf:** Configuratie (EV), (HVAC), (Negatieve Prijs) en (Besparing) staan alleen op de tab Configuratie als het pakket geladen is.
+- **Plan Tijdlijn** weer in de eerste kolom onder PV, als één kaart (`custom:mod-card`, card-mod nodig), zonder de losse kleurenregel eronder.
 - Plan vandaag: regel over de kWh die de auto overdag nog van de zon vraagt.
 - `sensor.forecasting_versie`: attribuut `pakketten` (welke optionele pakketten actief zijn) vervangt `set`.
 

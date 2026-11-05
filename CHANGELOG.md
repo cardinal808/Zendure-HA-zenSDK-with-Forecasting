@@ -16,6 +16,7 @@ Versions follow `year.month.sequence`; the sequence restarts at 1 every month. E
 
 **Dashboard**
 - **Optional packages show themselves:** Configuration (EV), (HVAC), (Negative Price) and (Savings) are only on the Settings tab when the package is loaded.
+- **Plan Timeline** back in the first column below PV, as one card (`custom:mod-card`, needs card-mod), without the separate colour line below it.
 - Plan for today: a line about the kWh the car still asks from the sun during the day.
 - `sensor.forecasting_version`: attribute `packages` (which optional packages are active) replaces `set`.
 
