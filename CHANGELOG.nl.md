@@ -14,6 +14,9 @@ Versies volgen `jaar.maand.volgnummer`; het volgnummer begint elke maand bij 1. 
 - `packages/zendure_hvac.yaml` (en `zendure_hvac_global.yaml`) staat nu ook in de publieke set: niet ontladen terwijl de airco draait. Er is geen aparte complete set meer.
 - De automation controleert de airco met een template, zodat alles ook zonder het HVAC-pakket blijft werken.
 - De schakelaar *HVAC Instellingen Tonen* is vervallen (zie hieronder).
+- **Instellen per modus in plaats van per uur:** de tijden *Alleen laden vanaf/tot* zijn vervallen. Nieuw `sensor.hvac_modus` (Uit, Stand-by, Verwarmen, Koelen, Drogen, Ventileren, Auto) uit de modus en `hvac_action` van de climate-entiteit. Per modus zet je aan of ontladen toch mag, bv. Koelen aan (zomer, zon genoeg) en Verwarmen uit (winter, geen zon). Standaard is elke modus geblokkeerd.
+- **Stand-by telt niet:** staat de airco op temperatuur (`hvac_action` idle), dan ontlaadt de accu gewoon.
+- `binary_sensor.hvac_ontladen_geblokkeerd` heeft een attribuut `reden`, ook zichtbaar in Configuratie (HVAC).
 
 **Dashboard**
 - **Optionele pakketten tonen zich vanzelf:** Configuratie (EV), (HVAC), (Negatieve Prijs) en (Besparing) staan alleen op de tab Configuratie als het pakket geladen is. Ontbreekt `zendure_besparing.yaml`, dan toont de tab Besparing alleen een melding in plaats van lege kaarten.

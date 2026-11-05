@@ -7,12 +7,15 @@
 # Zonder dit bestand verandert er niets. Het blok Forecasting Configuratie (HVAC) op de tab Configuratie
 # verschijnt vanzelf zodra dit bestand geladen is.
 # Werking:
-#   - binary_sensor.hvac_actief               : draait de airco?
-#   - binary_sensor.hvac_ontladen_geblokkeerd : airco aan, binnen de ingestelde uren
-#                                               en (optioneel) niet in een duur uur
+#   - sensor.hvac_modus                       : wat doet de airco? (Uit, Stand-by, Verwarmen,
+#                                               Koelen, Drogen, Ventileren, Auto, Aan)
+#   - binary_sensor.hvac_actief               : draait de airco echt?
+#   - binary_sensor.hvac_ontladen_geblokkeerd : airco draait in een modus waarin ontladen niet
+#                                               is toegestaan, en (optioneel) niet in een duur uur
 # De NOM-ontlaadblokken in de automation ontladen niet zolang de laatste "aan" staat.
 # Laden (zon of net) blijft gewoon werken.
-# Laat het sensorveld leeg om de functie uit te zetten.
+# Standaard is ontladen in elke modus geblokkeerd. Zet per modus aan waarin het wel mag
+# (bv. Koelen: zomer, zon genoeg). Laat het sensorveld leeg om de functie uit te zetten.
 # =====================================================================
 
 input_text:
@@ -21,18 +24,6 @@ input_text:
     icon: mdi:air-conditioner
     max: 250
     mode: text
-
-input_datetime:
-  hvac_start:
-    name: HVAC Alleen Laden Vanaf
-    has_date: false
-    has_time: true
-    icon: mdi:clock-start
-  hvac_eind:
-    name: HVAC Alleen Laden Tot
-    has_date: false
-    has_time: true
-    icon: mdi:clock-end
 
 input_number:
   hvac_drempel_vermogen:
@@ -48,45 +39,98 @@ input_boolean:
   hvac_ontladen_bij_duur_uur:
     name: HVAC Ontladen Toestaan Tijdens Duur Uur
     icon: mdi:cash-plus
+  hvac_ontladen_bij_verwarmen:
+    name: HVAC Ontladen Toestaan Bij Verwarmen
+    icon: mdi:fire
+  hvac_ontladen_bij_koelen:
+    name: HVAC Ontladen Toestaan Bij Koelen
+    icon: mdi:snowflake
+  hvac_ontladen_bij_drogen:
+    name: HVAC Ontladen Toestaan Bij Drogen
+    icon: mdi:water-percent
+  hvac_ontladen_bij_ventileren:
+    name: HVAC Ontladen Toestaan Bij Ventileren
+    icon: mdi:fan
+  hvac_ontladen_bij_auto:
+    name: HVAC Ontladen Toestaan Bij Auto
+    icon: mdi:thermostat-auto
 
 template:
-  - binary_sensor:
-      # Aan als de ingevulde entiteit "aan" is:
-      #   climate.*                    -> modus is niet "off"
-      #   sensor.* (vermogen in W)     -> waarde boven de drempel (0 = 50 W)
-      #   overige (switch, binary_sensor, input_boolean, ...) -> state "on"
-      - name: "HVAC Actief"
-        unique_id: hvac_actief
+  - sensor:
+      # Wat doet de airco?
+      #   climate.*  -> hvac_action (heating/cooling/drying/fan) als die er is, anders de modus.
+      #                 hvac_action idle/off terwijl de airco aan staat = Stand-by
+      #                 (temperatuur bereikt, de airco verbruikt dan nauwelijks).
+      #                 auto/heat_cool zonder bruikbare hvac_action = Auto.
+      #   sensor.* (vermogen in W) -> Aan boven de drempel (0 = 50 W), anders Uit
+      #   overige (switch, binary_sensor, input_boolean, ...) -> Aan bij state "on"
+      - name: "HVAC Modus"
+        unique_id: hvac_modus
         icon: mdi:air-conditioner
         state: >
           {% set e = states('input_text.hvac_sensor') | trim %}
           {% if e == '' or not has_value(e) %}
-            false
+            Uit
           {% elif e.startswith('climate.') %}
-            {{ states(e) != 'off' }}
+            {% set s = states(e) %}
+            {% set a = state_attr(e, 'hvac_action') %}
+            {% set acties = {'heating': 'Verwarmen', 'preheating': 'Verwarmen', 'defrosting': 'Verwarmen',
+                             'cooling': 'Koelen', 'drying': 'Drogen', 'fan': 'Ventileren'} %}
+            {% set modi = {'heat': 'Verwarmen', 'cool': 'Koelen', 'dry': 'Drogen',
+                           'fan_only': 'Ventileren', 'auto': 'Auto', 'heat_cool': 'Auto'} %}
+            {% if s == 'off' %}
+              Uit
+            {% elif a in acties %}
+              {{ acties[a] }}
+            {% elif a in ['idle', 'off'] %}
+              Stand-by
+            {% else %}
+              {{ modi.get(s, 'Aan') }}
+            {% endif %}
           {% elif e.startswith('sensor.') %}
             {% set d = states('input_number.hvac_drempel_vermogen') | float(0) %}
-            {{ states(e) | float(0) > (d if d > 0 else 50) }}
+            {{ 'Aan' if states(e) | float(0) > (d if d > 0 else 50) else 'Uit' }}
           {% else %}
-            {{ is_state(e, 'on') }}
+            {{ 'Aan' if is_state(e, 'on') else 'Uit' }}
           {% endif %}
 
+  - binary_sensor:
+      - name: "HVAC Actief"
+        unique_id: hvac_actief
+        icon: mdi:air-conditioner
+        state: "{{ states('sensor.hvac_modus') not in ['Uit', 'Stand-by', 'unknown', 'unavailable'] }}"
+
+      # Aan = de NOM-modussen ontladen niet. "Aan" (geen climate-entiteit, modus onbekend)
+      # blijft altijd geblokkeerd, net als voorheen.
       - name: "HVAC Ontladen Geblokkeerd"
         unique_id: hvac_ontladen_geblokkeerd
         icon: mdi:battery-off-outline
         state: >
-          {% set actief = is_state('binary_sensor.hvac_actief', 'on') %}
-          {% set s = states('input_datetime.hvac_start') %}
-          {% set e = states('input_datetime.hvac_eind') %}
-          {% set nu = now().strftime('%H:%M:%S') %}
-          {# zelfde start en eind (standaard 00:00 - 00:00) = de hele dag #}
-          {% if s == e %}
-            {% set in_venster = true %}
-          {% elif s < e %}
-            {% set in_venster = s <= nu < e %}
-          {% else %}
-            {% set in_venster = nu >= s or nu < e %}
-          {% endif %}
+          {% set m = states('sensor.hvac_modus') %}
+          {% set toestaan = {'Verwarmen': 'input_boolean.hvac_ontladen_bij_verwarmen',
+                             'Koelen': 'input_boolean.hvac_ontladen_bij_koelen',
+                             'Drogen': 'input_boolean.hvac_ontladen_bij_drogen',
+                             'Ventileren': 'input_boolean.hvac_ontladen_bij_ventileren',
+                             'Auto': 'input_boolean.hvac_ontladen_bij_auto'} %}
+          {% set modus_ok = m in toestaan and is_state(toestaan[m], 'on') %}
           {% set duur_uur = is_state('input_boolean.hvac_ontladen_bij_duur_uur', 'on')
                             and is_state('sensor.dynamisch_duurste_periode', 'Ja') %}
-          {{ actief and in_venster and not duur_uur }}
+          {{ is_state('binary_sensor.hvac_actief', 'on') and not modus_ok and not duur_uur }}
+        attributes:
+          reden: >
+            {% set m = states('sensor.hvac_modus') %}
+            {% set toestaan = {'Verwarmen': 'input_boolean.hvac_ontladen_bij_verwarmen',
+                               'Koelen': 'input_boolean.hvac_ontladen_bij_koelen',
+                               'Drogen': 'input_boolean.hvac_ontladen_bij_drogen',
+                               'Ventileren': 'input_boolean.hvac_ontladen_bij_ventileren',
+                               'Auto': 'input_boolean.hvac_ontladen_bij_auto'} %}
+            {% if is_state('binary_sensor.hvac_actief', 'off') %}
+              Airco {{ m | lower }}: ontladen normaal
+            {% elif m in toestaan and is_state(toestaan[m], 'on') %}
+              {{ m }}: ontladen toegestaan
+            {% elif is_state('input_boolean.hvac_ontladen_bij_duur_uur', 'on')
+                    and is_state('sensor.dynamisch_duurste_periode', 'Ja') %}
+              {{ m }}, maar duur uur: ontladen toegestaan
+            {% else %}
+              {{ m }}: alleen laden
+            {% endif %}

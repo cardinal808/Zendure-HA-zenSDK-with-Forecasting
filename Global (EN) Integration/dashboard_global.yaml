@@ -4353,10 +4353,14 @@ views:
               <ha-alert alert-type="info">Help text</ha-alert>While the AC
               runs, the Smart Matching modes do not discharge (charging from
               solar or grid keeps working). Enter your AC entity (e.g.
-              climate.living_room; a power sensor in W also works and is often
-              more accurate). Optionally set the hours in which this applies;
-              the same time for From and Until means the whole day. Leave the
-              sensor empty to switch the feature off.
+              climate.living_room; a power sensor in W also works). With a
+              climate entity you see the mode and choose per mode whether
+              discharging is still allowed, e.g. **Cooling** on (summer,
+              plenty of sun) and **Heating** off (winter, no sun). When the
+              AC has reached its temperature (standby), the battery
+              discharges as usual. With a power sensor or switch the mode is
+              unknown and the block always applies. Leave the sensor empty to
+              switch the feature off.
             text_only: true
             visibility:
               - condition: state
@@ -4369,18 +4373,35 @@ views:
             entities:
               - entity: input_text.hvac_sensor
                 name: HVAC sensor (e.g. climate.living_room)
-              - entity: input_datetime.hvac_charge_only_from
-                name: Charge only from
-              - entity: input_datetime.hvac_charge_only_until
-                name: Charge only until
-              - entity: input_boolean.hvac_allow_discharge_in_expensive_hour
-                name: Allow discharge in an expensive hour
               - entity: input_number.hvac_threshold_power
                 name: Threshold power W (power sensor only, 0 = 50 W)
+              - type: section
+                label: Allow discharge when
+              - entity: input_boolean.hvac_allow_discharge_when_heating
+                name: Heating
+              - entity: input_boolean.hvac_allow_discharge_when_cooling
+                name: Cooling
+              - entity: input_boolean.hvac_allow_discharge_when_drying
+                name: Drying
+              - entity: input_boolean.hvac_allow_discharge_when_fan
+                name: Fan
+              - entity: input_boolean.hvac_allow_discharge_when_auto
+                name: Auto
+              - entity: input_boolean.hvac_allow_discharge_in_expensive_hour
+                name: Expensive hour (in any mode)
+              - type: section
+                label: Status
+              - entity: sensor.hvac_mode
+                name: AC mode
               - entity: binary_sensor.hvac_active
                 name: AC active
               - entity: binary_sensor.hvac_discharge_blocked
                 name: Discharge blocked
+              - type: attribute
+                entity: binary_sensor.hvac_discharge_blocked
+                attribute: reason
+                name: Reason
+                icon: mdi:information-outline
             visibility:
               - condition: state
                 entity: input_text.hvac_sensor

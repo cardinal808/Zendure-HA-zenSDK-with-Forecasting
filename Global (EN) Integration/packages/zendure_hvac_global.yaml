@@ -7,12 +7,15 @@
 # Without this file nothing changes. The Forecasting Configuration (HVAC) block on the Settings tab
 # appears by itself as soon as this file is loaded.
 # How it works:
-#   - binary_sensor.hvac_active             : is the AC running?
-#   - binary_sensor.hvac_discharge_blocked  : AC on, within the configured hours
-#                                             and (optionally) not in an expensive hour
+#   - sensor.hvac_mode                      : what is the AC doing? (Off, Standby, Heating,
+#                                             Cooling, Drying, Fan, Auto, On)
+#   - binary_sensor.hvac_active             : is the AC really running?
+#   - binary_sensor.hvac_discharge_blocked  : AC runs in a mode in which discharging is not
+#                                             allowed, and (optionally) not in an expensive hour
 # The Smart Matching discharge blocks in the automation do not discharge while the latter is "on".
 # Charging (solar or grid) keeps working.
-# Leave the sensor field empty to switch the feature off.
+# By default discharging is blocked in every mode. Switch on per mode where it is allowed
+# (e.g. Cooling: summer, plenty of sun). Leave the sensor field empty to switch the feature off.
 # =====================================================================
 
 input_text:
@@ -21,18 +24,6 @@ input_text:
     icon: mdi:air-conditioner
     max: 250
     mode: text
-
-input_datetime:
-  hvac_charge_only_from:
-    name: HVAC Charge Only From
-    has_date: false
-    has_time: true
-    icon: mdi:clock-start
-  hvac_charge_only_until:
-    name: HVAC Charge Only Until
-    has_date: false
-    has_time: true
-    icon: mdi:clock-end
 
 input_number:
   hvac_threshold_power:
@@ -48,45 +39,98 @@ input_boolean:
   hvac_allow_discharge_in_expensive_hour:
     name: HVAC Allow Discharge In Expensive Hour
     icon: mdi:cash-plus
+  hvac_allow_discharge_when_heating:
+    name: HVAC Allow Discharge When Heating
+    icon: mdi:fire
+  hvac_allow_discharge_when_cooling:
+    name: HVAC Allow Discharge When Cooling
+    icon: mdi:snowflake
+  hvac_allow_discharge_when_drying:
+    name: HVAC Allow Discharge When Drying
+    icon: mdi:water-percent
+  hvac_allow_discharge_when_fan:
+    name: HVAC Allow Discharge When Fan
+    icon: mdi:fan
+  hvac_allow_discharge_when_auto:
+    name: HVAC Allow Discharge When Auto
+    icon: mdi:thermostat-auto
 
 template:
-  - binary_sensor:
-      # On when the configured entity is "on":
-      #   climate.*                 -> mode is not "off"
-      #   sensor.* (power in W)     -> value above the threshold (0 = 50 W)
-      #   other (switch, binary_sensor, input_boolean, ...) -> state "on"
-      - name: "HVAC Active"
-        unique_id: hvac_active
+  - sensor:
+      # What is the AC doing?
+      #   climate.*  -> hvac_action (heating/cooling/drying/fan) when available, otherwise the mode.
+      #                 hvac_action idle/off while the AC is on = Standby
+      #                 (temperature reached, the AC then uses hardly any power).
+      #                 auto/heat_cool without a usable hvac_action = Auto.
+      #   sensor.* (power in W) -> On above the threshold (0 = 50 W), otherwise Off
+      #   other (switch, binary_sensor, input_boolean, ...) -> On when state is "on"
+      - name: "HVAC Mode"
+        unique_id: hvac_mode
         icon: mdi:air-conditioner
         state: >
           {% set e = states('input_text.hvac_sensor') | trim %}
           {% if e == '' or not has_value(e) %}
-            false
+            Off
           {% elif e.startswith('climate.') %}
-            {{ states(e) != 'off' }}
+            {% set s = states(e) %}
+            {% set a = state_attr(e, 'hvac_action') %}
+            {% set actions = {'heating': 'Heating', 'preheating': 'Heating', 'defrosting': 'Heating',
+                              'cooling': 'Cooling', 'drying': 'Drying', 'fan': 'Fan'} %}
+            {% set modes = {'heat': 'Heating', 'cool': 'Cooling', 'dry': 'Drying',
+                            'fan_only': 'Fan', 'auto': 'Auto', 'heat_cool': 'Auto'} %}
+            {% if s == 'off' %}
+              Off
+            {% elif a in actions %}
+              {{ actions[a] }}
+            {% elif a in ['idle', 'off'] %}
+              Standby
+            {% else %}
+              {{ modes.get(s, 'On') }}
+            {% endif %}
           {% elif e.startswith('sensor.') %}
             {% set d = states('input_number.hvac_threshold_power') | float(0) %}
-            {{ states(e) | float(0) > (d if d > 0 else 50) }}
+            {{ 'On' if states(e) | float(0) > (d if d > 0 else 50) else 'Off' }}
           {% else %}
-            {{ is_state(e, 'on') }}
+            {{ 'On' if is_state(e, 'on') else 'Off' }}
           {% endif %}
 
+  - binary_sensor:
+      - name: "HVAC Active"
+        unique_id: hvac_active
+        icon: mdi:air-conditioner
+        state: "{{ states('sensor.hvac_mode') not in ['Off', 'Standby', 'unknown', 'unavailable'] }}"
+
+      # On = the Smart Matching modes do not discharge. "On" (no climate entity, mode unknown)
+      # stays blocked at all times, as before.
       - name: "HVAC Discharge Blocked"
         unique_id: hvac_discharge_blocked
         icon: mdi:battery-off-outline
         state: >
-          {% set active = is_state('binary_sensor.hvac_active', 'on') %}
-          {% set s = states('input_datetime.hvac_charge_only_from') %}
-          {% set e = states('input_datetime.hvac_charge_only_until') %}
-          {% set now_t = now().strftime('%H:%M:%S') %}
-          {# same start and end (default 00:00 - 00:00) = the whole day #}
-          {% if s == e %}
-            {% set in_window = true %}
-          {% elif s < e %}
-            {% set in_window = s <= now_t < e %}
-          {% else %}
-            {% set in_window = now_t >= s or now_t < e %}
-          {% endif %}
+          {% set m = states('sensor.hvac_mode') %}
+          {% set allow = {'Heating': 'input_boolean.hvac_allow_discharge_when_heating',
+                          'Cooling': 'input_boolean.hvac_allow_discharge_when_cooling',
+                          'Drying': 'input_boolean.hvac_allow_discharge_when_drying',
+                          'Fan': 'input_boolean.hvac_allow_discharge_when_fan',
+                          'Auto': 'input_boolean.hvac_allow_discharge_when_auto'} %}
+          {% set mode_ok = m in allow and is_state(allow[m], 'on') %}
           {% set expensive = is_state('input_boolean.hvac_allow_discharge_in_expensive_hour', 'on')
                              and is_state('sensor.dynamic_highest_price_period', 'Yes') %}
-          {{ active and in_window and not expensive }}
+          {{ is_state('binary_sensor.hvac_active', 'on') and not mode_ok and not expensive }}
+        attributes:
+          reason: >
+            {% set m = states('sensor.hvac_mode') %}
+            {% set allow = {'Heating': 'input_boolean.hvac_allow_discharge_when_heating',
+                            'Cooling': 'input_boolean.hvac_allow_discharge_when_cooling',
+                            'Drying': 'input_boolean.hvac_allow_discharge_when_drying',
+                            'Fan': 'input_boolean.hvac_allow_discharge_when_fan',
+                            'Auto': 'input_boolean.hvac_allow_discharge_when_auto'} %}
+            {% if is_state('binary_sensor.hvac_active', 'off') %}
+              AC {{ m | lower }}: discharging normal
+            {% elif m in allow and is_state(allow[m], 'on') %}
+              {{ m }}: discharging allowed
+            {% elif is_state('input_boolean.hvac_allow_discharge_in_expensive_hour', 'on')
+                    and is_state('sensor.dynamic_highest_price_period', 'Yes') %}
+              {{ m }}, but expensive hour: discharging allowed
+            {% else %}
+              {{ m }}: charging only
+            {% endif %}

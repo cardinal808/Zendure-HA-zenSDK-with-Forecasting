@@ -4359,10 +4359,13 @@ views:
               <ha-alert alert-type="info">Helptekst</ha-alert>Zolang de airco
               draait, ontladen de NOM-modussen niet (laden uit zon of net blijft
               werken). Vul de entiteit van je airco in (bv.
-              climate.airco_woonkamer; een vermogenssensor in W kan ook en is
-              vaak nauwkeuriger). Stel optioneel de uren in waarin dit geldt;
-              dezelfde tijd bij Vanaf en Tot betekent de hele dag. Laat de
-              sensor leeg om de functie uit te zetten.
+              climate.airco_woonkamer; een vermogenssensor in W kan ook). Bij
+              een climate-entiteit zie je de modus en zet je per modus aan of
+              ontladen toch mag, bv. **Koelen** aan (zomer, zon genoeg) en
+              **Verwarmen** uit (winter, geen zon). Staat de airco op
+              temperatuur (stand-by), dan ontlaadt de accu gewoon. Bij een
+              vermogenssensor of schakelaar is de modus onbekend en geldt de
+              blokkade altijd. Laat de sensor leeg om de functie uit te zetten.
             text_only: true
             visibility:
               - condition: state
@@ -4375,18 +4378,35 @@ views:
             entities:
               - entity: input_text.hvac_sensor
                 name: HVAC sensor (bv. climate.airco_woonkamer)
-              - entity: input_datetime.hvac_start
-                name: Alleen laden vanaf
-              - entity: input_datetime.hvac_eind
-                name: Alleen laden tot
-              - entity: input_boolean.hvac_ontladen_bij_duur_uur
-                name: Ontladen toestaan tijdens duur uur
               - entity: input_number.hvac_drempel_vermogen
                 name: Drempel vermogen W (alleen bij vermogenssensor, 0 = 50 W)
+              - type: section
+                label: Ontladen toestaan bij
+              - entity: input_boolean.hvac_ontladen_bij_verwarmen
+                name: Verwarmen
+              - entity: input_boolean.hvac_ontladen_bij_koelen
+                name: Koelen
+              - entity: input_boolean.hvac_ontladen_bij_drogen
+                name: Drogen
+              - entity: input_boolean.hvac_ontladen_bij_ventileren
+                name: Ventileren
+              - entity: input_boolean.hvac_ontladen_bij_auto
+                name: Auto
+              - entity: input_boolean.hvac_ontladen_bij_duur_uur
+                name: Duur uur (in elke modus)
+              - type: section
+                label: Status
+              - entity: sensor.hvac_modus
+                name: Airco modus
               - entity: binary_sensor.hvac_actief
                 name: Airco actief
               - entity: binary_sensor.hvac_ontladen_geblokkeerd
                 name: Ontladen geblokkeerd
+              - type: attribute
+                entity: binary_sensor.hvac_ontladen_geblokkeerd
+                attribute: reden
+                name: Reden
+                icon: mdi:information-outline
             visibility:
               - condition: state
                 entity: input_text.hvac_sensor
