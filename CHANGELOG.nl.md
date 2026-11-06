@@ -40,6 +40,13 @@ Versies volgen `jaar.maand.volgnummer`; het volgnummer begint elke maand bij 1. 
 - Zonder herkende of ingevulde teller rekent de set import en export uit het vermogen. Dat is minder nauwkeurig; *Verzamelde gegevens* toont dan *Berekend uit vermogen (geen kWh-teller gevonden of ingevuld)*.
 - Een wissel van bron (automatisch ↔ ingevuld, of een andere sensor) geeft geen sprong in de net-tellers: het nieuwe attribuut `meter_sensoren` onthoudt welke sensoren de stand leverden.
 
+**Planner: pad-check kijkt voorbij de nacht**
+- Zodra de prijzen van morgen bekend zijn (rond 14:00), kijkt de pad-check niet meer alleen tot het begin van de goedkope uren van morgen (bv. 00:45), maar tot de zon van morgen het verbruik dekt. Een dure ochtendpiek telt daardoor al 's middags mee: is laden nu (na laad- en ontlaadverlies) goedkoper dan inkopen in die piek én goedkoper dan laden in de nacht, dan wordt nu bijgeladen. Is de nacht goedkoper, dan plant hij de nacht.
+- Dekt de zon morgen het verbruik niet (winter), dan kijkt hij tot zonsopkomst + 3 uur: het gaat om de ochtendpiek, niet om de avond van morgen. Zonder detailvoorspelling (bv. Forecast.Solar) geldt zonsopkomst + 3 uur als zon-dekking.
+- Bij het doorkijken telt de zon van vandaag mee voor het moment dat de accu leeg is (direct verbruik en overschot naar de accu).
+- De energiebalans (overbrugging, scenario A/B) verandert niet; na middernacht en zolang de prijzen van morgen onbekend zijn, rekent de planner precies als voorheen. Rendementsfilter en minimale spread gelden ook hier.
+- Nieuwe attributen `padcheck_horizon`, `padcheck_voorbij_nacht` en `padcheck_zon_dekt_morgen_vanaf`; *Plan vandaag* toont *voorbij de nacht*.
+
 **Dashboard**
 - **Optionele pakketten tonen zich vanzelf:** Forecasting Configuratie (Besparing), (EV), (HVAC) en Diagnose-export staan alleen op de tab Configuratie als het pakket geladen is. Ontbreekt `zendure_besparing.yaml`, dan toont de tab Besparing alleen een melding in plaats van lege kaarten.
 - Nieuwe kaart **Optionele pakketten** op de tab Configuratie: per optioneel pakket of het geladen is (✅/➖), het bestand en wat het doet, met een link naar de uitleg.

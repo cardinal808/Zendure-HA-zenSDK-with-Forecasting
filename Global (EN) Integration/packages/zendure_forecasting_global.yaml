@@ -11,7 +11,7 @@
 #   2. Power sensors + integration sensors (kWh counters)
 #   3. Statistics: 7 days (solar self-consumption, average usage) and measured charge power
 #   4. The planner: sensor.zendure_forecast_plan (+ sensor.zendure_forecast_chart)
-#      incl. scenario A/B, path check (until solar coverage), efficiency filter and cheap-dip discharge hold
+#      incl. scenario A/B, path check (until solar coverage, with tomorrow's prices until tomorrow's solar coverage), efficiency filter and cheap-dip discharge hold
 #
 # Fixed values (thresholds, fallback values) are at the top of the planner under
 # "Settings (fixed values)" with the prefix c_.
@@ -1379,8 +1379,110 @@ template:
           {%- endif -%}
         {%- endfor -%}
         {{ ns.t if ns.t > 0 else (ns.end + (ns.e / l_hour * 3600 if l_hour > 0 else 172800)) }}
-      t_gap_end_ts: "{{ [t_cover_ts, t_end_ts] | min }}"
-      t_gap_start_ts: "{{ [t_empty_plan_ts, now_ts] | max }}"
+      # Candidate slots: the rest of today, plus tomorrow if those prices are really known
+      path_cand: "{{ cand + (tmrw if tomorrow_known else []) }}"
+
+      # ---- Path check beyond the night ----------------------------------
+      # In the afternoon and evening the bridge ends at the start of tomorrow's cheap hours
+      # (e.g. 00:45). An expensive morning peak after those hours fell outside the path check,
+      # even when charging now is cheaper than at night. As soon as tomorrow's prices are known,
+      # the path check looks ahead until tomorrow's solar covers usage (no further, otherwise it
+      # charges at night what solar delivers during the day anyway), capped at the end of the
+      # known prices. The allocation picks the cheapest slot before each expensive quarter hour
+      # itself: now, or at night if that is cheaper. The energy balance (bridge, scenario A/B)
+      # does not change. After midnight the morning already falls within the regular bridge.
+      solar_tomorrow_from_ts: "{{ next_sun_ts - 7200 }}"
+      solar_tomorrow_until_ts: "{{ next_sun_ts + 72000 }}"
+      solar_detail_tomorrow: >
+        {%- set e1 = states('input_text.forecast_setting_solar_remaining_today_sensor') | trim -%}
+        {%- set e2 = states('input_text.forecast_setting_solar_tomorrow_sensor') | trim -%}
+        {%- set ns = namespace(l=[], ts=[], ids=[]) -%}
+        {%- if not sun_day_is_today -%}
+          {%- for e in [e2, e1 | replace('_remaining_today', '_today'), e1] -%}
+            {%- if e | lower | regex_match('^sensor\\..+') and e not in ns.ids -%}
+              {%- set ns.ids = ns.ids + [e] -%}
+              {%- set d = state_attr(e, 'detailedForecast') or state_attr(e, 'detailed_forecast') or [] -%}
+              {%- for p in d -%}
+                {%- if p is mapping and p.period_start is defined -%}
+                  {%- set ps = as_timestamp(p.period_start, 0) -%}
+                  {%- if ps >= solar_tomorrow_from_ts and ps < solar_tomorrow_until_ts and ps not in ns.ts -%}
+                    {%- set ns.ts = ns.ts + [ps] -%}
+                    {%- set nk = namespace(k=0) -%}{%- for i in range(((ps - q_s0) // 900) | int, (((ps + c_detail_period_s) - q_s0 - 0.001) // 900) | int + 1) -%}{%- set qa = q_s0 + i * 900 -%}{%- set ov = [qa + 900, (ps + c_detail_period_s)] | min - [qa, ps] | max -%}{%- if ov > 0 -%}{%- set nk.k = nk.k + (q_kw[[i, 0] | max] if i < q_kw | length else l_hour) * ov / 3600 -%}{%- endif -%}{%- endfor -%}
+                    {%- set ns.l = ns.l + [{'s': ps, 'pv': ((p.pv_estimate | float(0)) * reliab) | round(3), 'kw': nk.k * 3600 / c_detail_period_s}] -%}
+                  {%- endif -%}
+                {%- endif -%}
+              {%- endfor -%}
+            {%- endif -%}
+          {%- endfor -%}
+        {%- endif -%}
+        {{ ns.l | sort(attribute='s') }}
+      # From when does tomorrow's solar cover usage? 0 = not (or unknown)
+      t_cover_tomorrow_ts: >
+        {%- set ns = namespace(t=0) -%}
+        {%- for p in solar_detail_tomorrow -%}
+          {%- if ns.t == 0 and p.pv >= p.kw -%}{%- set ns.t = p.s -%}{%- endif -%}
+        {%- endfor -%}
+        {%- if solar_detail_tomorrow | length > 0 -%}{{ ns.t }}
+        {%- elif not sun_day_is_today and solar_tomorrow >= c_cover_min_kwh -%}{{ next_sun_ts + c_cover_offset_s }}
+        {%- else -%}0{%- endif -%}
+      prices_end_ts: "{{ (tmrw | map(attribute='e') | max) if tmrw | length > 0 else end_today_ts }}"
+      # If tomorrow's solar does not cover usage (winter), until sunrise + 3 hours: this is about the
+      # morning peak, not tomorrow evening (the planner plans that after midnight).
+      t_path_tomorrow_ts: >
+        {%- set t = t_cover_tomorrow_ts if t_cover_tomorrow_ts > 0 else next_sun_ts + c_cover_offset_s -%}
+        {{ [t, prices_end_ts] | min }}
+      path_ahead: "{{ tomorrow_known and not sun_day_is_today and t_path_tomorrow_ts > t_end_ts }}"
+      t_path_horizon_ts: "{{ t_path_tomorrow_ts if path_ahead else [t_cover_ts, t_end_ts] | min }}"
+      path_horizon_source: >
+        {%- if not path_ahead -%}Until {{ 'solar coverage' if t_cover_ts < t_end_ts else 'end of bridge' }}
+        {%- elif solar_detail_tomorrow | length > 0 and t_cover_tomorrow_ts > 0 -%}Until solar coverage tomorrow (detailed forecast)
+        {%- elif t_cover_tomorrow_ts > 0 -%}Until solar coverage tomorrow (sunrise + {{ (c_cover_offset_s / 3600) | round(1) }} hours)
+        {%- else -%}Until sunrise tomorrow + {{ (c_cover_offset_s / 3600) | round(1) }} hours (solar does not cover usage tomorrow){%- endif -%}
+      # Solar per detail period for the path check: today plus (when looking ahead) tomorrow
+      path_solar: >
+        {%- if path_ahead -%}
+          {%- set ts = solar_detail | map(attribute='s') | list -%}
+          {{ (solar_detail + (solar_detail_tomorrow | rejectattr('s', 'in', ts) | list)) | sort(attribute='s') }}
+        {%- else -%}{{ solar_detail }}{%- endif -%}
+      # Battery empty when looking ahead: today's solar counts (direct use and surplus into the
+      # battery), otherwise the gap would start in the afternoon while solar still runs the house.
+      # Without a detailed forecast: solar covers usage until sunset and the expected surplus is
+      # added now. Night charging deliberately does not count here: the allocation plans that.
+      t_empty_ahead_ts: >
+        {%- set emax = ([s_max - margin_dc, 0] | max) * eff_out -%}
+        {%- set ns = namespace(e=([s_now - margin_dc, 0] | max) * eff_out, t=0, ev=ev_solar_today_kwh) -%}
+        {%- set solar_no_detail = solar_detail | length == 0 and is_state('sun.sun', 'above_horizon') -%}
+        {%- if solar_no_detail -%}{%- set ns.e = [ns.e + solar_dc * eff_out, emax] | min -%}{%- endif -%}
+        {%- if path_ahead -%}
+          {%- for x in path_cand | sort(attribute='s') -%}
+            {%- if ns.t == 0 and x.e > now_ts and x.s < t_path_horizon_ts -%}
+              {%- set a = [x.s, now_ts] | max -%}{%- set b = [x.e, t_path_horizon_ts] | min -%}
+              {%- set nk = namespace(k=0) -%}{%- for i in range(((a - q_s0) // 900) | int, ((b - q_s0 - 0.001) // 900) | int + 1) -%}{%- set qa = q_s0 + i * 900 -%}{%- set ov = [qa + 900, b] | min - [qa, a] | max -%}{%- if ov > 0 -%}{%- set nk.k = nk.k + (q_kw[[i, 0] | max] if i < q_kw | length else l_hour) * ov / 3600 -%}{%- endif -%}{%- endfor -%}
+              {%- set nz = namespace(d=0, o=0) -%}
+              {%- for p in path_solar -%}
+                {%- set pa = [p.s, a] | max -%}{%- set pb = [p.s + c_detail_period_s, b] | min -%}
+                {%- if pb > pa -%}
+                  {%- set nz.d = nz.d + ([p.pv, p.kw] | min) * (pb - pa) / 3600 -%}
+                  {%- set nz.o = nz.o + ([p.pv - p.kw, 0] | max) * (pb - pa) / 3600 -%}
+                {%- endif -%}
+              {%- endfor -%}
+              {%- if solar_no_detail and a < sunset_ts -%}{%- set nz.d = nk.k -%}{%- endif -%}
+              {%- set to_ev = [nz.o, ns.ev] | min -%}{%- set ns.ev = ns.ev - to_ev -%}
+              {%- set ns.e = [ns.e + (nz.o - to_ev) * eff_in * eff_out, emax] | min -%}
+              {%- set is_tmrw = x.s >= end_today_ts -%}
+              {%- set dip = dip_hold_plan and ((x.v <= dip_threshold_tomorrow and x.v < p_tmrw_avg) if is_tmrw else (x.v <= dip_threshold and x.v < p_day_avg)) -%}
+              {%- set need = [nk.k - nz.d, 0] | max -%}
+              {%- if not dip -%}
+                {%- if need >= ns.e and need > 0 -%}{%- set ns.t = a + ns.e / need * (b - a) -%}
+                {%- else -%}{%- set ns.e = ns.e - need -%}{%- endif -%}
+              {%- endif -%}
+            {%- endif -%}
+          {%- endfor -%}
+        {%- endif -%}
+        {{ ns.t if ns.t > 0 else t_path_horizon_ts }}
+
+      t_gap_end_ts: "{{ t_path_horizon_ts }}"
+      t_gap_start_ts: "{{ [t_empty_ahead_ts if path_ahead else t_empty_plan_ts, now_ts] | max }}"
       gap_hours: "{{ ([t_gap_end_ts - t_gap_start_ts, 0] | max / 3600) | round(2) }}"
       gap_load: >
         {%- set ns = namespace(k=0) -%}
@@ -1390,7 +1492,6 @@ template:
         {%- endfor -%}
         {{ ns.k | round(3) }}
       # Candidate slots: the rest of today, plus tomorrow once those prices are actually known
-      path_cand: "{{ cand + (tmrw if tomorrow_known else []) }}"
       # Per price slot in the gap: usage minus the solar that is already used directly there
       # (solar only known with a detailed forecast)
       gap_slots: >
@@ -1400,7 +1501,7 @@ template:
           {%- set b = [x.e, t_gap_end_ts] | min -%}
           {%- if b > a -%}
             {%- set nz = namespace(k=0) -%}
-            {%- for p in solar_detail -%}
+            {%- for p in path_solar -%}
               {%- set pa = [p.s, a] | max -%}
               {%- set pb = [p.s + c_detail_period_s, b] | min -%}
               {%- if pb > pa -%}{%- set nz.k = nz.k + ([p.pv, p.kw] | min) * (pb - pa) / 3600 -%}{%- endif -%}
@@ -1533,7 +1634,7 @@ template:
           {%- set a = [x.s, now_ts] | max -%}{%- set b = [x.e, t_gap_end_ts] | min -%}
           {%- if b > a -%}
             {%- set nz = namespace(k=0) -%}
-            {%- for z in solar_detail -%}
+            {%- for z in path_solar -%}
               {%- set pa = [z.s, a] | max -%}{%- set pb = [z.s + c_detail_period_s, b] | min -%}
               {%- if pb > pa -%}{%- set nz.k = nz.k + ([z.pv, z.kw] | min) * (pb - pa) / 3600 -%}{%- endif -%}
             {%- endfor -%}
@@ -1786,6 +1887,9 @@ template:
           pathcheck_solar_covers_from: "{{ t_cover_ts | timestamp_custom('%Y-%m-%d %H:%M', true) }}"
           pathcheck_solar_source: "{{ cover_source }}"
           pathcheck_gap_end: "{{ t_gap_end_ts | timestamp_custom('%Y-%m-%d %H:%M', true) }}"
+          pathcheck_horizon: "{{ path_horizon_source }}"
+          pathcheck_beyond_night: "{{ path_ahead }}"
+          pathcheck_solar_covers_tomorrow_from: "{{ (t_cover_tomorrow_ts | timestamp_custom('%Y-%m-%d %H:%M', true)) if t_cover_tomorrow_ts > 0 else none }}"
           pathcheck_gap_hours: "{{ gap_hours }}"
           pathcheck_solar_in_gap_kwh: "{{ gap_solar_direct }}"
           pathcheck_shortfall_kwh: "{{ gap_shortfall_ac }}"

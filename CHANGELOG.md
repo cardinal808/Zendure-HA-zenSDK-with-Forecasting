@@ -39,6 +39,13 @@ Versions follow `year.month.sequence`; the sequence restarts at 1 every month. E
 - Without a detected or entered counter the set calculates import and export from power. That is less accurate; *Collected data* then shows *Calculated from power (no kWh counter found or entered)*.
 - Switching source (automatic ↔ entered, or another sensor) does not cause a jump in the grid counters: the new attribute `meter_sensors` remembers which sensors supplied the reading.
 
+**Planner: path check looks beyond the night**
+- As soon as tomorrow's prices are known (around 14:00), the path check no longer looks only until the start of tomorrow's cheap hours (e.g. 00:45), but until tomorrow's solar covers usage. An expensive morning peak therefore already counts in the afternoon: if charging now (after charge and discharge loss) is cheaper than buying in that peak and cheaper than charging at night, it charges now. If the night is cheaper, it plans the night.
+- If tomorrow's solar does not cover usage (winter), it looks until sunrise + 3 hours: this is about the morning peak, not tomorrow evening. Without a detailed forecast (e.g. Forecast.Solar), sunrise + 3 hours counts as solar coverage.
+- When looking ahead, today's solar counts for the moment the battery runs empty (direct use and surplus into the battery).
+- The energy balance (bridge, scenario A/B) does not change; after midnight and while tomorrow's prices are unknown, the planner calculates exactly as before. The efficiency filter and minimal spread also apply here.
+- New attributes `pathcheck_horizon`, `pathcheck_beyond_night` and `pathcheck_solar_covers_tomorrow_from`; *Plan today* shows *beyond the night*.
+
 **Dashboard**
 - **Optional packages show themselves:** Forecasting Configuration (Savings), (EV), (HVAC) and Diagnostics export are only on the Settings tab when the package is loaded. Without `zendure_savings_global.yaml` the Savings tab only shows a notice instead of empty cards.
 - New **Optional packages** card on the Settings tab: per optional package whether it is loaded (✅/➖), the file and what it does, with a link to the explanation.

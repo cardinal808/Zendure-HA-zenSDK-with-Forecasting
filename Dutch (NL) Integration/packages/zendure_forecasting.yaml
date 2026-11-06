@@ -11,7 +11,7 @@
 #   2. Vermogenssensoren + integratiesensoren (kWh-tellers)
 #   3. Statistieken: 7 dagen (zelfverbruik zon, gemiddeld gebruik) en gemeten laadvermogen
 #   4. De planner: sensor.zendure_forecast_plan (+ sensor.zendure_forecast_grafiek)
-#      met o.a. scenario A/B, pad-check (tot zon-dekking), efficiencyfilter en goedkoop-dal-blokkade
+#      met o.a. scenario A/B, pad-check (tot zon-dekking, met prijzen van morgen tot zon-dekking morgen), efficiencyfilter en goedkoop-dal-blokkade
 #
 # Vaste waarden (drempels, terugvalwaarden) staan bovenaan de planner onder
 # "Instellingen (vaste waarden)" met het voorvoegsel c_.
@@ -1378,8 +1378,110 @@ template:
           {%- endif -%}
         {%- endfor -%}
         {{ ns.t if ns.t > 0 else (ns.eind + (ns.e / l_uur * 3600 if l_uur > 0 else 172800)) }}
-      t_gap_eind_ts: "{{ [t_zon_dek_ts, t_end_ts] | min }}"
-      t_gap_start_ts: "{{ [t_leeg_plan_ts, nu_ts] | max }}"
+      # Kandidaat-slots: de rest van vandaag, plus morgen als die prijzen echt bekend zijn
+      pad_kand: "{{ kand + (morg if morgen_bekend else []) }}"
+
+      # ---- Pad-check voorbij de nacht ----------------------------------
+      # 's Middags en 's avonds eindigt de overbrugging bij het begin van de goedkope uren van
+      # morgen (bv. 00:45). Een dure ochtendpiek ná die uren viel daardoor buiten de pad-check,
+      # ook als laden nu goedkoper is dan in de nacht. Zodra de prijzen van morgen bekend zijn,
+      # kijkt de pad-check door tot de zon van morgen het verbruik dekt (niet verder, anders
+      # wordt er 's nachts geladen wat de zon overdag toch levert), begrensd op het einde van de
+      # bekende prijzen. De toewijzing kiest per duur kwartier zelf het goedkoopste slot ervóór:
+      # nu, of in de nacht als die goedkoper is. De energiebalans (overbrugging, scenario A/B)
+      # verandert niet. Na middernacht valt de ochtend al binnen de gewone overbrugging.
+      zon_morgen_van_ts: "{{ volgende_zon_ts - 7200 }}"
+      zon_morgen_tot_ts: "{{ volgende_zon_ts + 72000 }}"
+      zon_detail_morgen: >
+        {%- set e1 = states('input_text.forecast_zon_resterend_vandaag_sensor') | trim -%}
+        {%- set e2 = states('input_text.forecast_zon_morgen_sensor') | trim -%}
+        {%- set ns = namespace(l=[], ts=[], ids=[]) -%}
+        {%- if not zon_dag_is_vandaag -%}
+          {%- for e in [e2, e1 | replace('_remaining_today', '_today'), e1] -%}
+            {%- if e | lower | regex_match('^sensor\\..+') and e not in ns.ids -%}
+              {%- set ns.ids = ns.ids + [e] -%}
+              {%- set d = state_attr(e, 'detailedForecast') or state_attr(e, 'detailed_forecast') or [] -%}
+              {%- for p in d -%}
+                {%- if p is mapping and p.period_start is defined -%}
+                  {%- set ps = as_timestamp(p.period_start, 0) -%}
+                  {%- if ps >= zon_morgen_van_ts and ps < zon_morgen_tot_ts and ps not in ns.ts -%}
+                    {%- set ns.ts = ns.ts + [ps] -%}
+                    {%- set nk = namespace(k=0) -%}{%- for i in range(((ps - kwart_s0) // 900) | int, (((ps + c_detail_periode_s) - kwart_s0 - 0.001) // 900) | int + 1) -%}{%- set qa = kwart_s0 + i * 900 -%}{%- set ov = [qa + 900, (ps + c_detail_periode_s)] | min - [qa, ps] | max -%}{%- if ov > 0 -%}{%- set nk.k = nk.k + (kwart_kw[[i, 0] | max] if i < kwart_kw | length else l_uur) * ov / 3600 -%}{%- endif -%}{%- endfor -%}
+                    {%- set ns.l = ns.l + [{'s': ps, 'pv': ((p.pv_estimate | float(0)) * betr) | round(3), 'kw': nk.k * 3600 / c_detail_periode_s}] -%}
+                  {%- endif -%}
+                {%- endif -%}
+              {%- endfor -%}
+            {%- endif -%}
+          {%- endfor -%}
+        {%- endif -%}
+        {{ ns.l | sort(attribute='s') }}
+      # Vanaf wanneer dekt de zon van morgen het verbruik? 0 = niet (of niet bekend)
+      t_zon_dek_morgen_ts: >
+        {%- set ns = namespace(t=0) -%}
+        {%- for p in zon_detail_morgen -%}
+          {%- if ns.t == 0 and p.pv >= p.kw -%}{%- set ns.t = p.s -%}{%- endif -%}
+        {%- endfor -%}
+        {%- if zon_detail_morgen | length > 0 -%}{{ ns.t }}
+        {%- elif not zon_dag_is_vandaag and zon_morgen >= c_dek_min_kwh -%}{{ volgende_zon_ts + c_dek_offset_s }}
+        {%- else -%}0{%- endif -%}
+      prijzen_eind_ts: "{{ (morg | map(attribute='e') | max) if morg | length > 0 else eind_vandaag_ts }}"
+      # Dekt de zon morgen het verbruik niet (winter), dan tot zonsopkomst + 3 uur: het gaat om de
+      # ochtendpiek, niet om de avond van morgen (die plant de planner na middernacht).
+      t_pad_morgen_ts: >
+        {%- set t = t_zon_dek_morgen_ts if t_zon_dek_morgen_ts > 0 else volgende_zon_ts + c_dek_offset_s -%}
+        {{ [t, prijzen_eind_ts] | min }}
+      pad_verder: "{{ morgen_bekend and not zon_dag_is_vandaag and t_pad_morgen_ts > t_end_ts }}"
+      t_pad_horizon_ts: "{{ t_pad_morgen_ts if pad_verder else [t_zon_dek_ts, t_end_ts] | min }}"
+      pad_horizon_bron: >
+        {%- if not pad_verder -%}Tot {{ 'zon-dekking' if t_zon_dek_ts < t_end_ts else 'einde overbrugging' }}
+        {%- elif zon_detail_morgen | length > 0 and t_zon_dek_morgen_ts > 0 -%}Tot zon-dekking morgen (detailvoorspelling)
+        {%- elif t_zon_dek_morgen_ts > 0 -%}Tot zon-dekking morgen (zonsopkomst + {{ (c_dek_offset_s / 3600) | round(1) }} uur)
+        {%- else -%}Tot zonsopkomst morgen + {{ (c_dek_offset_s / 3600) | round(1) }} uur (zon dekt morgen het verbruik niet){%- endif -%}
+      # Zon per detailperiode voor de pad-check: vandaag plus (bij doorkijken) morgen
+      pad_zon: >
+        {%- if pad_verder -%}
+          {%- set ts = zon_detail | map(attribute='s') | list -%}
+          {{ (zon_detail + (zon_detail_morgen | rejectattr('s', 'in', ts) | list)) | sort(attribute='s') }}
+        {%- else -%}{{ zon_detail }}{%- endif -%}
+      # Accu leeg bij doorkijken: de zon van vandaag telt mee (direct verbruik en overschot naar
+      # de accu), anders begint het gat 's middags al terwijl de zon het huis nog draait. Zonder
+      # detailvoorspelling: zon dekt het verbruik tot zonsondergang en het verwachte overschot
+      # gaat er nu bij. Nachtladen telt hier bewust niet mee: dat plant de toewijzing.
+      t_leeg_verder_ts: >
+        {%- set emax = ([s_max - marge_dc, 0] | max) * eff_out -%}
+        {%- set ns = namespace(e=([s_nu - marge_dc, 0] | max) * eff_out, t=0, ev=ev_zon_vandaag_kwh) -%}
+        {%- set zon_zonder_detail = zon_detail | length == 0 and is_state('sun.sun', 'above_horizon') -%}
+        {%- if zon_zonder_detail -%}{%- set ns.e = [ns.e + zon_dc * eff_out, emax] | min -%}{%- endif -%}
+        {%- if pad_verder -%}
+          {%- for x in pad_kand | sort(attribute='s') -%}
+            {%- if ns.t == 0 and x.e > nu_ts and x.s < t_pad_horizon_ts -%}
+              {%- set a = [x.s, nu_ts] | max -%}{%- set b = [x.e, t_pad_horizon_ts] | min -%}
+              {%- set nk = namespace(k=0) -%}{%- for i in range(((a - kwart_s0) // 900) | int, ((b - kwart_s0 - 0.001) // 900) | int + 1) -%}{%- set qa = kwart_s0 + i * 900 -%}{%- set ov = [qa + 900, b] | min - [qa, a] | max -%}{%- if ov > 0 -%}{%- set nk.k = nk.k + (kwart_kw[[i, 0] | max] if i < kwart_kw | length else l_uur) * ov / 3600 -%}{%- endif -%}{%- endfor -%}
+              {%- set nz = namespace(d=0, o=0) -%}
+              {%- for p in pad_zon -%}
+                {%- set pa = [p.s, a] | max -%}{%- set pb = [p.s + c_detail_periode_s, b] | min -%}
+                {%- if pb > pa -%}
+                  {%- set nz.d = nz.d + ([p.pv, p.kw] | min) * (pb - pa) / 3600 -%}
+                  {%- set nz.o = nz.o + ([p.pv - p.kw, 0] | max) * (pb - pa) / 3600 -%}
+                {%- endif -%}
+              {%- endfor -%}
+              {%- if zon_zonder_detail and a < zon_ondergang_ts -%}{%- set nz.d = nk.k -%}{%- endif -%}
+              {%- set naar_ev = [nz.o, ns.ev] | min -%}{%- set ns.ev = ns.ev - naar_ev -%}
+              {%- set ns.e = [ns.e + (nz.o - naar_ev) * eff_in * eff_out, emax] | min -%}
+              {%- set is_morgen = x.s >= eind_vandaag_ts -%}
+              {%- set dal = dal_blokkade_plan and ((x.v <= dal_drempel_morgen and x.v < p_morg_gem) if is_morgen else (x.v <= dal_drempel and x.v < p_dag_gem)) -%}
+              {%- set nodig = [nk.k - nz.d, 0] | max -%}
+              {%- if not dal -%}
+                {%- if nodig >= ns.e and nodig > 0 -%}{%- set ns.t = a + ns.e / nodig * (b - a) -%}
+                {%- else -%}{%- set ns.e = ns.e - nodig -%}{%- endif -%}
+              {%- endif -%}
+            {%- endif -%}
+          {%- endfor -%}
+        {%- endif -%}
+        {{ ns.t if ns.t > 0 else t_pad_horizon_ts }}
+
+      t_gap_eind_ts: "{{ t_pad_horizon_ts }}"
+      t_gap_start_ts: "{{ [t_leeg_verder_ts if pad_verder else t_leeg_plan_ts, nu_ts] | max }}"
       gap_uren: "{{ ([t_gap_eind_ts - t_gap_start_ts, 0] | max / 3600) | round(2) }}"
       gap_last: >
         {%- set ns = namespace(k=0) -%}
@@ -1388,8 +1490,6 @@ template:
           {%- if b > a -%}{%- set ns.k = ns.k + u.kw * (b - a) / 3600 -%}{%- endif -%}
         {%- endfor -%}
         {{ ns.k | round(3) }}
-      # Kandidaat-slots: de rest van vandaag, plus morgen als die prijzen echt bekend zijn
-      pad_kand: "{{ kand + (morg if morgen_bekend else []) }}"
       # Per prijsslot in het gat: verbruik min de zon die daar al direct verbruikt wordt
       # (zon alleen bekend met detailvoorspelling)
       gap_kwartieren: >
@@ -1399,7 +1499,7 @@ template:
           {%- set b = [x.e, t_gap_eind_ts] | min -%}
           {%- if b > a -%}
             {%- set nz = namespace(k=0) -%}
-            {%- for p in zon_detail -%}
+            {%- for p in pad_zon -%}
               {%- set pa = [p.s, a] | max -%}
               {%- set pb = [p.s + c_detail_periode_s, b] | min -%}
               {%- if pb > pa -%}{%- set nz.k = nz.k + ([p.pv, p.kw] | min) * (pb - pa) / 3600 -%}{%- endif -%}
@@ -1531,7 +1631,7 @@ template:
           {%- set a = [x.s, nu_ts] | max -%}{%- set b = [x.e, t_gap_eind_ts] | min -%}
           {%- if b > a -%}
             {%- set nz = namespace(k=0) -%}
-            {%- for z in zon_detail -%}
+            {%- for z in pad_zon -%}
               {%- set pa = [z.s, a] | max -%}{%- set pb = [z.s + c_detail_periode_s, b] | min -%}
               {%- if pb > pa -%}{%- set nz.k = nz.k + ([z.pv, z.kw] | min) * (pb - pa) / 3600 -%}{%- endif -%}
             {%- endfor -%}
@@ -1784,6 +1884,9 @@ template:
           padcheck_zon_dekt_vanaf: "{{ t_zon_dek_ts | timestamp_custom('%Y-%m-%d %H:%M', true) }}"
           padcheck_zon_bron: "{{ zon_dek_bron }}"
           padcheck_gat_eind: "{{ t_gap_eind_ts | timestamp_custom('%Y-%m-%d %H:%M', true) }}"
+          padcheck_horizon: "{{ pad_horizon_bron }}"
+          padcheck_voorbij_nacht: "{{ pad_verder }}"
+          padcheck_zon_dekt_morgen_vanaf: "{{ (t_zon_dek_morgen_ts | timestamp_custom('%Y-%m-%d %H:%M', true)) if t_zon_dek_morgen_ts > 0 else none }}"
           padcheck_gat_uren: "{{ gap_uren }}"
           padcheck_zon_in_gat_kwh: "{{ gap_zon_direct }}"
           padcheck_tekort_kwh: "{{ gap_tekort_ac }}"
