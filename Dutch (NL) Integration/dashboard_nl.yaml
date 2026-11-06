@@ -4112,6 +4112,15 @@ views:
               zon van de secundaire dan niet gebruikt wordt kost niets: bij een
               negatieve prijs is stroom uit het net gratis of levert zelfs geld
               op.
+
+
+              **Vooraf ontladen** (modus Dynamisch NOM + Forecasting, zon-detailvoorspelling
+              nodig): komt er een venster met een negatieve terugleverprijs en verwacht
+              zon-overschot, dan zorgt de planner dat de accu bij het begin leeg genoeg is
+              voor 75% van dat overschot. Hij ontlaadt daarvoor (alleen voor het huis) in de
+              duurste kwartieren ervoor, ook als de accu anders zou wachten, en laadt tot het
+              venster alleen uit het net als dat binnen de ruimte past. Plan vandaag toont
+              wat hij doet.
             text_only: true
             visibility:
               - condition: state
@@ -4131,6 +4140,10 @@ views:
                 label: Zendure Pro (PV-ingangen)
               - entity: input_boolean.negatieve_prijs_zendure_pv_export
                 name: Zendure Pro PV-export uitschakelen
+              - type: section
+                label: Accu (Dynamisch NOM + Forecasting)
+              - entity: input_boolean.negatieve_prijs_vooraf_ontladen
+                name: Vooraf ontladen
               - type: section
                 label: Externe omvormer (optioneel)
               - entity: input_select.negatieve_prijs_omvormer_aantal

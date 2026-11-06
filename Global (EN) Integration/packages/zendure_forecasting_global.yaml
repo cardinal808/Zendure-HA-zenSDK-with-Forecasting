@@ -917,6 +917,8 @@ template:
       c_detail_period_s: 1800            # length of a period in the detailed forecast (Solcast: 30 min)
       c_cover_offset_s: 10800            # without a detailed forecast: solar covers usage 3 hours after sunrise
       c_cover_min_kwh: 2                 # and only if at least this much solar is expected that day
+      c_solar_credit: 0.75               # pre-discharge: expected solar surplus counts for only 75% (the forecast can be too optimistic)
+      c_pd_min_kwh: 0.5                  # pre-discharge: only from this much expected solar surplus in a negative window
       c_shape_n_full_workday: 10         # shape per quarter counts fully after this many complete hours (workday)
       c_shape_n_full_weekend: 5          # same for weekends; before that gradually (fewer measurements = closer to even)
 
@@ -1576,13 +1578,83 @@ template:
         {%- set ss = path_allocation | map(attribute='s') | list -%}
         {{ path_cand | selectattr('s', 'in', ss) | list }}
 
+      # ---- Pre-discharge for a negative feed-in price ----------------------------
+      # If a window with a negative feed-in price and expected solar surplus is coming, the battery
+      # must be empty enough at the start of that window to absorb the surplus (the inverter then
+      # needs to throttle less and less is exported at a negative price). Works only by lifting
+      # the hold and limiting grid charging; no discharging to the grid is added. Discharging
+      # happens in the most expensive quarter hours before the window (threshold price, as with
+      # smart hold). Min. SOC always stays.
+      pd_on: "{{ is_state('input_boolean.negative_price_pre_discharge', 'on') and prices_ok }}"
+      pd_solar: >
+        {%- set ts = solar_detail | map(attribute='s') | list -%}
+        {{ (solar_detail + (solar_detail_tomorrow | rejectattr('s', 'in', ts) | list)) | sort(attribute='s') }}
+      # First consecutive run of quarter hours with a negative feed-in price that has yet to
+      # start, with the expected solar surplus (kWh AC) in it
+      pd_window: >
+        {%- set markup = states('input_number.savings_setting_dynamic_feedin_markup') | float(0) -%}
+        {%- set bonus = states('input_number.savings_setting_dynamic_feedin_bonus') | float(0) / 100 -%}
+        {%- set ns = namespace(r=[], cur=none, w=none) -%}
+        {%- if pd_on -%}
+          {%- for x in path_cand | sort(attribute='s') -%}
+            {%- set neg = (x.v + bonus * ([x.v, 0] | max) + markup) < 0 -%}
+            {%- if neg and ns.cur is not none and ns.cur.e == x.s -%}
+              {%- set ns.cur = {'s': ns.cur.s, 'e': x.e} -%}
+            {%- elif neg -%}
+              {%- if ns.cur is not none -%}{%- set ns.r = ns.r + [ns.cur] -%}{%- endif -%}
+              {%- set ns.cur = {'s': x.s, 'e': x.e} -%}
+            {%- elif ns.cur is not none -%}
+              {%- set ns.r = ns.r + [ns.cur] -%}{%- set ns.cur = none -%}
+            {%- endif -%}
+          {%- endfor -%}
+          {%- if ns.cur is not none -%}{%- set ns.r = ns.r + [ns.cur] -%}{%- endif -%}
+          {%- for w in ns.r -%}
+            {%- if ns.w is none and w.s > now_ts -%}
+              {%- set nz = namespace(o=0) -%}
+              {%- for p in pd_solar -%}
+                {%- set pa = [p.s, w.s] | max -%}{%- set pb = [p.s + c_detail_period_s, w.e] | min -%}
+                {%- if pb > pa -%}{%- set nz.o = nz.o + ([p.pv - p.kw, 0] | max) * (pb - pa) / 3600 -%}{%- endif -%}
+              {%- endfor -%}
+              {%- if nz.o >= c_pd_min_kwh -%}{%- set ns.w = {'s': w.s, 'e': w.e, 'kwh': nz.o | round(3)} -%}{%- endif -%}
+            {%- endif -%}
+          {%- endfor -%}
+        {%- endif -%}
+        {{ ns.w }}
+      # Target at the start of the window (kWh above min. SOC): room for 75% of the surplus
+      pd_target_dc: >
+        {{ ([s_max - pd_window.kwh * c_solar_credit * eff_in, 0] | max) | round(3) if pd_window is mapping else s_max }}
+      # Free simulation until the window: the battery discharges for the house in every quarter
+      # hour, solar charges it, no grid charging and no hold. Per slot what it delivers (kWh AC).
+      pd_sim: >
+        {%- set ns = namespace(e=s_now, l=[]) -%}
+        {%- if pd_window is mapping -%}
+          {%- for x in path_cand | sort(attribute='s') -%}
+            {%- if x.e > now_ts and x.s < pd_window.s -%}
+              {%- set a = [x.s, now_ts] | max -%}{%- set b = [x.e, pd_window.s] | min -%}
+              {%- set nk = namespace(k=0) -%}{%- for i in range(((a - q_s0) // 900) | int, ((b - q_s0 - 0.001) // 900) | int + 1) -%}{%- set qa = q_s0 + i * 900 -%}{%- set ov = [qa + 900, b] | min - [qa, a] | max -%}{%- if ov > 0 -%}{%- set nk.k = nk.k + (q_kw[[i, 0] | max] if i < q_kw | length else l_hour) * ov / 3600 -%}{%- endif -%}{%- endfor -%}
+              {%- set nz = namespace(d=0, o=0) -%}
+              {%- for p in pd_solar -%}
+                {%- set pa = [p.s, a] | max -%}{%- set pb = [p.s + c_detail_period_s, b] | min -%}
+                {%- if pb > pa -%}
+                  {%- set nz.d = nz.d + ([p.pv, p.kw] | min) * (pb - pa) / 3600 -%}
+                  {%- set nz.o = nz.o + ([p.pv - p.kw, 0] | max) * (pb - pa) / 3600 -%}
+                {%- endif -%}
+              {%- endfor -%}
+              {%- set ns.e = [ns.e + nz.o * eff_in, s_max] | min -%}
+              {%- set deliver = [[nk.k - nz.d, 0] | max, ns.e * eff_out] | min -%}
+              {%- set ns.e = ns.e - (deliver / eff_out if eff_out > 0 else 0) -%}
+              {%- if deliver > 0.001 -%}{%- set ns.l = ns.l + [{'s': x.s, 'v': x.v, 'kwh': deliver | round(4)}] -%}{%- endif -%}
+            {%- endif -%}
+          {%- endfor -%}
+        {%- endif -%}
+        {{ {'e': ns.e | round(3), 'l': ns.l} }}
       # ---- Total grid charge and final slots ---------------------------------
       # The regular plan and the path check overlap: the gap is already part of the total
       # energy balance. So the larger of the two counts, not the sum.
       grid_total_ac: "{{ ([grid_ac, path_grid_ac if extra_slots | length > 0 else 0] | max) | round(3) }}"
       n_total: >
         {% if grid_total_ac >= c_charge_stop_kwh and e_slot > 0 %}{{ (grid_total_ac / e_slot) | round(0, 'ceil') | int }}{% else %}0{% endif %}
-      chosen: >
+      chosen_plan: >
         {%- set extra_s = extra_slots | map(attribute='s') | list -%}
         {%- set ns = namespace(l=extra_slots) -%}
         {%- for x in chosen_base | sort(attribute='v') -%}
@@ -1591,6 +1663,43 @@ template:
           {%- endif -%}
         {%- endfor -%}
         {{ ns.l | sort(attribute='s') }}
+      # Pre-discharge: grid charging before the window only fits in the room left above the
+      # target (cheapest slots first); the rest is dropped
+      pd_useful: "{{ pd_on and pd_window is mapping and pd_sim.e < s_max - 0.1 }}"
+      pd_room_dc: "{{ ([pd_target_dc - pd_sim.e, 0] | max) | round(3) if pd_useful else 0 }}"
+      chosen: >
+        {%- if pd_useful -%}
+          {%- set n_max = ((pd_room_dc / (e_slot * eff_in)) | int) if e_slot * eff_in > 0 else 0 -%}
+          {%- set before = chosen_plan | selectattr('s', 'lt', pd_window.s) | sort(attribute='v') | list -%}
+          {%- set keep = before[:n_max] | map(attribute='s') | list -%}
+          {{ ((chosen_plan | rejectattr('s', 'lt', pd_window.s) | list) + (chosen_plan | selectattr('s', 'in', keep) | list)) | sort(attribute='s') }}
+        {%- else -%}{{ chosen_plan }}{%- endif -%}
+      pd_grid_dropped: "{{ (chosen_plan | length) - (chosen | length) }}"
+      pd_grid_dc: >
+        {{ ([(chosen | selectattr('s', 'lt', pd_window.s) | list | length) * e_slot * eff_in, pd_room_dc] | min) | round(3) if pd_useful else 0 }}
+      # How much must the battery deliver at least before the window (kWh AC)? Planned grid
+      # charging before the window counts. End above target (even discharging everywhere): everywhere.
+      pd_deliver_min_ac: >
+        {%- set total = pd_sim.l | map(attribute='kwh') | sum -%}
+        {%- set room_left = [pd_room_dc - pd_grid_dc, 0] | max * eff_out -%}
+        {{ ([total - room_left, 0] | max) | round(3) }}
+      # Only when it makes a difference: if solar fills the battery again before the window anyway
+      # (even discharging everywhere), pre-discharge does not help
+      pd_active: >
+        {{ pd_useful and (pd_deliver_min_ac > 0.05 or pd_sim.e > pd_target_dc + 0.05) }}
+      # Threshold price: the battery supplies in the most expensive quarters before the window until
+      # the minimum is reached. none = in all quarters (even then it does not reach the target).
+      pd_threshold: >
+        {%- set ns = namespace(r=pd_deliver_min_ac, p=none) -%}
+        {%- if pd_active and pd_sim.e <= pd_target_dc + 0.05 -%}
+          {%- for q in pd_sim.l | sort(attribute='v', reverse=true) -%}
+            {%- if ns.r > 0 -%}{%- set ns.p = q.v -%}{%- set ns.r = ns.r - q.kwh -%}{%- endif -%}
+          {%- endfor -%}
+        {%- endif -%}
+        {{ ns.p }}
+      pd_discharge_now: >
+        {{ pd_active and now_ts < pd_window.s and price_now < 999 and (pd_threshold is not number or price_now >= pd_threshold) }}
+
       slot_now: >
         {% set ns = namespace(a=false) %}
         {% for x in chosen %}{% if x.s <= now_ts < x.e %}{% set ns.a = true %}{% endif %}{% endfor %}
@@ -1658,7 +1767,8 @@ template:
         {{ is_state('input_boolean.forecast_setting_hold_discharge_in_dip', 'on') and prices_ok and price_now < 999
            and not sh_charge_planned and sh_threshold is number and solar_dc <= room
            and price_now < sh_threshold - c_hold_min_difference }}
-      hold_discharge: "{{ dip_hold or smart_hold }}"
+      # Pre-discharge comes first: no hold in the quarter hours above the threshold price
+      hold_discharge: "{{ (dip_hold or smart_hold) and not pd_discharge_now }}"
 
       # ---- Overview for tomorrow --------------------------------------
       tomorrow_direct: "{{ direct_tomorrow_kwh | round(2) }}"
@@ -1811,7 +1921,7 @@ template:
             {% if grid_total_ac < threshold %}
               Not needed
             {% elif chosen | length == 0 %}
-              Not favorable
+              {{ 'Not needed' if pd_grid_dropped | int > 0 else 'Not favorable' }}
             {% elif slot_now %}
               Charge
             {% else %}
@@ -1866,10 +1976,11 @@ template:
             {%- set tomorrow_line -%}{%- if tomorrow_known and tomorrow_blocks | length > 0 %} Estimate: charge {{ block(tomorrow_blocks | first) }}{% if tomorrow_blocks | length > 1 %} and {{ tomorrow_blocks | length - 1 }} more charge block(s), about {{ '%.1f' | format(tomorrow_grid_charge) }} kWh in total{% endif %}. This is planned for real after midnight.{%- elif tomorrow_known %} Grid charging is not expected to pay off tomorrow.{%- endif -%}{%- endset -%}
             {%- if not prices_ok -%}No prices available, nothing is planned.
             {%- elif grid_total_ac < threshold -%}No grid charging needed: battery and expected solar are enough until {{ at(t_end_ts) }}.{{ tomorrow_line }}
+            {%- elif chosen | length == 0 and pd_grid_dropped | int > 0 -%}No grid charging: the battery needs room for the solar surplus at the negative feed-in price (see below).
             {%- elif chosen | length == 0 -%}
               {%- if empty -%}The battery is empty. The house now takes power directly from the grid{% if gap_slots | length > 0 %}, until {{ at(t_gap_end_ts) }} at most €{{ '%.3f' | format(gap_slots | map(attribute='v') | max) }}{% endif %}. Before that there is no charge moment left that is cheaper than buying directly after {{ ((1 - eff_rt) * 100) | round(0) | int }}% charge and discharge loss.
-              {%- elif smart_hold -%}The battery ({{ '%.1f' | format(s_now) }} kWh) does not last until {{ at(t_gap_end_ts) }} and there is no charge moment left. It is therefore saved for the most expensive quarters (€{{ '%.3f' | format(sh_threshold) }} and up); until then the house buys directly at €{{ '%.3f' | format(price_now) }}. Charging from the grid does not pay off now.
-              {%- elif dip_hold_plan -%}The battery ({{ '%.1f' | format(s_now) }} kWh) is saved during cheap dips, because buying directly is cheaper there; it only supplies power in more expensive quarter hours and is expected to be empty around {{ at(t_empty_ts) }}. Grid charging does not pay off now: no slot is cheaper after loss than the purchase it would replace.
+              {%- elif smart_hold and not pd_discharge_now -%}The battery ({{ '%.1f' | format(s_now) }} kWh) does not last until {{ at(t_gap_end_ts) }} and there is no charge moment left. It is therefore saved for the most expensive quarters (€{{ '%.3f' | format(sh_threshold) }} and up); until then the house buys directly at €{{ '%.3f' | format(price_now) }}. Charging from the grid does not pay off now.
+              {%- elif dip_hold_plan and not pd_active -%}The battery ({{ '%.1f' | format(s_now) }} kWh) is saved during cheap dips, because buying directly is cheaper there; it only supplies power in more expensive quarter hours and is expected to be empty around {{ at(t_empty_ts) }}. Grid charging does not pay off now: no slot is cheaper after loss than the purchase it would replace.
               {%- else -%}The battery ({{ '%.1f' | format(s_now) }} kWh) supplies power until about {{ at(t_empty_ts) }}. Grid charging does not pay off now: no slot is cheaper after loss than the purchase it would replace.
               {%- endif -%}
               {%- if not tomorrow_known %} Tomorrow's prices arrive around 14:00, then the plan is recalculated.
@@ -1881,6 +1992,13 @@ template:
               {%- else -%}Next charge moment: {{ block(first) }}.{%- endif %}
               {%- if blocks_today | length > 1 %} Then {{ blocks_today | length - 1 }} more charge block(s).{% endif %} About {{ '%.1f' | format(planned_ac) }} kWh in total for €{{ '%.2f' | format(cost) }}{% if extra_slots | length > 0 %}, so the expensive quarter hours until {{ at(t_gap_end_ts) }} (average €{{ '%.3f' | format(p_gap_avg) }}) are supplied by the battery{% endif %}.
               {%- if empty and not slot_now %} Until then the house takes power directly from the grid.{% endif -%}
+            {%- endif -%}
+            {%- if pd_active %} Pre-discharge: {{ at(pd_window.s) }}-{{ hm(pd_window.e) }} the feed-in price is negative, with about {{ '%.1f' | format(pd_window.kwh) }} kWh solar surplus.
+              {%- if pd_threshold is number %} The battery supplies for this mainly in the quarter hours from €{{ '%.3f' | format(pd_threshold) }}{% else %} The battery supplies for this in all quarter hours{% endif %}
+              {%- if chosen | selectattr('s', 'lt', pd_window.s) | list | length > 0 %}; the planned grid charging before it fits within the room.
+              {%- elif pd_grid_dropped | int > 0 %} and is not charged from the grid until then ({{ pd_grid_dropped }} charge slot(s) dropped).
+              {%- else %}.{% endif -%}
+              {%- if pd_sim.e > pd_target_dc + 0.05 %} Even then there is probably not room for everything; the inverter limit catches the rest.{% endif -%}
             {%- endif -%}
           # --- Path check (does the battery last until energy comes in again?) ---
           pathcheck_battery_empty_at: "{{ (t_empty_ts | timestamp_custom('%Y-%m-%d %H:%M', true)) if t_empty_ts < now_ts + 172800 else none }}"
@@ -1905,6 +2023,16 @@ template:
           hold_discharge: "{{ hold_discharge }}"
           smart_hold: "{{ smart_hold }}"
           hold_threshold_price: "{{ sh_threshold }}"
+          # --- Pre-discharge for a negative feed-in price ---
+          pre_discharge: "{{ pd_active }}"
+          pre_discharge_now: "{{ pd_discharge_now }}"
+          pre_discharge_window_start: "{{ (pd_window.s | timestamp_custom('%Y-%m-%d %H:%M', true)) if pd_window is mapping else none }}"
+          pre_discharge_window_end: "{{ (pd_window.e | timestamp_custom('%Y-%m-%d %H:%M', true)) if pd_window is mapping else none }}"
+          pre_discharge_solar_surplus_kwh: "{{ pd_window.kwh if pd_window is mapping else 0 }}"
+          pre_discharge_target_kwh: "{{ pd_target_dc if pd_window is mapping else none }}"
+          pre_discharge_expected_kwh: "{{ pd_sim.e if pd_window is mapping else none }}"
+          pre_discharge_price_limit: "{{ pd_threshold }}"
+          pre_discharge_grid_dropped: "{{ pd_grid_dropped }}"
           charge_power_used_kw: "{{ p_max_kw | round(2) }}"
           charge_power_measured_w: "{{ p_measured_w if p_measured_w >= c_charge_min_w else none }}"
           charge_power_set_kw: "{{ p_set_kw }}"

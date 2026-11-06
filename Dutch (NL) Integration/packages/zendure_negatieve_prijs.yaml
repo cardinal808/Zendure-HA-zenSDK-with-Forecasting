@@ -55,6 +55,12 @@
 #    niets: bij een negatieve prijs is stroom uit het net gratis of levert zelfs geld op.
 # Aantal externe omvormers = 0 zet automatisering 2 en 3 uit.
 #
+# Vooraf ontladen (schakelaar Vooraf ontladen, modus Dynamisch NOM + Forecasting): komt er een
+# venster met een negatieve terugleverprijs en verwacht zon-overschot (Solcast-detail), dan zorgt
+# de planner dat de accu bij het begin leeg genoeg is voor 75% van dat overschot. Hij heft daarvoor
+# het vasthouden (goedkoop dal, slim vasthouden) op in de duurste kwartieren ervoor en laadt tot
+# het venster niet uit het net. Geen ontladen naar het net; min. SOC blijft staan.
+#
 # Alle automatiseringen zetten alleen terug wat ze zelf hebben omgezet.
 # Laden uit zon en ontladen naar het huis (NOM) blijven gewoon werken.
 # =====================================================================
@@ -63,6 +69,12 @@ input_boolean:
   negatieve_prijs_export_blokkeren:
     name: Negatieve Prijs Export Blokkeren
     icon: mdi:transmission-tower-off
+
+  # Vooraf ontladen: accu vóór een negatief venster leeg genoeg maken voor het zon-overschot
+  # (rekent in de planner, alleen in modus Dynamisch NOM + Forecasting)
+  negatieve_prijs_vooraf_ontladen:
+    name: Negatieve Prijs Vooraf Ontladen
+    icon: mdi:battery-arrow-down-outline
 
   # PV-export van de Zendure Pro (zon-ingangen) meenemen via Gielz' PV Export Uitgeschakeld
   negatieve_prijs_zendure_pv_export:

@@ -917,6 +917,8 @@ template:
       c_detail_periode_s: 1800           # lengte van een periode in de detailvoorspelling (Solcast: 30 min)
       c_dek_offset_s: 10800              # zonder detailvoorspelling: zon dekt het verbruik 3 uur na zonsopkomst
       c_dek_min_kwh: 2                   # en alleen als er die dag minstens zoveel zon verwacht wordt
+      c_zon_krediet: 0.75                # vooraf ontladen: verwacht zon-overschot telt maar voor 75% (forecast kan te optimistisch zijn)
+      c_vo_min_kwh: 0.5                  # vooraf ontladen: pas vanaf zoveel verwacht zon-overschot in een negatief venster
       c_vorm_n_vol_werkdag: 10           # vorm per kwartier telt volledig mee na zoveel complete uren (werkdag)
       c_vorm_n_vol_weekend: 5            # idem weekend; daarvoor geleidelijk (minder metingen = dichter bij gelijk verdeeld)
 
@@ -1573,13 +1575,83 @@ template:
         {%- set ss = pad_toewijzing | map(attribute='s') | list -%}
         {{ pad_kand | selectattr('s', 'in', ss) | list }}
 
+      # ---- Vooraf ontladen voor een negatieve terugleverprijs -------------------
+      # Komt er een venster met een negatieve terugleverprijs én verwacht zon-overschot, dan moet
+      # de accu bij het begin van dat venster leeg genoeg zijn om het overschot op te nemen (de
+      # omvormer hoeft dan minder te knijpen en er wordt minder tegen een negatieve prijs
+      # teruggeleverd). Werkt alleen door vasthouden op te heffen en netladen te beperken; er
+      # komt geen ontladen naar het net bij. Ontladen gebeurt in de duurste kwartieren vóór het
+      # venster (grensprijs, zoals bij slim vasthouden). Min. SOC blijft altijd staan.
+      vo_aan: "{{ is_state('input_boolean.negatieve_prijs_vooraf_ontladen', 'on') and prijzen_ok }}"
+      vo_zon: >
+        {%- set ts = zon_detail | map(attribute='s') | list -%}
+        {{ (zon_detail + (zon_detail_morgen | rejectattr('s', 'in', ts) | list)) | sort(attribute='s') }}
+      # Eerste aaneengesloten reeks kwartieren met een negatieve terugleverprijs die nog moet
+      # beginnen, met het verwachte zon-overschot (kWh AC) erin
+      vo_venster: >
+        {%- set opslag = states('input_number.besparing_dyn_opslag_teruglevering') | float(0) -%}
+        {%- set bonus = states('input_number.besparing_dyn_bonus_teruglevering') | float(0) / 100 -%}
+        {%- set ns = namespace(r=[], cur=none, w=none) -%}
+        {%- if vo_aan -%}
+          {%- for x in pad_kand | sort(attribute='s') -%}
+            {%- set neg = (x.v + bonus * ([x.v, 0] | max) + opslag) < 0 -%}
+            {%- if neg and ns.cur is not none and ns.cur.e == x.s -%}
+              {%- set ns.cur = {'s': ns.cur.s, 'e': x.e} -%}
+            {%- elif neg -%}
+              {%- if ns.cur is not none -%}{%- set ns.r = ns.r + [ns.cur] -%}{%- endif -%}
+              {%- set ns.cur = {'s': x.s, 'e': x.e} -%}
+            {%- elif ns.cur is not none -%}
+              {%- set ns.r = ns.r + [ns.cur] -%}{%- set ns.cur = none -%}
+            {%- endif -%}
+          {%- endfor -%}
+          {%- if ns.cur is not none -%}{%- set ns.r = ns.r + [ns.cur] -%}{%- endif -%}
+          {%- for w in ns.r -%}
+            {%- if ns.w is none and w.s > nu_ts -%}
+              {%- set nz = namespace(o=0) -%}
+              {%- for p in vo_zon -%}
+                {%- set pa = [p.s, w.s] | max -%}{%- set pb = [p.s + c_detail_periode_s, w.e] | min -%}
+                {%- if pb > pa -%}{%- set nz.o = nz.o + ([p.pv - p.kw, 0] | max) * (pb - pa) / 3600 -%}{%- endif -%}
+              {%- endfor -%}
+              {%- if nz.o >= c_vo_min_kwh -%}{%- set ns.w = {'s': w.s, 'e': w.e, 'kwh': nz.o | round(3)} -%}{%- endif -%}
+            {%- endif -%}
+          {%- endfor -%}
+        {%- endif -%}
+        {{ ns.w }}
+      # Doel bij het begin van het venster (kWh boven min. SOC): ruimte voor 75% van het overschot
+      vo_doel_dc: >
+        {{ ([s_max - vo_venster.kwh * c_zon_krediet * eff_in, 0] | max) | round(3) if vo_venster is mapping else s_max }}
+      # Vrije simulatie tot het venster: accu ontlaadt in elk kwartier voor het huis, zon laadt
+      # bij, geen netladen en geen vasthouden. Per slot wat de accu dan levert (kWh AC).
+      vo_sim: >
+        {%- set ns = namespace(e=s_nu, l=[]) -%}
+        {%- if vo_venster is mapping -%}
+          {%- for x in pad_kand | sort(attribute='s') -%}
+            {%- if x.e > nu_ts and x.s < vo_venster.s -%}
+              {%- set a = [x.s, nu_ts] | max -%}{%- set b = [x.e, vo_venster.s] | min -%}
+              {%- set nk = namespace(k=0) -%}{%- for i in range(((a - kwart_s0) // 900) | int, ((b - kwart_s0 - 0.001) // 900) | int + 1) -%}{%- set qa = kwart_s0 + i * 900 -%}{%- set ov = [qa + 900, b] | min - [qa, a] | max -%}{%- if ov > 0 -%}{%- set nk.k = nk.k + (kwart_kw[[i, 0] | max] if i < kwart_kw | length else l_uur) * ov / 3600 -%}{%- endif -%}{%- endfor -%}
+              {%- set nz = namespace(d=0, o=0) -%}
+              {%- for p in vo_zon -%}
+                {%- set pa = [p.s, a] | max -%}{%- set pb = [p.s + c_detail_periode_s, b] | min -%}
+                {%- if pb > pa -%}
+                  {%- set nz.d = nz.d + ([p.pv, p.kw] | min) * (pb - pa) / 3600 -%}
+                  {%- set nz.o = nz.o + ([p.pv - p.kw, 0] | max) * (pb - pa) / 3600 -%}
+                {%- endif -%}
+              {%- endfor -%}
+              {%- set ns.e = [ns.e + nz.o * eff_in, s_max] | min -%}
+              {%- set lever = [[nk.k - nz.d, 0] | max, ns.e * eff_out] | min -%}
+              {%- set ns.e = ns.e - (lever / eff_out if eff_out > 0 else 0) -%}
+              {%- if lever > 0.001 -%}{%- set ns.l = ns.l + [{'s': x.s, 'v': x.v, 'kwh': lever | round(4)}] -%}{%- endif -%}
+            {%- endif -%}
+          {%- endfor -%}
+        {%- endif -%}
+        {{ {'e': ns.e | round(3), 'l': ns.l} }}
       # ---- Totaal netladen en definitieve slots ------------------------------
       # Het gewone plan en de pad-check overlappen: het gat zit al in de totale energiebalans.
       # Daarom telt het grootste van de twee, niet de som.
       netladen_ac: "{{ ([grid_ac, pad_netladen_ac if extra_slots | length > 0 else 0] | max) | round(3) }}"
       n_totaal: >
         {% if netladen_ac >= c_laden_stop_kwh and e_slot > 0 %}{{ (netladen_ac / e_slot) | round(0, 'ceil') | int }}{% else %}0{% endif %}
-      gekozen: >
+      gekozen_plan: >
         {%- set extra_s = extra_slots | map(attribute='s') | list -%}
         {%- set ns = namespace(l=extra_slots) -%}
         {%- for x in gekozen_basis | sort(attribute='v') -%}
@@ -1588,6 +1660,43 @@ template:
           {%- endif -%}
         {%- endfor -%}
         {{ ns.l | sort(attribute='s') }}
+      # Vooraf ontladen: netladen vóór het venster mag alleen in de ruimte die boven het doel
+      # overblijft (de goedkoopste slots eerst); de rest vervalt
+      vo_zinvol: "{{ vo_aan and vo_venster is mapping and vo_sim.e < s_max - 0.1 }}"
+      vo_ruimte_dc: "{{ ([vo_doel_dc - vo_sim.e, 0] | max) | round(3) if vo_zinvol else 0 }}"
+      gekozen: >
+        {%- if vo_zinvol -%}
+          {%- set n_max = ((vo_ruimte_dc / (e_slot * eff_in)) | int) if e_slot * eff_in > 0 else 0 -%}
+          {%- set voor = gekozen_plan | selectattr('s', 'lt', vo_venster.s) | sort(attribute='v') | list -%}
+          {%- set houden = voor[:n_max] | map(attribute='s') | list -%}
+          {{ ((gekozen_plan | rejectattr('s', 'lt', vo_venster.s) | list) + (gekozen_plan | selectattr('s', 'in', houden) | list)) | sort(attribute='s') }}
+        {%- else -%}{{ gekozen_plan }}{%- endif -%}
+      vo_netladen_vervallen: "{{ (gekozen_plan | length) - (gekozen | length) }}"
+      vo_netladen_dc: >
+        {{ ([(gekozen | selectattr('s', 'lt', vo_venster.s) | list | length) * e_slot * eff_in, vo_ruimte_dc] | min) | round(3) if vo_zinvol else 0 }}
+      # Hoeveel moet de accu vóór het venster minstens leveren (kWh AC)? Gepland netladen vóór
+      # het venster telt mee. Eind boven het doel (ook met overal ontladen): overal ontladen.
+      vo_lever_min_ac: >
+        {%- set totaal = vo_sim.l | map(attribute='kwh') | sum -%}
+        {%- set ruimte = [vo_ruimte_dc - vo_netladen_dc, 0] | max * eff_out -%}
+        {{ ([totaal - ruimte, 0] | max) | round(3) }}
+      # Alleen als het verschil maakt: laadt de zon de accu vóór het venster toch weer vol (ook met
+      # overal ontladen), dan helpt vooraf ontladen niet
+      vo_actief: >
+        {{ vo_zinvol and (vo_lever_min_ac > 0.05 or vo_sim.e > vo_doel_dc + 0.05) }}
+      # Grensprijs: de accu levert in de duurste kwartieren vóór het venster tot het minimum
+      # gehaald is. none = in alle kwartieren (ook dan haalt hij het doel niet).
+      vo_grens: >
+        {%- set ns = namespace(r=vo_lever_min_ac, p=none) -%}
+        {%- if vo_actief and vo_sim.e <= vo_doel_dc + 0.05 -%}
+          {%- for q in vo_sim.l | sort(attribute='v', reverse=true) -%}
+            {%- if ns.r > 0 -%}{%- set ns.p = q.v -%}{%- set ns.r = ns.r - q.kwh -%}{%- endif -%}
+          {%- endfor -%}
+        {%- endif -%}
+        {{ ns.p }}
+      vo_ontladen_nu: >
+        {{ vo_actief and nu_ts < vo_venster.s and prijs_nu < 999 and (vo_grens is not number or prijs_nu >= vo_grens) }}
+
       slot_nu: >
         {% set ns = namespace(a=false) %}
         {% for x in gekozen %}{% if x.s <= nu_ts < x.e %}{% set ns.a = true %}{% endif %}{% endfor %}
@@ -1655,7 +1764,8 @@ template:
         {{ is_state('input_boolean.forecast_dal_ontladen_blokkeren', 'on') and prijzen_ok and prijs_nu < 999
            and not vh_laden_gepland and vh_grens is number and zon_dc <= room
            and prijs_nu < vh_grens - c_vasthouden_min_verschil }}
-      ontladen_vasthouden: "{{ dal_vasthouden or slim_vasthouden }}"
+      # Vooraf ontladen gaat voor: in de kwartieren boven de grensprijs niet vasthouden
+      ontladen_vasthouden: "{{ (dal_vasthouden or slim_vasthouden) and not vo_ontladen_nu }}"
 
       # ---- Overzicht voor morgen --------------------------------------
       morgen_direct: "{{ direct_morgen_kwh | round(2) }}"
@@ -1808,7 +1918,7 @@ template:
             {% if netladen_ac < drempel %}
               Niet nodig
             {% elif gekozen | length == 0 %}
-              Niet gunstig
+              {{ 'Niet nodig' if vo_netladen_vervallen | int > 0 else 'Niet gunstig' }}
             {% elif slot_nu %}
               Laden
             {% else %}
@@ -1863,10 +1973,11 @@ template:
             {%- set morgen_zin -%}{%- if morgen_bekend and morgen_blokken | length > 0 %} Indicatie: laden {{ blok(morgen_blokken | first) }}{% if morgen_blokken | length > 1 %} en nog {{ morgen_blokken | length - 1 }} laadblok(ken), samen ongeveer {{ '%.1f' | format(morgen_netladen) }} kWh{% endif %}. Na middernacht wordt dit definitief gepland.{%- elif morgen_bekend %} Morgen loont laden uit het net naar verwachting niet.{%- endif -%}{%- endset -%}
             {%- if not prijzen_ok -%}Geen prijzen beschikbaar, er wordt niets gepland.
             {%- elif netladen_ac < drempel -%}Geen netladen nodig: accu en verwachte zon zijn genoeg tot {{ tijd(t_end_ts) }}.{{ morgen_zin }}
+            {%- elif gekozen | length == 0 and vo_netladen_vervallen | int > 0 -%}Niet uit het net laden: de accu moet ruimte hebben voor het zon-overschot bij de negatieve terugleverprijs (zie hieronder).
             {%- elif gekozen | length == 0 -%}
               {%- if leeg -%}De accu is leeg. Het huis neemt nu direct stroom uit het net{% if gap_kwartieren | length > 0 %}, tot {{ tijd(t_gap_eind_ts) }} voor maximaal €{{ '%.3f' | format(gap_kwartieren | map(attribute='v') | max) }}{% endif %}. Er is daarvoor geen laadmoment meer dat na {{ ((1 - eff_rt) * 100) | round(0) | int }}% laad- en ontlaadverlies goedkoper is dan direct inkopen.
-              {%- elif slim_vasthouden -%}De accu ({{ '%.1f' | format(s_nu) }} kWh) houdt het niet vol tot {{ tijd(t_gap_eind_ts) }} en er is geen laadmoment meer. Daarom wordt hij bewaard voor de duurste kwartieren (€{{ '%.3f' | format(vh_grens) }} en hoger); tot dan koopt het huis direct in tegen €{{ '%.3f' | format(prijs_nu) }}. Bijladen uit het net loont nu niet.
-              {%- elif dal_blokkade_plan -%}De accu ({{ '%.1f' | format(s_nu) }} kWh) wordt in goedkope dalen gespaard, want direct inkopen is daar goedkoper; hij levert alleen in duurdere kwartieren en is naar verwachting rond {{ tijd(t_leeg_ts) }} leeg. Bijladen uit het net loont nu niet: geen enkel slot is na verlies goedkoper dan de inkoop die het zou vervangen.
+              {%- elif slim_vasthouden and not vo_ontladen_nu -%}De accu ({{ '%.1f' | format(s_nu) }} kWh) houdt het niet vol tot {{ tijd(t_gap_eind_ts) }} en er is geen laadmoment meer. Daarom wordt hij bewaard voor de duurste kwartieren (€{{ '%.3f' | format(vh_grens) }} en hoger); tot dan koopt het huis direct in tegen €{{ '%.3f' | format(prijs_nu) }}. Bijladen uit het net loont nu niet.
+              {%- elif dal_blokkade_plan and not vo_actief -%}De accu ({{ '%.1f' | format(s_nu) }} kWh) wordt in goedkope dalen gespaard, want direct inkopen is daar goedkoper; hij levert alleen in duurdere kwartieren en is naar verwachting rond {{ tijd(t_leeg_ts) }} leeg. Bijladen uit het net loont nu niet: geen enkel slot is na verlies goedkoper dan de inkoop die het zou vervangen.
               {%- else -%}De accu ({{ '%.1f' | format(s_nu) }} kWh) levert tot ongeveer {{ tijd(t_leeg_ts) }}. Bijladen uit het net loont nu niet: geen enkel slot is na verlies goedkoper dan de inkoop die het zou vervangen.
               {%- endif -%}
               {%- if not morgen_bekend %} Rond 14:00 komen de prijzen van morgen, dan wordt opnieuw gepland.
@@ -1878,6 +1989,13 @@ template:
               {%- else -%}Volgende laadmoment: {{ blok(eerste) }}.{%- endif %}
               {%- if blokken_vandaag | length > 1 %} Daarna nog {{ blokken_vandaag | length - 1 }} laadblok(ken).{% endif %} Totaal ongeveer {{ '%.1f' | format(gepland_ac) }} kWh voor €{{ '%.2f' | format(kosten) }}{% if extra_slots | length > 0 %}, om de dure kwartieren tot {{ tijd(t_gap_eind_ts) }} (gemiddeld €{{ '%.3f' | format(p_gap_avg) }}) uit de accu te halen{% endif %}.
               {%- if leeg and not slot_nu %} Tot dan neemt het huis direct stroom uit het net.{% endif -%}
+            {%- endif -%}
+            {%- if vo_actief %} Vooraf ontladen: {{ tijd(vo_venster.s) }}-{{ hm(vo_venster.e) }} is de terugleverprijs negatief, met ongeveer {{ '%.1f' | format(vo_venster.kwh) }} kWh zon-overschot.
+              {%- if vo_grens is number %} De accu levert daarvoor vooral in de kwartieren vanaf €{{ '%.3f' | format(vo_grens) }}{% else %} De accu levert daarvoor in alle kwartieren{% endif %}
+              {%- if gekozen | selectattr('s', 'lt', vo_venster.s) | list | length > 0 %}; het geplande netladen daarvoor past binnen de ruimte.
+              {%- elif vo_netladen_vervallen | int > 0 %} en wordt tot dan niet uit het net geladen ({{ vo_netladen_vervallen }} laadslot(s) vervallen).
+              {%- else %}.{% endif -%}
+              {%- if vo_sim.e > vo_doel_dc + 0.05 %} Ook dan is er naar verwachting nog geen ruimte voor alles; de rest vangt de omvormerbegrenzing op.{% endif -%}
             {%- endif -%}
           # --- Pad-check (haalt de accu het moment dat er weer energie bijkomt?) ---
           padcheck_accu_leeg_om: "{{ (t_leeg_ts | timestamp_custom('%Y-%m-%d %H:%M', true)) if t_leeg_ts < nu_ts + 172800 else none }}"
@@ -1902,6 +2020,16 @@ template:
           ontladen_vasthouden: "{{ ontladen_vasthouden }}"
           slim_vasthouden: "{{ slim_vasthouden }}"
           vasthouden_grensprijs: "{{ vh_grens }}"
+          # --- Vooraf ontladen voor een negatieve terugleverprijs ---
+          vooraf_ontladen: "{{ vo_actief }}"
+          vooraf_ontladen_nu: "{{ vo_ontladen_nu }}"
+          vooraf_venster_start: "{{ (vo_venster.s | timestamp_custom('%Y-%m-%d %H:%M', true)) if vo_venster is mapping else none }}"
+          vooraf_venster_eind: "{{ (vo_venster.e | timestamp_custom('%Y-%m-%d %H:%M', true)) if vo_venster is mapping else none }}"
+          vooraf_zon_overschot_kwh: "{{ vo_venster.kwh if vo_venster is mapping else 0 }}"
+          vooraf_doel_kwh: "{{ vo_doel_dc if vo_venster is mapping else none }}"
+          vooraf_verwacht_kwh: "{{ vo_sim.e if vo_venster is mapping else none }}"
+          vooraf_grensprijs: "{{ vo_grens }}"
+          vooraf_netladen_vervallen: "{{ vo_netladen_vervallen }}"
           laadvermogen_gebruikt_kw: "{{ p_max_kw | round(2) }}"
           laadvermogen_gemeten_w: "{{ p_gemeten_w if p_gemeten_w >= c_laden_min_w else none }}"
           laadvermogen_ingesteld_kw: "{{ p_set_kw }}"

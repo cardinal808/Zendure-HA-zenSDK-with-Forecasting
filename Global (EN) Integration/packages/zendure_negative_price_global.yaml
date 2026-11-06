@@ -55,6 +55,12 @@
 #    nothing: with a negative price, power from the grid is free or even pays.
 # Number of external inverters = 0 disables automations 2 and 3.
 #
+# Pre-discharge (switch Pre-discharge, mode Dynamic Smart Matching + Forecasting): if a window with a
+# negative feed-in price and expected solar surplus (Solcast detail) is coming, the planner makes sure
+# the battery is empty enough at its start for 75% of that surplus. For this it lifts the hold (cheap
+# dip, smart hold) in the most expensive quarter hours before it and does not charge from the grid
+# until the window. No discharging to the grid; min. SOC stays.
+#
 # All automations only restore what they changed themselves.
 # Charging from solar and discharging to the house (Smart Matching) keep working.
 # =====================================================================
@@ -63,6 +69,12 @@ input_boolean:
   negative_price_block_export:
     name: Negative Price Block Export
     icon: mdi:transmission-tower-off
+
+  # Pre-discharge: make the battery empty enough before a negative window for the solar surplus
+  # (calculated in the planner, only in mode Dynamic Smart Matching + Forecasting)
+  negative_price_pre_discharge:
+    name: Negative Price Pre Discharge
+    icon: mdi:battery-arrow-down-outline
 
   # Include the PV export of the Zendure Pro (solar inputs) via Gielz' PV Export Disabled
   negative_price_zendure_pv_export:

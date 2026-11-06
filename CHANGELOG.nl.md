@@ -21,6 +21,11 @@ Versies volgen `jaar.maand.volgnummer`; het volgnummer begint elke maand bij 1. 
 **Negatieve prijs**
 - Nieuwe schakelaar **Zendure Pro PV-export uitschakelen** (`input_boolean.negatieve_prijs_zendure_pv_export`): kies of de functie bij een negatieve prijs ook de PV-export van de Zendure Pro (zon-ingangen) uitschakelt via Gielz' *PV Export Uitgeschakeld*. Gaat vanzelf aan zodra je *Niet terugleveren* aanzet; uit = alleen de externe omvormers begrenzen, bv. bij een Zendure zonder zonnepanelen.
 - De instellingen voor de Zendure Pro en de externe omvormer staan nu samen in één kaart.
+- **Nieuw: vooraf ontladen** (schakelaar *Vooraf ontladen*, modus Dynamisch NOM + Forecasting, zon-detailvoorspelling zoals Solcast nodig). Komt er een venster met een negatieve terugleverprijs en verwacht zon-overschot, dan zorgt de planner dat de accu bij het begin leeg genoeg is voor 75% van dat overschot. Zo kan meer zon de accu in en hoeft de omvormer minder te knijpen.
+  - De accu ontlaadt daarvoor alleen voor het huis (geen teruglevering), in de duurste kwartieren vóór het venster: daar vervalt het vasthouden (goedkoop dal, slim vasthouden). Haalt hij het doel ook met overal ontladen niet, dan ontlaadt hij in alle kwartieren.
+  - Netladen vóór het venster blijft alleen staan als het binnen de ruimte past (goedkoopste slots eerst), bv. 's nachts laden voor een dure ochtendpiek.
+  - Laadt de zon de accu vóór het venster toch weer vol, dan doet hij niets. Min. SOC blijft altijd staan. Opslag en bonus teruglevering uit Forecasting Configuratie (Besparing) tellen mee in de terugleverprijs.
+  - *Plan vandaag* legt uit wat hij doet; nieuwe attributen `vooraf_ontladen`, `vooraf_ontladen_nu`, `vooraf_venster_start`/`_eind`, `vooraf_zon_overschot_kwh`, `vooraf_doel_kwh`, `vooraf_verwacht_kwh`, `vooraf_grensprijs` en `vooraf_netladen_vervallen`.
 
 **Nieuw: diagnose-export** *(optioneel pakket)*
 - Nieuw pakket `packages/zendure_export.yaml` en een blok **Diagnose-export** op de tab Configuratie. Met *Export maken* schrijf je één JSON-bestand met versies, actieve pakketten, alle instellingen, de stand van alle sensoren, de details van de planner, de ingevulde externe sensoren en de status van de Zendure-automatiseringen. Je krijgt een melding met een downloadlink; na 1 uur (en bij een herstart) wordt het bestand weer verwijderd.
@@ -65,6 +70,7 @@ Versies volgen `jaar.maand.volgnummer`; het volgnummer begint elke maand bij 1. 
 - `zendure_besparing.yaml` is optioneel: wil je de tab Besparing niet, dan mag je hem weghalen. *Niet terugleveren bij negatieve prijs* rekent dan met de kale marktprijs (geen opslag of bonus teruglevering).
 - Optioneel: zet `zendure_ev.yaml`, `zendure_hvac.yaml` en/of `zendure_export.yaml` (NL) of `zendure_ev_global.yaml`, `zendure_hvac_global.yaml` en/of `zendure_export_global.yaml` (Global) in de map `packages`. Heb je zelf al `system_log:` in `configuration.yaml`, haal dan het blok `system_log` uit het exportpakket en zet daar `fire_event: true`. Gebruikte je de complete set: `input_boolean.hvac_tonen_op_dashboard` bestaat niet meer en kan weg.
 - Gebruik je *Niet terugleveren bij negatieve prijs*: **Zendure Pro PV-export uitschakelen** gaat na de herstart vanzelf één keer aan. Zet hem uit als je Zendure geen zonnepanelen heeft.
+- Optioneel: zet in Forecasting Configuratie (Negatieve Prijs) **Vooraf ontladen** aan (staat standaard uit).
 - Test eerst of je auto het laden hervat als de stroom terugkomt, voordat je de lader laat schakelen.
 - Is je zonproductie of gemiddeld gebruik over 7 dagen te hoog door een eerdere sprong: druk na de update één keer op **Verbruiksgegevens resetten**.
 - Staat bij *Verzamelde gegevens → Net* "Berekend uit vermogen", vul dan je eigen net-tellers in bij Forecasting Configuratie (Basis).

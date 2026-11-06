@@ -4105,6 +4105,15 @@ views:
               surplus, and is restored when the price is positive again. Not
               using the secondary's solar costs nothing: with a negative price,
               power from the grid is free or even pays.
+
+
+              **Pre-discharge** (mode Dynamic Smart Matching + Forecasting, needs a
+              detailed solar forecast): if a window with a negative feed-in price and
+              expected solar surplus is coming, the planner makes sure the battery is
+              empty enough at its start for 75% of that surplus. For this it discharges
+              (only for the house) in the most expensive quarter hours before it, also when
+              the battery would otherwise wait, and only charges from the grid until the
+              window if that fits within the room. Plan for today shows what it does.
             text_only: true
             visibility:
               - condition: state
@@ -4124,6 +4133,10 @@ views:
                 label: Zendure Pro (PV inputs)
               - entity: input_boolean.negative_price_zendure_pv_export
                 name: Disable Zendure Pro PV export
+              - type: section
+                label: Battery (Dynamic Smart Matching + Forecasting)
+              - entity: input_boolean.negative_price_pre_discharge
+                name: Pre-discharge
               - type: section
                 label: External inverter (optional)
               - entity: input_select.negative_price_inverter_count
