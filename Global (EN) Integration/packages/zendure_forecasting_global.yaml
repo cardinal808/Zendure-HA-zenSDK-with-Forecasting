@@ -1620,9 +1620,11 @@ template:
           {%- endfor -%}
         {%- endif -%}
         {{ ns.w }}
-      # Target at the start of the window (kWh above min. SOC): room for 75% of the surplus
+      # Solar credit: input field in %, 0 = default (c_solar_credit)
+      pd_credit: "{{ ((states('input_number.negative_price_pre_discharge_solar_credit') | float(0)) / 100) if (states('input_number.negative_price_pre_discharge_solar_credit') | float(0)) > 0 else c_solar_credit }}"
+      # Target at the start of the window (kWh above min. SOC): room for the solar-credit share of the surplus
       pd_target_dc: >
-        {{ ([s_max - pd_window.kwh * c_solar_credit * eff_in, 0] | max) | round(3) if pd_window is mapping else s_max }}
+        {{ ([s_max - pd_window.kwh * pd_credit * eff_in, 0] | max) | round(3) if pd_window is mapping else s_max }}
       # Free simulation until the window: the battery discharges for the house in every quarter
       # hour, solar charges it, no grid charging and no hold. Per slot what it delivers (kWh AC).
       pd_sim: >
@@ -2029,6 +2031,7 @@ template:
           pre_discharge_window_start: "{{ (pd_window.s | timestamp_custom('%Y-%m-%d %H:%M', true)) if pd_window is mapping else none }}"
           pre_discharge_window_end: "{{ (pd_window.e | timestamp_custom('%Y-%m-%d %H:%M', true)) if pd_window is mapping else none }}"
           pre_discharge_solar_surplus_kwh: "{{ pd_window.kwh if pd_window is mapping else 0 }}"
+          pre_discharge_solar_credit_pct: "{{ (pd_credit * 100) | round(0) | int }}"
           pre_discharge_target_kwh: "{{ pd_target_dc if pd_window is mapping else none }}"
           pre_discharge_expected_kwh: "{{ pd_sim.e if pd_window is mapping else none }}"
           pre_discharge_price_limit: "{{ pd_threshold }}"

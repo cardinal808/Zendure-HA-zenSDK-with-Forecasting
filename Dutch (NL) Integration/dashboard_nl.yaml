@@ -4117,7 +4117,7 @@ views:
               **Vooraf ontladen** (modus Dynamisch NOM + Forecasting, zon-detailvoorspelling
               nodig): komt er een venster met een negatieve terugleverprijs en verwacht
               zon-overschot, dan zorgt de planner dat de accu bij het begin leeg genoeg is
-              voor 75% van dat overschot. Hij ontlaadt daarvoor (alleen voor het huis) in de
+              voor 75% van dat overschot (instelbaar met *Zonkrediet*: hoger = dieper ontladen, 0 = 75%). Hij ontlaadt daarvoor (alleen voor het huis) in de
               duurste kwartieren ervoor, ook als de accu anders zou wachten, en laadt tot het
               venster alleen uit het net als dat binnen de ruimte past. Plan vandaag toont
               wat hij doet.
@@ -4144,6 +4144,8 @@ views:
                 label: Accu (Dynamisch NOM + Forecasting)
               - entity: input_boolean.negatieve_prijs_vooraf_ontladen
                 name: Vooraf ontladen
+              - entity: input_number.negatieve_prijs_vooraf_zonkrediet
+                name: Zonkrediet (%, 0 = 75%)
               - type: section
                 label: Externe omvormer (optioneel)
               - entity: input_select.negatieve_prijs_omvormer_aantal

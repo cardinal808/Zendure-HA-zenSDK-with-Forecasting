@@ -1617,9 +1617,11 @@ template:
           {%- endfor -%}
         {%- endif -%}
         {{ ns.w }}
-      # Doel bij het begin van het venster (kWh boven min. SOC): ruimte voor 75% van het overschot
+      # Zonkrediet: invoerveld in %, 0 = standaard (c_zon_krediet)
+      vo_krediet: "{{ ((states('input_number.negatieve_prijs_vooraf_zonkrediet') | float(0)) / 100) if (states('input_number.negatieve_prijs_vooraf_zonkrediet') | float(0)) > 0 else c_zon_krediet }}"
+      # Doel bij het begin van het venster (kWh boven min. SOC): ruimte voor het zonkrediet-deel van het overschot
       vo_doel_dc: >
-        {{ ([s_max - vo_venster.kwh * c_zon_krediet * eff_in, 0] | max) | round(3) if vo_venster is mapping else s_max }}
+        {{ ([s_max - vo_venster.kwh * vo_krediet * eff_in, 0] | max) | round(3) if vo_venster is mapping else s_max }}
       # Vrije simulatie tot het venster: accu ontlaadt in elk kwartier voor het huis, zon laadt
       # bij, geen netladen en geen vasthouden. Per slot wat de accu dan levert (kWh AC).
       vo_sim: >
@@ -2026,6 +2028,7 @@ template:
           vooraf_venster_start: "{{ (vo_venster.s | timestamp_custom('%Y-%m-%d %H:%M', true)) if vo_venster is mapping else none }}"
           vooraf_venster_eind: "{{ (vo_venster.e | timestamp_custom('%Y-%m-%d %H:%M', true)) if vo_venster is mapping else none }}"
           vooraf_zon_overschot_kwh: "{{ vo_venster.kwh if vo_venster is mapping else 0 }}"
+          vooraf_zonkrediet_pct: "{{ (vo_krediet * 100) | round(0) | int }}"
           vooraf_doel_kwh: "{{ vo_doel_dc if vo_venster is mapping else none }}"
           vooraf_verwacht_kwh: "{{ vo_sim.e if vo_venster is mapping else none }}"
           vooraf_grensprijs: "{{ vo_grens }}"

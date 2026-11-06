@@ -118,6 +118,17 @@ input_select:
       - Exportlimiet (GoodWe, Growatt)
 
 input_number:
+  # Vooraf ontladen: deel van het verwachte zon-overschot dat meetelt (%). 0 = standaard (75%).
+  # Hoger = dieper ontladen en meer ruimte voor de zon; lager = voorzichtiger bij een te optimistische forecast.
+  negatieve_prijs_vooraf_zonkrediet:
+    name: Negatieve Prijs Vooraf Zonkrediet
+    icon: mdi:weather-sunny-alert
+    min: 0
+    max: 100
+    step: 5
+    mode: box
+    unit_of_measurement: "%"
+
   # Intern: limiet van de omvormer vóór het begrenzen
   negatieve_prijs_limiet_vorige:
     name: Negatieve Prijs Limiet Vorige

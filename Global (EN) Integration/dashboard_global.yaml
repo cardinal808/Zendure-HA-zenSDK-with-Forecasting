@@ -4110,7 +4110,7 @@ views:
               **Pre-discharge** (mode Dynamic Smart Matching + Forecasting, needs a
               detailed solar forecast): if a window with a negative feed-in price and
               expected solar surplus is coming, the planner makes sure the battery is
-              empty enough at its start for 75% of that surplus. For this it discharges
+              empty enough at its start for 75% of that surplus (adjustable with *Solar credit*: higher = discharge deeper, 0 = 75%). For this it discharges
               (only for the house) in the most expensive quarter hours before it, also when
               the battery would otherwise wait, and only charges from the grid until the
               window if that fits within the room. Plan for today shows what it does.
@@ -4137,6 +4137,8 @@ views:
                 label: Battery (Dynamic Smart Matching + Forecasting)
               - entity: input_boolean.negative_price_pre_discharge
                 name: Pre-discharge
+              - entity: input_number.negative_price_pre_discharge_solar_credit
+                name: Solar credit (%, 0 = 75%)
               - type: section
                 label: External inverter (optional)
               - entity: input_select.negative_price_inverter_count
