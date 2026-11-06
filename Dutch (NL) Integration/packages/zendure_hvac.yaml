@@ -2,9 +2,10 @@
 # Gebaseerd op Gielz1986/Zendure-HA-zenSDK (Michiel Hofker). Zie README.md voor licentie en wijzigingen.
 # OPTIONEEL PAKKET - niet nodig voor Dynamisch NOM + Forecasting. Weglaten = functie uit.
 # Toevoegen of weghalen: zet het bestand in (of haal het uit) de map packages en herstart Home Assistant.
-# Nodig: een climate-entiteit, vermogenssensor of schakelaar van de airco.
+# Nodig: een climate-entiteit, vermogenssensor of schakelaar van de airco; voor "Airco niet uit
+# accu" en het apart tellen ook een vermogensmeting (W of kW).
 # =====================================================================
-# Zendure HVAC (airco) - NOM niet laten ontladen terwijl de airco draait (optioneel)
+# Zendure HVAC (airco) - de airco niet uit de accu laten draaien (optioneel)
 #
 # Plaats dit bestand naast zendure_gielz1986_nl.yaml (zelfde packages-map).
 # Zonder dit bestand verandert er niets. Het blok Forecasting Configuratie (HVAC) op de tab Configuratie
@@ -15,9 +16,21 @@
 #   - binary_sensor.hvac_actief               : draait de airco echt?
 #   - binary_sensor.hvac_ontladen_geblokkeerd : airco draait in een modus waarin ontladen niet
 #                                               is toegestaan, en (optioneel) niet in een duur uur
-# De NOM-ontlaadblokken in de automation ontladen niet zolang de laatste "aan" staat.
+#   - binary_sensor.hvac_niet_uit_accu       : de airco mag niet uit de accu (modus niet
+#                                               toegestaan, geen duur uur)
+#   - Aanpak (input_select.hvac_aanpak) bepaalt wat er dan gebeurt:
+#       * Niet ontladen (standaard): binary_sensor.hvac_ontladen_geblokkeerd gaat aan en de
+#         NOM-ontlaadblokken in de automation ontladen helemaal niet.
+#       * Airco niet uit accu: sensor.hvac_ontlaad_correctie is het vermogen van de airco; de
+#         NOM-ontlaadblokken trekken dat af van de P1-meter (zoals bij de auto), dus de accu
+#         voedt de rest van het huis gewoon. Vereist een vermogensmeting van de airco
+#         (HVAC Vermogen Sensor, of een vermogenssensor als HVAC Sensor); zonder meting geldt
+#         Niet ontladen.
+#   - Verbruik apart tellen: zolang de airco niet uit de accu mag, telt zijn verbruik
+#     (sensor.hvac_apart_totaal, ..._uit_zon_totaal en de 7-daagse cijfers) niet mee in het
+#     verbruiksprofiel, het dagverbruik en het zelfverbruik van de zon (alleen met vermogensmeting).
 # Laden (zon of net) blijft gewoon werken.
-# Standaard is ontladen in elke modus geblokkeerd. Zet per modus aan waarin het wel mag
+# Standaard mag de airco in geen enkele modus uit de accu. Zet per modus aan waarin het wel mag
 # (bv. Koelen: zomer, zon genoeg). Laat het sensorveld leeg om de functie uit te zetten.
 # =====================================================================
 
@@ -27,6 +40,22 @@ input_text:
     icon: mdi:air-conditioner
     max: 250
     mode: text
+  # Vermogen van de airco (W of kW), bv. een Shelly of de vermogenssensor van de airco-integratie.
+  # Leeg: de HVAC Sensor als dat een vermogenssensor is.
+  hvac_vermogen_sensor:
+    name: HVAC Vermogen Sensor
+    icon: mdi:flash
+    max: 250
+    mode: text
+
+input_select:
+  # Wat gebeurt er als de airco niet uit de accu mag? Eerste optie = standaard (zoals voorheen).
+  hvac_aanpak:
+    name: HVAC Aanpak
+    icon: mdi:battery-sync-outline
+    options:
+      - Niet ontladen
+      - Airco niet uit accu
 
 input_number:
   hvac_drempel_vermogen:
@@ -58,14 +87,77 @@ input_boolean:
     name: HVAC Ontladen Toestaan Bij Auto
     icon: mdi:thermostat-auto
 
+# ---------------------------------------------------------------------
+# kWh-tellers van het apart getelde airco-verbruik (methode "left", zoals de EV-tellers)
+# ---------------------------------------------------------------------
+sensor:
+  - platform: integration
+    name: "HVAC Apart Totaal"
+    unique_id: hvac_apart_totaal
+    source: sensor.hvac_apart_vermogen
+    unit_prefix: k
+    round: 3
+    method: left
+
+  - platform: integration
+    name: "HVAC Apart Uit Zon Totaal"
+    unique_id: hvac_apart_uit_zon_totaal
+    source: sensor.hvac_apart_uit_zon_vermogen
+    unit_prefix: k
+    round: 3
+    method: left
+
+  - platform: statistics
+    name: "HVAC Apart 7 Dagen"
+    unique_id: hvac_apart_7_dagen
+    entity_id: sensor.hvac_teller_apart
+    state_characteristic: change
+    max_age:
+      days: 7
+    sampling_size: 1500
+    precision: 2
+
+  - platform: statistics
+    name: "HVAC Apart Uit Zon 7 Dagen"
+    unique_id: hvac_apart_uit_zon_7_dagen
+    entity_id: sensor.hvac_teller_apart_uit_zon
+    state_characteristic: change
+    max_age:
+      days: 7
+    sampling_size: 1500
+    precision: 2
+
 template:
+  # Tellers elk kwartier bevriezen (voor de 7-daagse statistiek, zoals in zendure_forecasting.yaml)
+  - trigger:
+      - trigger: time_pattern
+        minutes: "/15"
+      - trigger: homeassistant
+        event: start
+    sensor:
+      - name: "HVAC Teller Apart"
+        unique_id: hvac_teller_apart
+        unit_of_measurement: "kWh"
+        device_class: energy
+        state_class: total_increasing
+        availability: "{{ has_value('sensor.hvac_apart_totaal') }}"
+        state: "{{ states('sensor.hvac_apart_totaal') | float(0) }}"
+
+      - name: "HVAC Teller Apart Uit Zon"
+        unique_id: hvac_teller_apart_uit_zon
+        unit_of_measurement: "kWh"
+        device_class: energy
+        state_class: total_increasing
+        availability: "{{ has_value('sensor.hvac_apart_uit_zon_totaal') }}"
+        state: "{{ states('sensor.hvac_apart_uit_zon_totaal') | float(0) }}"
+
   - sensor:
       # Wat doet de airco?
       #   climate.*  -> hvac_action (heating/cooling/drying/fan) als die er is, anders de modus.
       #                 hvac_action idle/off terwijl de airco aan staat = Stand-by
       #                 (temperatuur bereikt, de airco verbruikt dan nauwelijks).
       #                 auto/heat_cool zonder bruikbare hvac_action = Auto.
-      #   sensor.* (vermogen in W) -> Aan boven de drempel (0 = 50 W), anders Uit
+      #   sensor.* (vermogen in W of kW) -> Aan boven de drempel (0 = 50 W), anders Uit
       #   overige (switch, binary_sensor, input_boolean, ...) -> Aan bij state "on"
       - name: "HVAC Modus"
         unique_id: hvac_modus
@@ -92,10 +184,65 @@ template:
             {% endif %}
           {% elif e.startswith('sensor.') %}
             {% set d = states('input_number.hvac_drempel_vermogen') | float(0) %}
-            {{ 'Aan' if states(e) | float(0) > (d if d > 0 else 50) else 'Uit' }}
+            {% set w = states(e) | float(0) * (1000 if state_attr(e, 'unit_of_measurement') == 'kW' else 1) %}
+            {{ 'Aan' if w > (d if d > 0 else 50) else 'Uit' }}
           {% else %}
             {{ 'Aan' if is_state(e, 'on') else 'Uit' }}
           {% endif %}
+
+      # Vermogen van de airco in W; unavailable zonder vermogensmeting
+      - name: "HVAC Vermogen"
+        unique_id: hvac_vermogen
+        icon: mdi:air-conditioner
+        unit_of_measurement: "W"
+        device_class: power
+        state_class: measurement
+        availability: >
+          {% set e = states('input_text.hvac_vermogen_sensor') | trim | lower %}
+          {% set e = e if e != '' else (states('input_text.hvac_sensor') | trim | lower) %}
+          {{ e | regex_match('^sensor\\..+') and has_value(e) }}
+        state: >
+          {% set e = states('input_text.hvac_vermogen_sensor') | trim | lower %}
+          {% set e = e if e != '' else (states('input_text.hvac_sensor') | trim | lower) %}
+          {% set u = state_attr(e, 'unit_of_measurement') %}
+          {% set v = states(e) | float(0) %}
+          {{ ([v * 1000 if u == 'kW' else v, 0] | max) | round(0) }}
+
+      # Wat de NOM-ontlaadblokken van de P1-meter aftrekken (aanpak Airco niet uit accu)
+      - name: "HVAC Ontlaad Correctie"
+        unique_id: hvac_ontlaad_correctie
+        icon: mdi:battery-minus-outline
+        unit_of_measurement: "W"
+        device_class: power
+        state_class: measurement
+        state: >
+          {{ states('sensor.hvac_vermogen') | float(0)
+             if is_state('binary_sensor.hvac_niet_uit_accu', 'on') and is_state('input_select.hvac_aanpak', 'Airco niet uit accu')
+             else 0 }}
+
+      # Verbruik dat apart geteld wordt (niet in het verbruiksprofiel): de airco zolang hij
+      # niet uit de accu mag, ongeacht de aanpak
+      - name: "HVAC Apart Vermogen"
+        unique_id: hvac_apart_vermogen
+        icon: mdi:air-conditioner
+        unit_of_measurement: "W"
+        device_class: power
+        state_class: measurement
+        state: >
+          {{ states('sensor.hvac_vermogen') | float(0) if is_state('binary_sensor.hvac_niet_uit_accu', 'on') else 0 }}
+
+      # Deel daarvan dat niet uit het net komt (dus uit zon). Wat de auto uit het net haalt gaat voor.
+      - name: "HVAC Apart Uit Zon Vermogen"
+        unique_id: hvac_apart_uit_zon_vermogen
+        icon: mdi:solar-power
+        unit_of_measurement: "W"
+        device_class: power
+        state_class: measurement
+        state: >
+          {% set h = states('sensor.hvac_apart_vermogen') | float(0) %}
+          {% set ev = states('sensor.ev_laadvermogen') | float(0) %}
+          {% set import_w = [states('sensor.p1_aansturing_vermogen') | float(0) - ev, 0] | max %}
+          {{ (h - [import_w, h] | min) | round(0) }}
 
   - binary_sensor:
       - name: "HVAC Actief"
@@ -103,11 +250,12 @@ template:
         icon: mdi:air-conditioner
         state: "{{ states('sensor.hvac_modus') not in ['Uit', 'Stand-by', 'unknown', 'unavailable'] }}"
 
-      # Aan = de NOM-modussen ontladen niet. "Aan" (geen climate-entiteit, modus onbekend)
-      # blijft altijd geblokkeerd, net als voorheen.
-      - name: "HVAC Ontladen Geblokkeerd"
-        unique_id: hvac_ontladen_geblokkeerd
-        icon: mdi:battery-off-outline
+      # Aan = de airco mag niet uit de accu: hij draait in een modus waarin dat niet is toegestaan
+      # en het is geen duur uur (met die optie aan). "Aan" (geen climate-entiteit, modus onbekend)
+      # telt altijd als niet toegestaan, net als voorheen.
+      - name: "HVAC Niet Uit Accu"
+        unique_id: hvac_niet_uit_accu
+        icon: mdi:air-conditioner
         state: >
           {% set m = states('sensor.hvac_modus') %}
           {% set toestaan = {'Verwarmen': 'input_boolean.hvac_ontladen_bij_verwarmen',
@@ -119,6 +267,15 @@ template:
           {% set duur_uur = is_state('input_boolean.hvac_ontladen_bij_duur_uur', 'on')
                             and is_state('sensor.dynamisch_duurste_periode', 'Ja') %}
           {{ is_state('binary_sensor.hvac_actief', 'on') and not modus_ok and not duur_uur }}
+
+      # Aan = de NOM-modussen ontladen niet. Bij aanpak Airco niet uit accu alleen als er geen
+      # vermogensmeting is (dan kan de correctie niet).
+      - name: "HVAC Ontladen Geblokkeerd"
+        unique_id: hvac_ontladen_geblokkeerd
+        icon: mdi:battery-off-outline
+        state: >
+          {{ is_state('binary_sensor.hvac_niet_uit_accu', 'on')
+             and not (is_state('input_select.hvac_aanpak', 'Airco niet uit accu') and has_value('sensor.hvac_vermogen')) }}
         attributes:
           reden: >
             {% set m = states('sensor.hvac_modus') %}
@@ -134,6 +291,10 @@ template:
             {% elif is_state('input_boolean.hvac_ontladen_bij_duur_uur', 'on')
                     and is_state('sensor.dynamisch_duurste_periode', 'Ja') %}
               {{ m }}, maar duur uur: ontladen toegestaan
+            {% elif is_state('input_select.hvac_aanpak', 'Airco niet uit accu') and has_value('sensor.hvac_vermogen') %}
+              {{ m }}: accu ontlaadt voor het huis, niet voor de airco ({{ states('sensor.hvac_vermogen') | float(0) | round(0) | int }} W)
+            {% elif is_state('input_select.hvac_aanpak', 'Airco niet uit accu') %}
+              {{ m }}: alleen laden (geen vermogensmeting, dus geen correctie mogelijk)
             {% else %}
               {{ m }}: alleen laden
             {% endif %}

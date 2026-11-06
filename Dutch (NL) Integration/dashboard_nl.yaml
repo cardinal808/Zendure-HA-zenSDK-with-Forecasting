@@ -4411,15 +4411,26 @@ views:
           - type: markdown
             content: >-
               <ha-alert alert-type="info">Helptekst</ha-alert>Zolang de airco
-              draait, ontladen de NOM-modussen niet (laden uit zon of net blijft
+              draait, mag hij niet uit de accu (laden uit zon of net blijft
               werken). Vul de entiteit van je airco in (bv.
               climate.airco_woonkamer; een vermogenssensor in W kan ook). Bij
               een climate-entiteit zie je de modus en zet je per modus aan of
-              ontladen toch mag, bv. **Koelen** aan (zomer, zon genoeg) en
-              **Verwarmen** uit (winter, geen zon). Staat de airco op
-              temperatuur (stand-by), dan ontlaadt de accu gewoon. Bij een
-              vermogenssensor of schakelaar is de modus onbekend en geldt de
-              blokkade altijd. Laat de sensor leeg om de functie uit te zetten.
+              de airco toch uit de accu mag, bv. **Koelen** aan (zomer, zon
+              genoeg) en **Verwarmen** uit (winter, geen zon). Staat de airco
+              op temperatuur (stand-by), dan ontlaadt de accu gewoon. Bij een
+              vermogenssensor of schakelaar is de modus onbekend en geldt het
+              altijd. Laat de sensor leeg om de functie uit te zetten.
+
+
+              **Aanpak:** *Niet ontladen* stopt het ontladen helemaal zolang de
+              airco niet uit de accu mag. *Airco niet uit accu* trekt het
+              vermogen van de airco af van de P1-meter (zoals bij de auto): de
+              accu voedt de rest van het huis gewoon. Daarvoor is een
+              vermogensmeting nodig (**Vermogen sensor**, W of kW, bv. een
+              Shelly; leeg = de HVAC sensor als dat een vermogenssensor is).
+              Met een vermogensmeting telt het airco-verbruik in die tijd ook
+              niet mee in het verbruiksprofiel en het dagverbruik, zodat de
+              planner niet rekent met stroom die de accu toch niet levert.
             text_only: true
             visibility:
               - condition: state
@@ -4434,8 +4445,12 @@ views:
                 name: HVAC sensor (bv. climate.airco_woonkamer)
               - entity: input_number.hvac_drempel_vermogen
                 name: Drempel vermogen W (alleen bij vermogenssensor, 0 = 50 W)
+              - entity: input_text.hvac_vermogen_sensor
+                name: Vermogen sensor (W/kW, leeg = HVAC sensor)
+              - entity: input_select.hvac_aanpak
+                name: Aanpak als de airco niet uit de accu mag
               - type: section
-                label: Ontladen toestaan bij
+                label: Airco uit de accu toestaan bij
               - entity: input_boolean.hvac_ontladen_bij_verwarmen
                 name: Verwarmen
               - entity: input_boolean.hvac_ontladen_bij_koelen
@@ -4454,8 +4469,16 @@ views:
                 name: Airco modus
               - entity: binary_sensor.hvac_actief
                 name: Airco actief
+              - entity: sensor.hvac_vermogen
+                name: Airco vermogen
+              - entity: binary_sensor.hvac_niet_uit_accu
+                name: Airco niet uit accu
+              - entity: sensor.hvac_ontlaad_correctie
+                name: Afgetrokken van P1
               - entity: binary_sensor.hvac_ontladen_geblokkeerd
                 name: Ontladen geblokkeerd
+              - entity: sensor.hvac_apart_7_dagen
+                name: Apart geteld (7 dagen)
               - type: attribute
                 entity: binary_sensor.hvac_ontladen_geblokkeerd
                 attribute: reden
@@ -4561,7 +4584,7 @@ views:
               {%- set p = [
                 ['Besparing', 'sensor.zendure_besparing', 'zendure_besparing.yaml', 'Tab Besparing: wat zon, accu en dynamisch contract opleveren, terugverdientijd.'],
                 ['EV', 'sensor.ev_laadplan', 'zendure_ev.yaml', 'Auto laden zonder dat de accu erin ontlaadt, laadsessie nacht of overdag.'],
-                ['HVAC', 'binary_sensor.hvac_actief', 'zendure_hvac.yaml', 'Niet ontladen terwijl de airco draait, per airco-modus.'],
+                ['HVAC', 'binary_sensor.hvac_actief', 'zendure_hvac.yaml', 'Airco niet uit de accu, per airco-modus: niet ontladen of het airco-vermogen aftrekken.'],
                 ['Diagnose-export', 'script.zendure_diagnose_export', 'zendure_export.yaml', 'Instellingen, sensoren en logs exporteren voor een vraag of issue.']
               ] -%}
               | | Pakket | Wat het doet |

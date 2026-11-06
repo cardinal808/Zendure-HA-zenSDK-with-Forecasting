@@ -4405,16 +4405,27 @@ views:
           - type: markdown
             content: >-
               <ha-alert alert-type="info">Help text</ha-alert>While the AC
-              runs, the Smart Matching modes do not discharge (charging from
-              solar or grid keeps working). Enter your AC entity (e.g.
+              runs, it may not run from the battery (charging from solar or
+              grid keeps working). Enter your AC entity (e.g.
               climate.living_room; a power sensor in W also works). With a
-              climate entity you see the mode and choose per mode whether
-              discharging is still allowed, e.g. **Cooling** on (summer,
+              climate entity you see the mode and choose per mode whether the
+              AC may still run from the battery, e.g. **Cooling** on (summer,
               plenty of sun) and **Heating** off (winter, no sun). When the
               AC has reached its temperature (standby), the battery
               discharges as usual. With a power sensor or switch the mode is
-              unknown and the block always applies. Leave the sensor empty to
-              switch the feature off.
+              unknown and it always applies. Leave the sensor empty to switch
+              the feature off.
+
+
+              **Approach:** *No discharging* stops discharging completely while
+              the AC may not run from the battery. *AC not from battery*
+              subtracts the AC power from the grid meter (as for the car): the
+              battery keeps supplying the rest of the house. That needs a power
+              measurement (**Power sensor**, W or kW, e.g. a Shelly; empty =
+              the HVAC sensor if that is a power sensor). With a power
+              measurement the AC usage during that time also does not count in
+              the usage profile and the daily usage, so the planner does not
+              count on power the battery will not supply anyway.
             text_only: true
             visibility:
               - condition: state
@@ -4429,8 +4440,12 @@ views:
                 name: HVAC sensor (e.g. climate.living_room)
               - entity: input_number.hvac_threshold_power
                 name: Threshold power W (power sensor only, 0 = 50 W)
+              - entity: input_text.hvac_power_sensor
+                name: Power sensor (W/kW, empty = HVAC sensor)
+              - entity: input_select.hvac_approach
+                name: Approach when the AC may not run from the battery
               - type: section
-                label: Allow discharge when
+                label: Allow the AC from the battery when
               - entity: input_boolean.hvac_allow_discharge_when_heating
                 name: Heating
               - entity: input_boolean.hvac_allow_discharge_when_cooling
@@ -4449,8 +4464,16 @@ views:
                 name: AC mode
               - entity: binary_sensor.hvac_active
                 name: AC active
+              - entity: sensor.hvac_power
+                name: AC power
+              - entity: binary_sensor.hvac_not_from_battery
+                name: AC not from battery
+              - entity: sensor.hvac_discharge_correction
+                name: Subtracted from grid meter
               - entity: binary_sensor.hvac_discharge_blocked
                 name: Discharge blocked
+              - entity: sensor.hvac_separate_7_days
+                name: Counted separately (7 days)
               - type: attribute
                 entity: binary_sensor.hvac_discharge_blocked
                 attribute: reason
@@ -4555,7 +4578,7 @@ views:
               {%- set p = [
                 ['Savings', 'sensor.zendure_savings', 'zendure_savings_global.yaml', 'Savings tab: what solar, the battery and a dynamic contract earn, payback time.'],
                 ['EV', 'sensor.ev_charge_plan', 'zendure_ev_global.yaml', 'Charge the car without the battery discharging into it, night or daytime session.'],
-                ['HVAC', 'binary_sensor.hvac_active', 'zendure_hvac_global.yaml', 'No discharging while the AC runs, per AC mode.'],
+                ['HVAC', 'binary_sensor.hvac_active', 'zendure_hvac_global.yaml', 'AC not from the battery, per AC mode: no discharging or subtract the AC power.'],
                 ['Diagnostics export', 'script.zendure_diagnostics_export', 'zendure_export_global.yaml', 'Export settings, sensors and logs for a question or issue.']
               ] -%}
               | | Package | What it does |

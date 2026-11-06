@@ -689,6 +689,8 @@ template:
       t_disch: "{{ states('sensor.forecast_zendure_discharge_total') | float(-1) }}"
       # Energy to the car (zendure_ev_global.yaml) does not count as house usage. Without that package 0.
       t_ev: "{{ states('sensor.ev_charged_total') | float(-1) }}"
+      # The AC while it may not run from the battery (zendure_hvac_global.yaml) does not count either. Without package 0.
+      t_hvac: "{{ states('sensor.hvac_separate_total') | float(-1) }}"
       t_prod: >
         {% set e = states('input_text.forecast_setting_solar_production_sensor') %}
         {% if e | lower | regex_match('^sensor\\..+') and has_value(e) %}
@@ -708,6 +710,10 @@ template:
         {% if t_ev >= 0 %}{{ t_ev }}
         {% elif prev_q is mapping and prev_q.ev is defined %}{{ prev_q.ev }}
         {% else %}0{% endif %}
+      hvac_now: >
+        {% if t_hvac >= 0 %}{{ t_hvac }}
+        {% elif prev_q is mapping and prev_q.hvac is defined %}{{ prev_q.hvac }}
+        {% else %}0{% endif %}
       measurement_ok: "{{ t_imp >= 0 and t_exp >= 0 and t_charge >= 0 and t_disch >= 0 and prod_now >= 0 }}"
       daytype_now: >
         {% if has_value('binary_sensor.workday_sensor') %}{{ 'workday' if is_state('binary_sensor.workday_sensor', 'on') else 'weekend' }}
@@ -718,7 +724,9 @@ template:
           {% set d = (t_imp - prev.imp) - (t_exp - prev.exp) + (prod_now - prev.prod) - (t_charge - prev.charge) + (t_disch - prev.disch) %}
           {% set d_ev = (ev_now - prev.ev) if prev.ev is defined else 0 %}
           {% set d_ev = d_ev if 0 <= d_ev <= c_max_hour_kwh else 0 %}
-          {{ ([d - d_ev, 0] | max | round(3)) if 0 <= d <= c_max_hour_kwh else -1 }}
+          {% set d_hvac = (hvac_now - prev.hvac) if prev.hvac is defined else 0 %}
+          {% set d_hvac = d_hvac if 0 <= d_hvac <= c_max_hour_kwh else 0 %}
+          {{ ([d - d_ev - d_hvac, 0] | max | round(3)) if 0 <= d <= c_max_hour_kwh else -1 }}
         {% else %}-1{% endif %}
       hour_idx: "{{ ((prev.ts | float(0)) | timestamp_custom('%H', true) | int) if prev is mapping else -1 }}"
       hour_type: "{{ (prev.daytype if prev is mapping and prev.daytype is defined else 'workday') }}"
@@ -730,7 +738,9 @@ template:
           {% set d = 0 if -0.05 <= d < 0 else d %}
           {% set d_ev = (ev_now - prev_q.ev) if prev_q.ev is defined else 0 %}
           {% set d_ev = d_ev if 0 <= d_ev <= c_max_hour_kwh / 4 else 0 %}
-          {{ ([d - d_ev, 0] | max | round(4)) if 0 <= d <= c_max_hour_kwh / 4 else -1 }}
+          {% set d_hvac = (hvac_now - prev_q.hvac) if prev_q.hvac is defined else 0 %}
+          {% set d_hvac = d_hvac if 0 <= d_hvac <= c_max_hour_kwh / 4 else 0 %}
+          {{ ([d - d_ev - d_hvac, 0] | max | round(4)) if 0 <= d <= c_max_hour_kwh / 4 else -1 }}
         {% else %}-1{% endif %}
       # Which hour (start, unix) and which quarter (0-3) does that measurement belong to?
       quarter_hour_ts: "{{ ((prev_q.ts | float(0)) // 3600 * 3600) | int if prev_q is mapping else 0 }}"
@@ -876,11 +886,11 @@ template:
           # Counter values for the calculation an hour from now (only updated on the full hour)
           measurement: >
             {% if full_hour %}
-              {% if measurement_ok %}{{ {'ts': now_ts | round(0), 'imp': t_imp, 'exp': t_exp, 'prod': prod_now, 'charge': t_charge, 'disch': t_disch, 'ev': ev_now, 'daytype': daytype_now} }}{% else %}{{ none }}{% endif %}
+              {% if measurement_ok %}{{ {'ts': now_ts | round(0), 'imp': t_imp, 'exp': t_exp, 'prod': prod_now, 'charge': t_charge, 'disch': t_disch, 'ev': ev_now, 'hvac': hvac_now, 'daytype': daytype_now} }}{% else %}{{ none }}{% endif %}
             {% else %}{{ prev }}{% endif %}
           # Counter values for the calculation a quarter from now
           measurement_quarter: >
-            {% if measurement_ok %}{{ {'ts': now_ts | round(0), 'imp': t_imp, 'exp': t_exp, 'prod': prod_now, 'charge': t_charge, 'disch': t_disch, 'ev': ev_now, 'daytype': daytype_now} }}{% else %}{{ none }}{% endif %}
+            {% if measurement_ok %}{{ {'ts': now_ts | round(0), 'imp': t_imp, 'exp': t_exp, 'prod': prod_now, 'charge': t_charge, 'disch': t_disch, 'ev': ev_now, 'hvac': hvac_now, 'daytype': daytype_now} }}{% else %}{{ none }}{% endif %}
 
   # -------------------------------------------------------------------
   # 4. THE PLANNER
@@ -1013,6 +1023,9 @@ template:
       # Car (zendure_ev_global.yaml): not house usage and not direct solar usage. Without the package 0.
       ev7: "{{ states('sensor.ev_charged_7_days') | float(0) }}"
       ev_solar7: "{{ states('sensor.ev_charged_from_solar_7_days') | float(0) }}"
+      # The AC while it may not run from the battery (zendure_hvac_global.yaml): same treatment. Without package 0.
+      hvac7: "{{ states('sensor.hvac_separate_7_days') | float(0) }}"
+      hvac_solar7: "{{ states('sensor.hvac_separate_from_solar_7_days') | float(0) }}"
       hist_days: >
         {# Largest coverage of solar, grid import and battery charging: without solar panels (or
            when the solar counter is temporarily missing) the history of the other counters
@@ -1025,7 +1038,8 @@ template:
         {{ (7 * ns.c) | round(2) }}
 
       # Directly used solar in 7 days = production - export from solar - charging from solar - car from solar
-      direct_7_kwh: "{{ [prod7 - exp_solar7 - charge_solar7 - ev_solar7, 0] | max }}"
+      # - AC from solar (counted separately)
+      direct_7_kwh: "{{ [prod7 - exp_solar7 - charge_solar7 - ev_solar7 - hvac_solar7, 0] | max }}"
       # Solar self-consumption (%) = directly used solar / production
       # Calculated from the first measured solar production (day 1), with the history available.
       self_consumption_calculated: >
@@ -1047,11 +1061,11 @@ template:
         {% elif self_consumption_calculated >= 0 %}Calculated (% of production, day 1)
         {% else %}Starting value {{ c_self_consumption_default_pct }}% (no solar production measured yet){% endif %}
 
-      # Average usage per day = import - export + production - charging + discharging - car
+      # Average usage per day = import - export + production - charging + discharging - car - AC (separate)
       # Calculated from about 2 hours of history and scaled to a day; gets more accurate every day.
       usage_day_calculated: >
         {% if hist_days >= c_min_hist_days and (imp7 + prod7) > 0 %}
-          {{ (([imp7 - exp7 + prod7 - charge7 + discharge7 - ev7, 0] | max) / hist_days) | round(2) }}
+          {{ (([imp7 - exp7 + prod7 - charge7 + discharge7 - ev7 - hvac7, 0] | max) / hist_days) | round(2) }}
         {% else %}-1{% endif %}
       usage_day: "{{ usage_day_calculated if usage_day_calculated >= c_min_usage_kwh else c_usage_start_kwh }}"
       usage_source: >
@@ -2282,7 +2296,8 @@ automation:
                 'sensor.forecast_counter_grid_export', 'sensor.forecast_counter_grid_export_from_solar',
                 'sensor.forecast_counter_zendure_charge', 'sensor.forecast_counter_zendure_discharge',
                 'sensor.forecast_counter_zendure_charge_from_solar',
-                'sensor.ev_counter_charged', 'sensor.ev_counter_charged_from_solar']
+                'sensor.ev_counter_charged', 'sensor.ev_counter_charged_from_solar',
+                'sensor.hvac_counter_separate', 'sensor.hvac_counter_separate_from_solar']
                | select('in', states.sensor | map(attribute='entity_id') | list) | list }}
       - action: recorder.purge_entities
         target:
