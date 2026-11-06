@@ -154,8 +154,11 @@ script:
               {%- for s in states[dom] if s.object_id is match(re_helper) -%}
                 {%- set secret = s.object_id is search(mask) -%}
                 {%- set ns.set = ns.set + [[s.entity_id, '***' if secret and s.state not in ['', 'unknown'] else s.state]] -%}
-                {%- if dom == 'input_text' and not secret and (s.state | trim) is match('^[a-z_]+[.][a-z0-9_]+$') -%}
-                  {%- set ns.ent_ext = ns.ent_ext + [s.state | trim] -%}
+                {#- Configured entities, also a comma list (e.g. own grid counters) -#}
+                {%- if dom == 'input_text' and not secret -%}
+                  {%- for e in (s.state | lower).split(',') | map('trim') | select('match', '^[a-z_]+[.][a-z0-9_]+$') -%}
+                    {%- if e not in ns.ent_ext -%}{%- set ns.ent_ext = ns.ent_ext + [e] -%}{%- endif -%}
+                  {%- endfor -%}
                 {%- endif -%}
               {%- endfor -%}
             {%- endfor -%}

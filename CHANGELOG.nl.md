@@ -65,6 +65,12 @@ Versies volgen `jaar.maand.volgnummer`; het volgnummer begint elke maand bij 1. 
 - De README heeft een tabel **Pakketten**: per bestand vereist of optioneel, wat het doet, wat het nodig heeft en wat je mist zonder.
 - Elk pakket heeft bovenaan, onder de versiekop, de regel `# OPTIONEEL PAKKET` (met wat het nodig heeft) of `# VEREIST PAKKET`.
 
+**Opgelost**
+- **Zonproductie altijd *niet beschikbaar*:** de nieuwe zon-teller miste twee variabelen, waardoor `sensor.forecast_teller_zon_productie` niet beschikbaar was, de 7-daagse zonproductie leeg bleef en de planner op startwaarden rekende (*Historie beschikbaar: 0 van 7 dagen*). Hersteld. Na een herstart 's nachts zonder stand wacht de teller tot de omvormer een waarde geeft, en de eerste keer begint hij bij de stand van de omvormer (sluit aan op de oude meetpunten).
+- **Historie:** de planner neemt nu de grootste dekking van zonproductie, net-import en accu laden. Zonder zonnepanelen, of als de zon-teller even ontbreekt, telt de historie van de andere tellers.
+- **Accu leeg op het dashboard** (Plan vandaag en de pad-check-regel) houdt nu rekening met de zon, slim vasthouden en vooraf ontladen, zoals het plan zelf. Eerder kon er "leeg om 21:20" staan terwijl de accu juist voor de ochtendpiek werd bewaard. Het plan zelf verandert niet.
+- **Diagnose-export:** ingevulde velden met meerdere sensoren (komma-lijst, bv. eigen net-tellers) staan nu ook bij de externe sensoren.
+
 **Upgraden**
 - Vervang alle bestanden en **herstart** Home Assistant.
 - Vervang `zendure_besparing.yaml` en `zendure_negatieve_prijs.yaml` altijd samen: staan beide versies door elkaar, dan zijn opslag en bonus teruglevering dubbel gedefinieerd en start Home Assistant de configuratie niet.

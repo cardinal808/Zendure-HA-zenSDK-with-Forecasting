@@ -449,6 +449,14 @@ template:
         {%- else -%}-1{%- endif -%}
       int_import: "{{ states('sensor.forecast_grid_import_total') | float(-1) }}"
       int_export: "{{ states('sensor.forecast_grid_export_total') | float(-1) }}"
+      # Solar production: configured total counter (kWh; Wh and MWh are converted); -1 = no value
+      solar_entity: "{{ states('input_text.forecast_setting_solar_production_sensor') | trim | lower }}"
+      solar_source: >
+        {%- if solar_entity | regex_match('^sensor\\..+') and has_value(solar_entity) -%}
+          {%- set u = state_attr(solar_entity, 'unit_of_measurement') -%}
+          {%- set v = states(solar_entity) | float(-1) -%}
+          {%- if v < 0 -%}-1{%- elif u == 'Wh' -%}{{ (v / 1000) | round(4) }}{%- elif u == 'MWh' -%}{{ (v * 1000) | round(4) }}{%- else -%}{{ v }}{%- endif -%}
+        {%- else -%}-1{%- endif -%}
     sensor:
       # Solar production: adds up the increase of the configured production sensor instead of
       # copying its value. A jump then does not count as production: another sensor entered, a
@@ -460,10 +468,17 @@ template:
         unit_of_measurement: "kWh"
         device_class: energy
         state_class: total_increasing
-        availability: "{{ solar_entity | lower | regex_match('^sensor\\..+') }}"
+        # Available with a valid sensor and a value: its own reading or a reading of the source.
+        # After a restart at night (inverter offline, no reading yet) it waits instead of
+        # starting at 0.
+        availability: >
+          {{ solar_entity | regex_match('^sensor\\..+')
+             and (this.state | float(-1) >= 0 or solar_source >= 0) }}
         state: >
           {% set prev_v = this.state | float(-1) %}
-          {% set prev_v = prev_v if prev_v >= 0 else 0 %}
+          {# No own reading yet (first time): start at the source reading. That matches the old
+             data points (which copied the reading) and avoids a negative 7-day change. #}
+          {% set prev_v = prev_v if prev_v >= 0 else ([solar_source, 0] | max) %}
           {% set s_old = this.attributes.get('source') %}
           {% set s_ts = this.attributes.get('source_ts') | float(0) %}
           {% if solar_source >= 0 and s_old is number and this.attributes.get('source_entity') == solar_entity %}
@@ -999,9 +1014,15 @@ template:
       ev7: "{{ states('sensor.ev_charged_7_days') | float(0) }}"
       ev_solar7: "{{ states('sensor.ev_charged_from_solar_7_days') | float(0) }}"
       hist_days: >
-        {% set c = state_attr('sensor.forecast_solar_production_7_days', 'age_coverage_ratio') %}
-        {# No value (e.g. right after a reset): no history yet #}
-        {{ (7 * (c | float(0) if c is not none else 0)) | round(2) }}
+        {# Largest coverage of solar, grid import and battery charging: without solar panels (or
+           when the solar counter is temporarily missing) the history of the other counters
+           counts. No value at all (e.g. right after a reset): no history yet. #}
+        {% set ns = namespace(c=0) %}
+        {% for e in ['sensor.forecast_solar_production_7_days', 'sensor.forecast_grid_import_7_days', 'sensor.forecast_zendure_charge_7_days'] %}
+          {% set c = state_attr(e, 'age_coverage_ratio') %}
+          {% if c is not none %}{% set ns.c = [ns.c, c | float(0)] | max %}{% endif %}
+        {% endfor %}
+        {{ (7 * ns.c) | round(2) }}
 
       # Directly used solar in 7 days = production - export from solar - charging from solar - car from solar
       direct_7_kwh: "{{ [prod7 - exp_solar7 - charge_solar7 - ev_solar7, 0] | max }}"
@@ -1772,6 +1793,49 @@ template:
       # Pre-discharge comes first: no hold in the quarter hours above the threshold price
       hold_discharge: "{{ (dip_hold or smart_hold) and not pd_discharge_now }}"
 
+      # ---- Battery empty (for the dashboard) ------------------------------
+      # As the plan expects it: today's (and tomorrow's) solar counts, the battery does not supply
+      # in cheap dips (dip hold), and with smart hold not below the threshold price either. Before a
+      # negative window with pre-discharge no hold applies. Without charge margin; planned charge
+      # slots do not count (as before). Display only, the plan uses t_empty_plan_ts / t_empty_ahead_ts.
+      sh_plan_active: >
+        {{ is_state('input_boolean.forecast_setting_hold_discharge_in_dip', 'on') and prices_ok
+           and not sh_charge_planned and sh_threshold is number and solar_dc <= room }}
+      t_empty_show_ts: >
+        {%- set emax = s_max * eff_out -%}
+        {%- set ns = namespace(e=s_now * eff_out, t=0, end=now_ts, ev=ev_solar_today_kwh) -%}
+        {%- set solar_no_detail = solar_detail | length == 0 and is_state('sun.sun', 'above_horizon') -%}
+        {%- if solar_no_detail -%}{%- set ns.e = [ns.e + solar_dc * eff_out, emax] | min -%}{%- endif -%}
+        {%- set sol_l = path_solar if path_ahead else solar_detail -%}
+        {%- for x in (cand + tmrw) | sort(attribute='s') -%}
+          {%- if ns.t == 0 and x.e > now_ts -%}
+            {%- set a = [x.s, now_ts] | max -%}{%- set b = x.e -%}
+            {%- set ns.end = b -%}
+            {%- set nk = namespace(k=0) -%}{%- for i in range(((a - q_s0) // 900) | int, ((b - q_s0 - 0.001) // 900) | int + 1) -%}{%- set qa = q_s0 + i * 900 -%}{%- set ov = [qa + 900, b] | min - [qa, a] | max -%}{%- if ov > 0 -%}{%- set nk.k = nk.k + (q_kw[[i, 0] | max] if i < q_kw | length else l_hour) * ov / 3600 -%}{%- endif -%}{%- endfor -%}
+            {%- set nz = namespace(d=0, o=0) -%}
+            {%- for p in sol_l -%}
+              {%- set pa = [p.s, a] | max -%}{%- set pb = [p.s + c_detail_period_s, b] | min -%}
+              {%- if pb > pa -%}
+                {%- set nz.d = nz.d + ([p.pv, p.kw] | min) * (pb - pa) / 3600 -%}
+                {%- set nz.o = nz.o + ([p.pv - p.kw, 0] | max) * (pb - pa) / 3600 -%}
+              {%- endif -%}
+            {%- endfor -%}
+            {%- if solar_no_detail and a < sunset_ts -%}{%- set nz.d = nk.k -%}{%- endif -%}
+            {%- set to_ev = [nz.o, ns.ev] | min -%}{%- set ns.ev = ns.ev - to_ev -%}
+            {%- set ns.e = [ns.e + (nz.o - to_ev) * eff_in * eff_out, emax] | min -%}
+            {%- set is_tmrw = x.s >= end_today_ts -%}
+            {%- set dip = dip_hold_plan and ((x.v <= dip_threshold_tomorrow and x.v < p_tmrw_avg) if is_tmrw else (x.v <= dip_threshold and x.v < p_day_avg)) -%}
+            {%- set vh = sh_plan_active and b <= t_gap_end_ts and x.v < sh_threshold - c_hold_min_difference -%}
+            {%- set pd_free = pd_active and x.s < pd_window.s -%}
+            {%- set need = [nk.k - nz.d, 0] | max -%}
+            {%- if pd_free or not (dip or vh) -%}
+              {%- if need >= ns.e and need > 0 -%}{%- set ns.t = a + ns.e / need * (b - a) -%}
+              {%- else -%}{%- set ns.e = ns.e - need -%}{%- endif -%}
+            {%- endif -%}
+          {%- endif -%}
+        {%- endfor -%}
+        {{ ns.t if ns.t > 0 else (ns.end + (ns.e / l_hour * 3600 if l_hour > 0 else 172800)) }}
+
       # ---- Overview for tomorrow --------------------------------------
       tomorrow_direct: "{{ direct_tomorrow_kwh | round(2) }}"
       tomorrow_battery_usage: "{{ ([usage_day - tomorrow_direct, 0] | max) | round(2) }}"
@@ -1982,8 +2046,8 @@ template:
             {%- elif chosen | length == 0 -%}
               {%- if empty -%}The battery is empty. The house now takes power directly from the grid{% if gap_slots | length > 0 %}, until {{ at(t_gap_end_ts) }} at most €{{ '%.3f' | format(gap_slots | map(attribute='v') | max) }}{% endif %}. Before that there is no charge moment left that is cheaper than buying directly after {{ ((1 - eff_rt) * 100) | round(0) | int }}% charge and discharge loss.
               {%- elif smart_hold and not pd_discharge_now -%}The battery ({{ '%.1f' | format(s_now) }} kWh) does not last until {{ at(t_gap_end_ts) }} and there is no charge moment left. It is therefore saved for the most expensive quarters (€{{ '%.3f' | format(sh_threshold) }} and up); until then the house buys directly at €{{ '%.3f' | format(price_now) }}. Charging from the grid does not pay off now.
-              {%- elif dip_hold_plan and not pd_active -%}The battery ({{ '%.1f' | format(s_now) }} kWh) is saved during cheap dips, because buying directly is cheaper there; it only supplies power in more expensive quarter hours and is expected to be empty around {{ at(t_empty_ts) }}. Grid charging does not pay off now: no slot is cheaper after loss than the purchase it would replace.
-              {%- else -%}The battery ({{ '%.1f' | format(s_now) }} kWh) supplies power until about {{ at(t_empty_ts) }}. Grid charging does not pay off now: no slot is cheaper after loss than the purchase it would replace.
+              {%- elif dip_hold_plan and not pd_active -%}The battery ({{ '%.1f' | format(s_now) }} kWh) is saved during cheap dips, because buying directly is cheaper there; it only supplies power in more expensive quarter hours and is expected to be empty around {{ at(t_empty_show_ts) }}. Grid charging does not pay off now: no slot is cheaper after loss than the purchase it would replace.
+              {%- else -%}The battery ({{ '%.1f' | format(s_now) }} kWh) supplies power until about {{ at(t_empty_show_ts) }}. Grid charging does not pay off now: no slot is cheaper after loss than the purchase it would replace.
               {%- endif -%}
               {%- if not tomorrow_known %} Tomorrow's prices arrive around 14:00, then the plan is recalculated.
               {%- else -%}{{ tomorrow_line }}
@@ -2003,7 +2067,7 @@ template:
               {%- if pd_sim.e > pd_target_dc + 0.05 %} Even then there is probably not room for everything; the inverter limit catches the rest.{% endif -%}
             {%- endif -%}
           # --- Path check (does the battery last until energy comes in again?) ---
-          pathcheck_battery_empty_at: "{{ (t_empty_ts | timestamp_custom('%Y-%m-%d %H:%M', true)) if t_empty_ts < now_ts + 172800 else none }}"
+          pathcheck_battery_empty_at: "{{ (t_empty_show_ts | timestamp_custom('%Y-%m-%d %H:%M', true)) if t_empty_show_ts < now_ts + 172800 else none }}"
           pathcheck_solar_covers_from: "{{ t_cover_ts | timestamp_custom('%Y-%m-%d %H:%M', true) }}"
           pathcheck_solar_source: "{{ cover_source }}"
           pathcheck_gap_end: "{{ t_gap_end_ts | timestamp_custom('%Y-%m-%d %H:%M', true) }}"
