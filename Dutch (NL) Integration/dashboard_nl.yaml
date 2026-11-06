@@ -4444,6 +4444,50 @@ views:
             hours_to_show: 4
           - type: heading
             icon: ''
+            heading: Diagnose-export
+            heading_style: title
+            visibility:
+              - condition: state
+                entity: script.zendure_diagnose_export
+                state_not: unavailable
+          - type: markdown
+            content: >-
+              <ha-alert alert-type="info">Helptekst</ha-alert>Met **Export maken**
+              schrijf je één bestand met je instellingen, de stand van alle
+              sensoren, de details van de planner en de logs van de afgelopen 24
+              uur. Je krijgt een melding met een downloadlink; stuur het bestand
+              mee met je vraag of GitHub-issue. IP-adressen en serienummers worden
+              weggelaten. Het bestand wordt na 1 uur vanzelf verwijderd.
+              Beslissingen, momentopnames en foutmeldingen worden verzameld vanaf
+              het moment dat dit pakket geladen is.
+            text_only: true
+            visibility:
+              - condition: state
+                entity: input_boolean.help_tonen_op_dashboard
+                state: 'on'
+              - condition: state
+                entity: script.zendure_diagnose_export
+                state_not: unavailable
+          - type: entities
+            entities:
+              - entity: script.zendure_diagnose_export
+                name: Export maken
+              - entity: script.zendure_diagnose_export_wissen
+                name: Export verwijderen
+              - type: section
+                label: Verzameld
+              - entity: sensor.zendure_diagnose_beslissingen
+                name: Beslissingen (laatste 50)
+              - entity: sensor.zendure_diagnose_momentopnames
+                name: Momentopnames (laatste 24 uur)
+              - entity: sensor.zendure_diagnose_fouten
+                name: Foutmeldingen (laatste 20)
+            visibility:
+              - condition: state
+                entity: script.zendure_diagnose_export
+                state_not: unavailable
+          - type: heading
+            icon: ''
             heading: Versiebeheer
             heading_style: title
             badges:

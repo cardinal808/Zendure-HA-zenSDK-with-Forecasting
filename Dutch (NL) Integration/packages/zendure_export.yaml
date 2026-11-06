@@ -1,0 +1,348 @@
+# Zendure zenSDK (Gielz) + Forecasting 2026.11.3 | gebaseerd op Gielz v20261007
+# Gebaseerd op Gielz1986/Zendure-HA-zenSDK (Michiel Hofker). Zie README.md voor licentie en wijzigingen.
+# =====================================================================
+# Zendure Export - configuratie en logboek exporteren voor analyse (optioneel)
+#
+# Plaats dit bestand naast zendure_gielz1986_nl.yaml (zelfde packages-map) en herstart Home
+# Assistant. Het blok "Diagnose-export" op de tab Configuratie verschijnt vanzelf zodra dit bestand
+# geladen is. De automation en de andere pakketten hoeven niet aangepast te worden.
+#
+# Wat het pakket doet:
+# 1. Beslissingslog (sensor.zendure_diagnose_beslissingen): elke regel die de automation en de
+#    pakketten in het logboek zetten (logbook.log op de modus-selectie), met tijd, modus en SOC.
+#    De laatste 50 regels.
+# 2. Momentopnames (sensor.zendure_diagnose_momentopnames): elk kwartier modus, SOC, P1, vermogen
+#    Zendure, PV, prijs, gepland netladen, HVAC-blokkade en EV-correctie. De laatste 24 uur.
+# 3. Foutmeldingen (sensor.zendure_diagnose_fouten): waarschuwingen en fouten uit het
+#    Home Assistant-log die over deze set gaan (Zendure, Forecasting, Dynamisch, HVAC, EV, ...).
+#    De laatste 20. Daarvoor zet dit pakket system_log: fire_event: true aan (zie onderaan).
+# 4. Export (script.zendure_diagnose_export): schrijft één JSON-bestand met versies, actieve
+#    pakketten, alle instellingen van de set, de stand van alle sensoren, de details van de
+#    planner (sensor.zendure_forecast_plan e.a.), de ingevulde externe sensoren, de status van de
+#    Zendure-automatiseringen en de drie logs hierboven. Je krijgt een melding met een
+#    downloadlink. Na 1 uur (en bij elke herstart) wordt het bestand weer verwijderd.
+#
+# Privacy: IP-adressen en serienummers worden vervangen door *** of x.x.x.x. Er staan geen
+# wachtwoorden of tokens in de set. Kijk het bestand wel even door voordat je het deelt.
+# Het bestand staat in /config/www en is via /local/ zonder inloggen bereikbaar zolang het
+# bestaat; daarom heeft de naam een willekeurig stuk en wordt het na 1 uur verwijderd.
+#
+# Eenmalig: bestond de map /config/www nog niet, dan maakt de export hem aan. Home Assistant
+# kent /local/ pas na een herstart; werkt de downloadlink niet, herstart dan één keer.
+#
+# Heb je zelf al system_log: in configuration.yaml staan? Haal dan het blok system_log
+# onderaan dit bestand weg en zet fire_event: true in je eigen configuratie.
+#
+# Tip: de momentopnames en het beslissingslog hoeven niet in de recorder. Wil je de database
+# klein houden, sluit dan sensor.zendure_diagnose_* uit (recorder: exclude: entity_globs).
+# =====================================================================
+
+template:
+  - trigger:
+      - platform: event
+        event_type: logbook_entry
+        event_data:
+          entity_id: input_select.zendure_2400_ac_modus_selecteren
+        id: beslissing
+      - platform: event
+        event_type: system_log_event
+        id: fout
+      - platform: time_pattern
+        minutes: "/15"
+        id: momentopname
+    condition:
+      # Alleen meldingen uit het HA-log die over deze set gaan
+      - condition: template
+        value_template: >-
+          {{ trigger.id != 'fout'
+             or (trigger.event.data | string) is search('(?i)zendure|gielz|forecast|\\b(dynamisch|hvac|ev|negatieve_prijs|besparing|homewizard|p1)_') }}
+    sensor:
+      - name: "Zendure Diagnose Beslissingen"
+        unique_id: zendure_diagnose_beslissingen
+        icon: mdi:script-text-outline
+        state: >-
+          {{ [((this.attributes.get('regels') or []) | length) + (1 if trigger.id == 'beslissing' else 0), 50] | min }}
+        attributes:
+          kolommen: "{{ ['tijd', 'melding', 'modus', 'soc'] }}"
+          regels: >-
+            {%- set oud = this.attributes.get('regels') or [] -%}
+            {%- if trigger.id == 'beslissing' -%}
+              {%- set melding = (trigger.event.data.message | default('') | string)
+                   | regex_replace('\\s+', ' ') | replace(' —', '') | trim -%}
+              {{ (oud + [[now().strftime('%Y-%m-%d %H:%M:%S'), melding[:300],
+                         states('input_select.zendure_2400_ac_modus_selecteren'),
+                         states('sensor.zendure_2400_ac_laadpercentage') | float(none)]])[-50:] }}
+            {%- else -%}
+              {{ oud }}
+            {%- endif -%}
+
+      - name: "Zendure Diagnose Momentopnames"
+        unique_id: zendure_diagnose_momentopnames
+        icon: mdi:camera-timer
+        state: >-
+          {{ [((this.attributes.get('regels') or []) | length) + (1 if trigger.id == 'momentopname' else 0), 96] | min }}
+        attributes:
+          kolommen: >-
+            {{ ['tijd', 'modus', 'soc_pct', 'p1_w', 'zendure_w', 'pv_zendure_w', 'prijs_eur_kwh',
+                'gepland_netladen_kwh', 'hvac_blokkeert', 'ev_correctie_w'] }}
+          regels: >-
+            {%- set oud = this.attributes.get('regels') or [] -%}
+            {%- if trigger.id == 'momentopname' -%}
+              {%- set hvac = states('binary_sensor.hvac_ontladen_geblokkeerd') -%}
+              {{ (oud + [[now().strftime('%Y-%m-%d %H:%M'),
+                         states('input_select.zendure_2400_ac_modus_selecteren'),
+                         states('sensor.zendure_2400_ac_laadpercentage') | float(none),
+                         states('sensor.p1_aansturing_vermogen') | float(none),
+                         states('sensor.zendure_2400_ac_vermogen_aansturing') | float(none),
+                         states('sensor.zendure_2400_ac_vermogen_pv_totaal') | float(none),
+                         states('sensor.dynamisch_nordpool') | float(none),
+                         state_attr('sensor.zendure_forecast_plan', 'gepland_netladen_kwh') | float(none),
+                         1 if hvac == 'on' else (0 if hvac == 'off' else none),
+                         states('sensor.ev_ontlaad_correctie') | float(none)]])[-96:] }}
+            {%- else -%}
+              {{ oud }}
+            {%- endif -%}
+
+      - name: "Zendure Diagnose Fouten"
+        unique_id: zendure_diagnose_fouten
+        icon: mdi:alert-circle-outline
+        state: >-
+          {{ [((this.attributes.get('regels') or []) | length) + (1 if trigger.id == 'fout' else 0), 20] | min }}
+        attributes:
+          kolommen: "{{ ['tijd', 'niveau', 'logger', 'melding', 'bron'] }}"
+          regels: >-
+            {%- set oud = this.attributes.get('regels') or [] -%}
+            {%- if trigger.id == 'fout' -%}
+              {%- set d = trigger.event.data -%}
+              {%- set tekst = (d.message if d.message is list else [d.message | default('')]) | join(' | ') -%}
+              {%- set bron = (d.source | default([]) | join(':')) if d.source is defined and d.source is not string else (d.source | default('') | string) -%}
+              {{ (oud + [[now().strftime('%Y-%m-%d %H:%M:%S'), d.level | default(''), d.name | default(''),
+                         (tekst | regex_replace('\\s+', ' '))[:400], bron[:150]]])[-20:] }}
+            {%- else -%}
+              {{ oud }}
+            {%- endif -%}
+
+script:
+  zendure_diagnose_export:
+    alias: Zendure Diagnose Exporteren
+    description: >-
+      Forecasting 2026.11.3 - Schrijft configuratie, sensorstanden, plannerdetails en logs naar
+      één JSON-bestand in /config/www en geeft een melding met de downloadlink. Het bestand wordt
+      na 1 uur verwijderd.
+    icon: mdi:file-export-outline
+    mode: restart
+    sequence:
+      - variables:
+          token: >-
+            {%- set ns = namespace(t='x') -%}
+            {%- for i in range(12) -%}{%- set ns.t = ns.t ~ ('abcdefghjkmnpqrstuvwxyz23456789' | random) -%}{%- endfor -%}
+            {{ ns.t }}
+          bestand: "zendure_export_{{ now().strftime('%Y%m%d_%H%M') }}_{{ token }}.json"
+          url: "/local/{{ bestand }}"
+          # De export zelf: JSON, IP-adressen gemaskeerd, base64 in stukken (voor de shell_command)
+          inhoud: >-
+            {%- set masker = '(?i)ip_adres|ip_address|serienummer|serial' -%}
+            {%- set re_helper = '^(zendure_|dynamisch_|forecast_|besparing_|ev_|hvac_|negatieve_prijs_|help_tonen|pv_tonen|afwijkende_p1|homewizard_p1)' -%}
+            {%- set re_sensor = '^(zendure_|forecast|dynamisch_|p1_|homewizard_|hvac_|ev_|github_zendure)' -%}
+            {%- set ns = namespace(inst=[], sens=[], det=[], ext=[], aut=[], ent_ext=[]) -%}
+            {#- Instellingen: alle invoervelden van de set -#}
+            {%- for dom in ['input_boolean', 'input_number', 'input_select', 'input_text', 'input_datetime'] -%}
+              {%- for s in states[dom] if s.object_id is match(re_helper) -%}
+                {%- set geheim = s.object_id is search(masker) -%}
+                {%- set ns.inst = ns.inst + [[s.entity_id, '***' if geheim and s.state not in ['', 'unknown'] else s.state]] -%}
+                {%- if dom == 'input_text' and not geheim and (s.state | trim) is match('^[a-z_]+[.][a-z0-9_]+$') -%}
+                  {%- set ns.ent_ext = ns.ent_ext + [s.state | trim] -%}
+                {%- endif -%}
+              {%- endfor -%}
+            {%- endfor -%}
+            {#- Sensoren van de set: stand + eenheid -#}
+            {%- for s in (states.sensor | list) + (states.binary_sensor | list)
+                if s.object_id is match(re_sensor) and not s.object_id.startswith('zendure_diagnose') -%}
+              {%- set eenheid = s.attributes.unit_of_measurement | default('') -%}
+              {%- set ns.sens = ns.sens + [[s.entity_id,
+                   '***' if s.object_id is search(masker) else (s.state ~ ((' ' ~ eenheid) if eenheid else ''))]] -%}
+            {%- endfor -%}
+            {#- Details: alle attributen van de planner en de belangrijkste sensoren -#}
+            {%- set detail = ['sensor.zendure_forecast_plan', 'sensor.forecast_verbruiksprofiel',
+                 'sensor.forecast_zelfverbruik_zon', 'sensor.forecasting_versie', 'sensor.dynamisch_nordpool',
+                 'sensor.dynamisch_goedkoopste_periode', 'sensor.zendure_2400_ac_indicatie_benodigde_energie',
+                 'sensor.zendure_2400_ac_indicatie_beschikbare_energie', 'sensor.zendure_terugleverprijs_nu',
+                 'sensor.zendure_besparing', 'sensor.ev_laadplan', 'sensor.hvac_modus',
+                 'binary_sensor.hvac_ontladen_geblokkeerd', 'binary_sensor.zendure_export_geblokkeerd_negatieve_prijs'] -%}
+            {#- (een attribuut van meer dan 20.000 tekens wordt vervangen door alleen de grootte) -#}
+            {%- for s in expand(detail) -%}
+              {%- set na = namespace(a=[]) -%}
+              {%- for k, v in s.attributes.items() -%}
+                {%- set n = v | to_json | length -%}
+                {%- set na.a = na.a + [[k, v if n <= 20000 else '(te groot: ' ~ n ~ ' tekens)']] -%}
+              {%- endfor -%}
+              {%- set ns.det = ns.det + [[s.entity_id, {'state': s.state, 'last_changed': s.last_changed.isoformat(),
+                   'attributes': dict(na.a)}]] -%}
+            {%- endfor -%}
+            {#- Externe entiteiten die in de invoervelden zijn ingevuld (zon-forecast, Nordpool, airco, ...) -#}
+            {%- for s in expand(ns.ent_ext | unique | list) -%}
+              {%- set a = dict(s.attributes) -%}
+              {%- set ns.ext = ns.ext + [[s.entity_id, {'state': s.state, 'last_changed': s.last_changed.isoformat(),
+                   'attributes': a if (a | to_json | length) < 1500 else {'(te groot, alleen namen)': a.keys() | list}}]] -%}
+            {%- endfor -%}
+            {#- Zendure-automatiseringen -#}
+            {%- for s in states.automation if (s.object_id ~ ' ' ~ s.name) is search('(?i)zendure|gielz|forecast') -%}
+              {%- set ns.aut = ns.aut + [[s.entity_id, {'naam': s.name, 'state': s.state,
+                   'laatst_getriggerd': s.attributes.last_triggered | default(none),
+                   'nu_actief': s.attributes.current | default(0), 'modus': s.attributes.mode | default('')}]] -%}
+            {%- endfor -%}
+            {%- set export = {
+                 'meta': {
+                   'export': now().isoformat(),
+                   'taal': 'NL',
+                   'forecasting_versie': states('sensor.forecasting_versie'),
+                   'gielz_versie': states('sensor.zendure_2400_ac_configuratie_versie'),
+                   'pakketten': state_attr('sensor.forecasting_versie', 'pakketten'),
+                   'home_assistant': state_attr('update.home_assistant_core_update', 'installed_version'),
+                   'tijdzone': now().tzname()
+                 },
+                 'instellingen': dict(ns.inst | sort(attribute='0')),
+                 'sensoren': dict(ns.sens | sort(attribute='0')),
+                 'details': dict(ns.det),
+                 'extern': dict(ns.ext),
+                 'automatiseringen': dict(ns.aut),
+                 'beslissingen': {
+                   'kolommen': state_attr('sensor.zendure_diagnose_beslissingen', 'kolommen'),
+                   'regels': state_attr('sensor.zendure_diagnose_beslissingen', 'regels') or []
+                 },
+                 'momentopnames': {
+                   'kolommen': state_attr('sensor.zendure_diagnose_momentopnames', 'kolommen'),
+                   'regels': state_attr('sensor.zendure_diagnose_momentopnames', 'regels') or []
+                 },
+                 'fouten': {
+                   'kolommen': state_attr('sensor.zendure_diagnose_fouten', 'kolommen'),
+                   'regels': state_attr('sensor.zendure_diagnose_fouten', 'regels') or []
+                 }
+               } -%}
+            {#- Home Assistant laat een template maximaal 256 kB opleveren (na base64). Te groot: details
+                alleen met de namen van de attributen. -#}
+            {%- if (export | to_json | length) > 170000 -%}
+              {%- set nk = namespace(d=[]) -%}
+              {%- for e, v in ns.det -%}
+                {%- set nk.d = nk.d + [[e, {'state': v.state, 'attributes': v.attributes.keys() | list}]] -%}
+              {%- endfor -%}
+              {%- set export = dict(export, details=dict(nk.d),
+                   meta=dict(export.meta, ingekort='details zonder waarden: export te groot')) -%}
+            {%- endif -%}
+            {%- set tekst = export | to_json
+                 | regex_replace('\\b(?:[0-9]{1,3}[.]){3}[0-9]{1,3}\\b', 'x.x.x.x') -%}
+            {%- set b = tekst | base64_encode -%}
+            {%- set stukken = namespace(l=[]) -%}
+            {%- for i in range(0, b | length, 100000) -%}
+              {%- set stukken.l = stukken.l + [b[i:i + 100000]] -%}
+            {%- endfor -%}
+            {{ stukken.l | join(' ') }}
+      - action: shell_command.zendure_diagnose_export
+        data:
+          actie: export
+          bestand: "{{ bestand }}"
+          inhoud: "{{ inhoud }}"
+        response_variable: resultaat
+        continue_on_error: true
+      - if:
+          - condition: template
+            value_template: "{{ resultaat is defined and resultaat.returncode | default(1) == 0 }}"
+        then:
+          - variables:
+              uit: "{{ (resultaat.stdout | default('0 1') | string).split(' ') }}"
+          - action: persistent_notification.create
+            data:
+              notification_id: zendure_diagnose_export
+              title: Zendure diagnose-export klaar
+              message: >-
+                **[Download de export]({{ url }})** ({{ ((uit[0] | int(0)) / 1024) | round(0) | int }} kB, JSON)
+
+
+                Configuratie, sensorstanden, plannerdetails en de logs van de afgelopen
+                24 uur. IP-adressen en serienummers zijn weggelaten; kijk het bestand even
+                door voordat je het deelt. Het bestand wordt over 1 uur automatisch
+                verwijderd (of nu via *Export verwijderen*).
+                {%- if uit[1] | default('1') == '0' %}
+
+
+                ⚠️ De map /config/www is net aangemaakt. Werkt de link niet, herstart Home
+                Assistant één keer en exporteer opnieuw.
+                {%- endif %}
+          - delay: "01:00:00"
+          - action: script.zendure_diagnose_export_wissen
+        else:
+          - action: persistent_notification.create
+            data:
+              notification_id: zendure_diagnose_export
+              title: Zendure diagnose-export mislukt
+              message: >-
+                Het exportbestand kon niet worden geschreven.
+                {% if resultaat is defined %}Foutcode {{ resultaat.returncode | default('?') }}:
+                {{ (resultaat.stderr | default('') | string)[-500:] }}{% else %}Bekijk
+                Instellingen → Systeem → Logboeken (zoek op shell_command).{% endif %}
+
+  zendure_diagnose_export_wissen:
+    alias: Zendure Diagnose Export Verwijderen
+    description: Forecasting 2026.11.3 - Verwijdert de exportbestanden uit de map www en de melding.
+    icon: mdi:file-remove-outline
+    mode: single
+    sequence:
+      - action: shell_command.zendure_diagnose_export
+        data:
+          actie: wissen
+        continue_on_error: true
+      - action: persistent_notification.dismiss
+        data:
+          notification_id: zendure_diagnose_export
+
+# Schrijft (actie export) of verwijdert (actie wissen) het exportbestand in <config>/www.
+# De inhoud komt als base64 binnen, zodat er geen aanhalingstekens of spaties in de argumenten
+# staan, en wordt hier netjes opgemaakt. Eerdere exports worden altijd eerst verwijderd.
+# De configuratiemap komt uit de opstartregel van Home Assistant (--config), anders /config of
+# ~/.homeassistant. Uitvoer bij export: <grootte in bytes> <1 als www al bestond, anders 0>
+shell_command:
+  zendure_diagnose_export: |-
+    python3 -c "
+    import base64, glob, json, os, sys
+    def configmap():
+        try:
+            a = open('/proc/%d/cmdline' % os.getppid(), 'rb').read().decode().split(chr(0))
+            for i, x in enumerate(a[:-1]):
+                if x in ('-c', '--config'):
+                    return a[i + 1]
+        except Exception:
+            pass
+        return '/config' if os.path.isdir('/config') else os.path.expanduser('~/.homeassistant')
+    www = os.path.join(configmap(), 'www')
+    bestond = int(os.path.isdir(www))
+    for f in glob.glob(os.path.join(www, 'zendure_export_*.json')):
+        os.remove(f)
+    if sys.argv[1] == 'export':
+        os.makedirs(www, exist_ok=True)
+        pad = os.path.join(www, os.path.basename(sys.argv[2]))
+        d = json.loads(base64.b64decode(''.join(sys.argv[3:])).decode('utf-8'))
+        with open(pad, 'w', encoding='utf-8') as f:
+            json.dump(d, f, indent=2, ensure_ascii=False)
+        print(os.path.getsize(pad), bestond)
+    " {{ actie | default('wissen') }} {{ bestand | default('-') }} {{ inhoud | default('') }}
+
+automation:
+  - id: zendure_diagnose_export_opruimen
+    alias: Zendure Diagnose Export Opruimen
+    description: >-
+      Forecasting 2026.11.3 - Verwijdert achtergebleven exportbestanden na een herstart van
+      Home Assistant.
+    mode: single
+    triggers:
+      - trigger: homeassistant
+        event: start
+    conditions: []
+    actions:
+      - delay: "00:00:30"
+      - action: script.zendure_diagnose_export_wissen
+
+# Nodig voor het foutlog (sensor.zendure_diagnose_fouten): stuurt waarschuwingen en fouten uit
+# het HA-log als event door. Staat system_log al in je configuration.yaml? Haal dit blok dan weg
+# en zet daar fire_event: true.
+system_log:
+  fire_event: true

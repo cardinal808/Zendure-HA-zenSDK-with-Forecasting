@@ -1,0 +1,348 @@
+# Zendure zenSDK (Gielz) + Forecasting 2026.11.3 | based on Gielz v20261007
+# Based on Gielz1986/Zendure-HA-zenSDK (Michiel Hofker). See README.md for license and changes.
+# =====================================================================
+# Zendure Export - export configuration and logs for analysis (optional)
+#
+# Put this file next to zendure_gielz1986_global.yaml (same packages folder) and restart Home
+# Assistant. The "Diagnostics export" block on the Settings tab appears by itself once this file
+# is loaded. The automation and the other packages do not need any changes.
+#
+# What the package does:
+# 1. Decision log (sensor.zendure_diagnostics_decisions): every line the automation and the
+#    packages write to the logbook (logbook.log on the operation mode), with time, mode and SOC.
+#    The last 50 lines.
+# 2. Snapshots (sensor.zendure_diagnostics_snapshots): every quarter hour the mode, SOC, grid
+#    meter, Zendure power, PV, price, planned grid charge, HVAC block and EV correction.
+#    The last 24 hours.
+# 3. Errors (sensor.zendure_diagnostics_errors): warnings and errors from the Home Assistant log
+#    that concern this set (Zendure, Forecasting, Dynamic, HVAC, EV, ...). The last 20.
+#    For this the package turns on system_log: fire_event: true (see the bottom of this file).
+# 4. Export (script.zendure_diagnostics_export): writes one JSON file with versions, active
+#    packages, all settings of the set, the state of all sensors, the planner details
+#    (sensor.zendure_forecast_plan and others), the external sensors you entered, the state of
+#    the Zendure automations and the three logs above. You get a notification with a download
+#    link. After 1 hour (and at every restart) the file is deleted again.
+#
+# Privacy: IP addresses and serial numbers are replaced by *** or x.x.x.x. The set contains no
+# passwords or tokens. Still, have a quick look at the file before you share it.
+# The file is stored in /config/www and can be reached via /local/ without logging in while it
+# exists; that is why the name contains a random part and the file is deleted after 1 hour.
+#
+# Once: if the folder /config/www did not exist yet, the export creates it. Home Assistant only
+# serves /local/ after a restart; if the download link does not work, restart once.
+#
+# Already have system_log: in configuration.yaml? Then remove the system_log block at the
+# bottom of this file and set fire_event: true in your own configuration.
+#
+# Tip: the snapshots and the decision log do not need to be in the recorder. To keep the
+# database small, exclude sensor.zendure_diagnostics_* (recorder: exclude: entity_globs).
+# =====================================================================
+
+template:
+  - trigger:
+      - platform: event
+        event_type: logbook_entry
+        event_data:
+          entity_id: input_select.zendure_operation_mode
+        id: decision
+      - platform: event
+        event_type: system_log_event
+        id: error
+      - platform: time_pattern
+        minutes: "/15"
+        id: snapshot
+    condition:
+      # Only messages from the HA log that concern this set
+      - condition: template
+        value_template: >-
+          {{ trigger.id != 'error'
+             or (trigger.event.data | string) is search('(?i)zendure|gielz|forecast|\\b(dynamic|hvac|ev|negative_price|savings|homewizard|home_energy)_') }}
+    sensor:
+      - name: "Zendure Diagnostics Decisions"
+        unique_id: zendure_diagnostics_decisions
+        icon: mdi:script-text-outline
+        state: >-
+          {{ [((this.attributes.get('rows') or []) | length) + (1 if trigger.id == 'decision' else 0), 50] | min }}
+        attributes:
+          columns: "{{ ['time', 'message', 'mode', 'soc'] }}"
+          rows: >-
+            {%- set old = this.attributes.get('rows') or [] -%}
+            {%- if trigger.id == 'decision' -%}
+              {%- set msg = (trigger.event.data.message | default('') | string)
+                   | regex_replace('\\s+', ' ') | replace(' —', '') | trim -%}
+              {{ (old + [[now().strftime('%Y-%m-%d %H:%M:%S'), msg[:300],
+                         states('input_select.zendure_operation_mode'),
+                         states('sensor.zendure_total_state_of_charge') | float(none)]])[-50:] }}
+            {%- else -%}
+              {{ old }}
+            {%- endif -%}
+
+      - name: "Zendure Diagnostics Snapshots"
+        unique_id: zendure_diagnostics_snapshots
+        icon: mdi:camera-timer
+        state: >-
+          {{ [((this.attributes.get('rows') or []) | length) + (1 if trigger.id == 'snapshot' else 0), 96] | min }}
+        attributes:
+          columns: >-
+            {{ ['time', 'mode', 'soc_pct', 'grid_w', 'zendure_w', 'pv_zendure_w', 'price_eur_kwh',
+                'planned_grid_charge_kwh', 'hvac_blocks', 'ev_correction_w'] }}
+          rows: >-
+            {%- set old = this.attributes.get('rows') or [] -%}
+            {%- if trigger.id == 'snapshot' -%}
+              {%- set hvac = states('binary_sensor.hvac_discharge_blocked') -%}
+              {{ (old + [[now().strftime('%Y-%m-%d %H:%M'),
+                         states('input_select.zendure_operation_mode'),
+                         states('sensor.zendure_total_state_of_charge') | float(none),
+                         states('sensor.home_energy_meter_power') | float(none),
+                         states('sensor.zendure_power') | float(none),
+                         states('sensor.zendure_power_pv_total') | float(none),
+                         states('sensor.dynamic_nordpool') | float(none),
+                         state_attr('sensor.zendure_forecast_plan', 'planned_grid_charge_kwh') | float(none),
+                         1 if hvac == 'on' else (0 if hvac == 'off' else none),
+                         states('sensor.ev_discharge_correction') | float(none)]])[-96:] }}
+            {%- else -%}
+              {{ old }}
+            {%- endif -%}
+
+      - name: "Zendure Diagnostics Errors"
+        unique_id: zendure_diagnostics_errors
+        icon: mdi:alert-circle-outline
+        state: >-
+          {{ [((this.attributes.get('rows') or []) | length) + (1 if trigger.id == 'error' else 0), 20] | min }}
+        attributes:
+          columns: "{{ ['time', 'level', 'logger', 'message', 'source'] }}"
+          rows: >-
+            {%- set old = this.attributes.get('rows') or [] -%}
+            {%- if trigger.id == 'error' -%}
+              {%- set d = trigger.event.data -%}
+              {%- set txt = (d.message if d.message is list else [d.message | default('')]) | join(' | ') -%}
+              {%- set src = (d.source | default([]) | join(':')) if d.source is defined and d.source is not string else (d.source | default('') | string) -%}
+              {{ (old + [[now().strftime('%Y-%m-%d %H:%M:%S'), d.level | default(''), d.name | default(''),
+                         (txt | regex_replace('\\s+', ' '))[:400], src[:150]]])[-20:] }}
+            {%- else -%}
+              {{ old }}
+            {%- endif -%}
+
+script:
+  zendure_diagnostics_export:
+    alias: Zendure Diagnostics Export
+    description: >-
+      Forecasting 2026.11.3 - Writes configuration, sensor states, planner details and logs to
+      one JSON file in /config/www and shows a notification with the download link. The file is
+      deleted after 1 hour.
+    icon: mdi:file-export-outline
+    mode: restart
+    sequence:
+      - variables:
+          token: >-
+            {%- set ns = namespace(t='x') -%}
+            {%- for i in range(12) -%}{%- set ns.t = ns.t ~ ('abcdefghjkmnpqrstuvwxyz23456789' | random) -%}{%- endfor -%}
+            {{ ns.t }}
+          file: "zendure_export_{{ now().strftime('%Y%m%d_%H%M') }}_{{ token }}.json"
+          url: "/local/{{ file }}"
+          # The export itself: JSON, IP addresses masked, base64 in chunks (for the shell_command)
+          content: >-
+            {%- set mask = '(?i)ip_adres|ip_address|serienummer|serial' -%}
+            {%- set re_helper = '^(zendure_|dynamic_|dashboard_|home_energy_|forecast_|savings_|ev_|hvac_|negative_price_)' -%}
+            {%- set re_sensor = '^(zendure_|forecast|dynamic_|home_energy_|homewizard_|hvac_|ev_|github_zendure)' -%}
+            {%- set ns = namespace(set=[], sens=[], det=[], ext=[], aut=[], ent_ext=[]) -%}
+            {#- Settings: all input helpers of the set -#}
+            {%- for dom in ['input_boolean', 'input_number', 'input_select', 'input_text', 'input_datetime'] -%}
+              {%- for s in states[dom] if s.object_id is match(re_helper) -%}
+                {%- set secret = s.object_id is search(mask) -%}
+                {%- set ns.set = ns.set + [[s.entity_id, '***' if secret and s.state not in ['', 'unknown'] else s.state]] -%}
+                {%- if dom == 'input_text' and not secret and (s.state | trim) is match('^[a-z_]+[.][a-z0-9_]+$') -%}
+                  {%- set ns.ent_ext = ns.ent_ext + [s.state | trim] -%}
+                {%- endif -%}
+              {%- endfor -%}
+            {%- endfor -%}
+            {#- Sensors of the set: state + unit -#}
+            {%- for s in (states.sensor | list) + (states.binary_sensor | list)
+                if s.object_id is match(re_sensor) and not s.object_id.startswith('zendure_diagnostics') -%}
+              {%- set unit = s.attributes.unit_of_measurement | default('') -%}
+              {%- set ns.sens = ns.sens + [[s.entity_id,
+                   '***' if s.object_id is search(mask) else (s.state ~ ((' ' ~ unit) if unit else ''))]] -%}
+            {%- endfor -%}
+            {#- Details: all attributes of the planner and the main sensors -#}
+            {%- set detail = ['sensor.zendure_forecast_plan', 'sensor.forecast_usage_profile',
+                 'sensor.forecast_solar_self_consumption', 'sensor.forecasting_version', 'sensor.dynamic_nordpool',
+                 'sensor.dynamic_lowest_price_period', 'sensor.zendure_indication_required_energy',
+                 'sensor.zendure_indication_available_energy', 'sensor.zendure_feedin_price_now',
+                 'sensor.zendure_savings', 'sensor.ev_charge_plan', 'sensor.hvac_mode',
+                 'binary_sensor.hvac_discharge_blocked', 'binary_sensor.zendure_export_blocked_negative_price'] -%}
+            {#- (an attribute of more than 20,000 characters is replaced by its size only) -#}
+            {%- for s in expand(detail) -%}
+              {%- set na = namespace(a=[]) -%}
+              {%- for k, v in s.attributes.items() -%}
+                {%- set n = v | to_json | length -%}
+                {%- set na.a = na.a + [[k, v if n <= 20000 else '(too large: ' ~ n ~ ' characters)']] -%}
+              {%- endfor -%}
+              {%- set ns.det = ns.det + [[s.entity_id, {'state': s.state, 'last_changed': s.last_changed.isoformat(),
+                   'attributes': dict(na.a)}]] -%}
+            {%- endfor -%}
+            {#- External entities entered in the input fields (solar forecast, Nordpool, AC, ...) -#}
+            {%- for s in expand(ns.ent_ext | unique | list) -%}
+              {%- set a = dict(s.attributes) -%}
+              {%- set ns.ext = ns.ext + [[s.entity_id, {'state': s.state, 'last_changed': s.last_changed.isoformat(),
+                   'attributes': a if (a | to_json | length) < 1500 else {'(too large, names only)': a.keys() | list}}]] -%}
+            {%- endfor -%}
+            {#- Zendure automations -#}
+            {%- for s in states.automation if (s.object_id ~ ' ' ~ s.name) is search('(?i)zendure|gielz|forecast') -%}
+              {%- set ns.aut = ns.aut + [[s.entity_id, {'name': s.name, 'state': s.state,
+                   'last_triggered': s.attributes.last_triggered | default(none),
+                   'running': s.attributes.current | default(0), 'mode': s.attributes.mode | default('')}]] -%}
+            {%- endfor -%}
+            {%- set export = {
+                 'meta': {
+                   'export': now().isoformat(),
+                   'language': 'EN',
+                   'forecasting_version': states('sensor.forecasting_version'),
+                   'gielz_version': states('sensor.zendure_configuration_version'),
+                   'packages': state_attr('sensor.forecasting_version', 'packages'),
+                   'home_assistant': state_attr('update.home_assistant_core_update', 'installed_version'),
+                   'time_zone': now().tzname()
+                 },
+                 'settings': dict(ns.set | sort(attribute='0')),
+                 'sensors': dict(ns.sens | sort(attribute='0')),
+                 'details': dict(ns.det),
+                 'external': dict(ns.ext),
+                 'automations': dict(ns.aut),
+                 'decisions': {
+                   'kolommen': state_attr('sensor.zendure_diagnostics_decisions', 'columns'),
+                   'regels': state_attr('sensor.zendure_diagnostics_decisions', 'rows') or []
+                 },
+                 'snapshots': {
+                   'kolommen': state_attr('sensor.zendure_diagnostics_snapshots', 'columns'),
+                   'regels': state_attr('sensor.zendure_diagnostics_snapshots', 'rows') or []
+                 },
+                 'errors': {
+                   'kolommen': state_attr('sensor.zendure_diagnostics_errors', 'columns'),
+                   'regels': state_attr('sensor.zendure_diagnostics_errors', 'rows') or []
+                 }
+               } -%}
+            {#- Home Assistant limits template output to 256 kB (after base64). Too large: details
+                with attribute names only. -#}
+            {%- if (export | to_json | length) > 170000 -%}
+              {%- set nk = namespace(d=[]) -%}
+              {%- for e, v in ns.det -%}
+                {%- set nk.d = nk.d + [[e, {'state': v.state, 'attributes': v.attributes.keys() | list}]] -%}
+              {%- endfor -%}
+              {%- set export = dict(export, details=dict(nk.d),
+                   meta=dict(export.meta, shortened='details without values: export too large')) -%}
+            {%- endif -%}
+            {%- set txt = export | to_json
+                 | regex_replace('\\b(?:[0-9]{1,3}[.]){3}[0-9]{1,3}\\b', 'x.x.x.x') -%}
+            {%- set b = txt | base64_encode -%}
+            {%- set chunks = namespace(l=[]) -%}
+            {%- for i in range(0, b | length, 100000) -%}
+              {%- set chunks.l = chunks.l + [b[i:i + 100000]] -%}
+            {%- endfor -%}
+            {{ chunks.l | join(' ') }}
+      - action: shell_command.zendure_diagnostics_export
+        data:
+          action: export
+          file: "{{ file }}"
+          content: "{{ content }}"
+        response_variable: result
+        continue_on_error: true
+      - if:
+          - condition: template
+            value_template: "{{ result is defined and result.returncode | default(1) == 0 }}"
+        then:
+          - variables:
+              out: "{{ (result.stdout | default('0 1') | string).split(' ') }}"
+          - action: persistent_notification.create
+            data:
+              notification_id: zendure_diagnostics_export
+              title: Zendure diagnostics export ready
+              message: >-
+                **[Download the export]({{ url }})** ({{ ((out[0] | int(0)) / 1024) | round(0) | int }} kB, JSON)
+
+
+                Configuration, sensor states, planner details and the logs of the last
+                24 hours. IP addresses and serial numbers are left out; have a quick look
+                at the file before you share it. The file is deleted automatically in
+                1 hour (or now via *Delete export*).
+                {%- if out[1] | default('1') == '0' %}
+
+
+                ⚠️ The folder /config/www was just created. If the link does not work,
+                restart Home Assistant once and export again.
+                {%- endif %}
+          - delay: "01:00:00"
+          - action: script.zendure_diagnostics_export_delete
+        else:
+          - action: persistent_notification.create
+            data:
+              notification_id: zendure_diagnostics_export
+              title: Zendure diagnostics export failed
+              message: >-
+                The export file could not be written.
+                {% if result is defined %}Return code {{ result.returncode | default('?') }}:
+                {{ (result.stderr | default('') | string)[-500:] }}{% else %}Check
+                Settings → System → Logs (search for shell_command).{% endif %}
+
+  zendure_diagnostics_export_delete:
+    alias: Zendure Diagnostics Export Delete
+    description: Forecasting 2026.11.3 - Deletes the export files from the www folder and the notification.
+    icon: mdi:file-remove-outline
+    mode: single
+    sequence:
+      - action: shell_command.zendure_diagnostics_export
+        data:
+          action: delete
+        continue_on_error: true
+      - action: persistent_notification.dismiss
+        data:
+          notification_id: zendure_diagnostics_export
+
+# Writes (action export) or deletes (action delete) the export file in <config>/www.
+# The content arrives as base64, so the arguments contain no quotes or spaces, and is formatted
+# here. Earlier exports are always deleted first.
+# The config folder comes from Home Assistant's command line (--config), otherwise /config or
+# ~/.homeassistant. Output on export: <size in bytes> <1 if www already existed, otherwise 0>
+shell_command:
+  zendure_diagnostics_export: |-
+    python3 -c "
+    import base64, glob, json, os, sys
+    def configmap():
+        try:
+            a = open('/proc/%d/cmdline' % os.getppid(), 'rb').read().decode().split(chr(0))
+            for i, x in enumerate(a[:-1]):
+                if x in ('-c', '--config'):
+                    return a[i + 1]
+        except Exception:
+            pass
+        return '/config' if os.path.isdir('/config') else os.path.expanduser('~/.homeassistant')
+    www = os.path.join(configmap(), 'www')
+    bestond = int(os.path.isdir(www))
+    for f in glob.glob(os.path.join(www, 'zendure_export_*.json')):
+        os.remove(f)
+    if sys.argv[1] == 'export':
+        os.makedirs(www, exist_ok=True)
+        pad = os.path.join(www, os.path.basename(sys.argv[2]))
+        d = json.loads(base64.b64decode(''.join(sys.argv[3:])).decode('utf-8'))
+        with open(pad, 'w', encoding='utf-8') as f:
+            json.dump(d, f, indent=2, ensure_ascii=False)
+        print(os.path.getsize(pad), bestond)
+    " {{ action | default('delete') }} {{ file | default('-') }} {{ content | default('') }}
+
+automation:
+  - id: zendure_diagnostics_export_cleanup
+    alias: Zendure Diagnostics Export Cleanup
+    description: >-
+      Forecasting 2026.11.3 - Deletes leftover export files after a Home Assistant restart.
+    mode: single
+    triggers:
+      - trigger: homeassistant
+        event: start
+    conditions: []
+    actions:
+      - delay: "00:00:30"
+      - action: script.zendure_diagnostics_export_delete
+
+# Needed for the error log (sensor.zendure_diagnostics_errors): passes warnings and errors from
+# the HA log on as events. Already have system_log in your configuration.yaml? Remove this block
+# and set fire_event: true there.
+system_log:
+  fire_event: true

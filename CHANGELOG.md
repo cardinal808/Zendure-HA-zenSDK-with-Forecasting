@@ -21,15 +21,20 @@ Versions follow `year.month.sequence`; the sequence restarts at 1 every month. E
 - New switch **Disable Zendure Pro PV export** (`input_boolean.negative_price_zendure_pv_export`): choose whether, at a negative price, the feature also disables the PV export of the Zendure Pro (solar inputs) via Gielz' *PV Export Disabled*. Turns on by itself as soon as you switch on *No export*; off = only limit the external inverters, e.g. with a Zendure without solar panels.
 - The settings for the Zendure Pro and the external inverter are now together in one card.
 
+**New: diagnostics export** (optional)
+- New package `packages/zendure_export_global.yaml` and a **Diagnostics export** block on the Settings tab. *Create export* writes one JSON file with versions, active packages, all settings, the state of all sensors, the planner details, the external sensors you entered and the state of the Zendure automations. You get a notification with a download link; after 1 hour (and at a restart) the file is deleted again.
+- The package also collects three logs: every line the automation writes to the logbook (last 50), a snapshot of mode, SOC, grid meter, power, price and plan every quarter hour (last 24 hours) and warnings and errors from the HA log that concern this set (last 20). For this the package turns on `system_log: fire_event: true`.
+- IP addresses and serial numbers are left out. The automation does not need any changes.
+
 **Dashboard**
-- **Optional packages show themselves:** Configuration (EV), (HVAC), (Negative Price) and (Savings) are only on the Settings tab when the package is loaded. Without `zendure_savings_global.yaml` the Savings tab only shows a notice instead of empty cards.
+- **Optional packages show themselves:** Configuration (EV), (HVAC), (Negative Price), (Savings) and Diagnostics export are only on the Settings tab when the package is loaded. Without `zendure_savings_global.yaml` the Savings tab only shows a notice instead of empty cards.
 - **Plan Timeline** back in the first column below PV, as one card (`custom:mod-card`, needs card-mod), without the separate colour line below it.
 - Plan for today: a line about the kWh the car still asks from the sun during the day.
 - `sensor.forecasting_version`: attribute `packages` (which optional packages are active) replaces `set`.
 
 **Upgrading**
 - Replace all files and **restart** Home Assistant.
-- Optional: put `zendure_ev_global.yaml` and/or `zendure_hvac_global.yaml` (Global) or `zendure_ev.yaml` and/or `zendure_hvac.yaml` (NL) in the `packages` folder.
+- Optional: put `zendure_ev_global.yaml`, `zendure_hvac_global.yaml` and/or `zendure_export_global.yaml` (Global) or `zendure_ev.yaml`, `zendure_hvac.yaml` and/or `zendure_export.yaml` (NL) in the `packages` folder. If you already have `system_log:` in `configuration.yaml`, remove the `system_log` block from the export package and set `fire_event: true` there.
 - If you use *No export at negative price*: **Disable Zendure Pro PV export** turns on by itself once after the restart. Turn it off if your Zendure has no solar panels.
 - First test whether your car resumes charging when power returns, before letting the charger be switched.
 

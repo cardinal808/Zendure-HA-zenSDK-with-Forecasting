@@ -4439,6 +4439,49 @@ views:
             hours_to_show: 4
           - type: heading
             icon: ''
+            heading: Diagnostics export
+            heading_style: title
+            visibility:
+              - condition: state
+                entity: script.zendure_diagnostics_export
+                state_not: unavailable
+          - type: markdown
+            content: >-
+              <ha-alert alert-type="info">Help text</ha-alert>**Create export**
+              writes one file with your settings, the state of all sensors, the
+              planner details and the logs of the last 24 hours. You get a
+              notification with a download link; attach the file to your question
+              or GitHub issue. IP addresses and serial numbers are left out. The
+              file is deleted automatically after 1 hour. Decisions, snapshots
+              and errors are collected from the moment this package is loaded.
+            text_only: true
+            visibility:
+              - condition: state
+                entity: input_boolean.dashboard_setting_show_help
+                state: 'on'
+              - condition: state
+                entity: script.zendure_diagnostics_export
+                state_not: unavailable
+          - type: entities
+            entities:
+              - entity: script.zendure_diagnostics_export
+                name: Create export
+              - entity: script.zendure_diagnostics_export_delete
+                name: Delete export
+              - type: section
+                label: Collected
+              - entity: sensor.zendure_diagnostics_decisions
+                name: Decisions (last 50)
+              - entity: sensor.zendure_diagnostics_snapshots
+                name: Snapshots (last 24 hours)
+              - entity: sensor.zendure_diagnostics_errors
+                name: Errors (last 20)
+            visibility:
+              - condition: state
+                entity: script.zendure_diagnostics_export
+                state_not: unavailable
+          - type: heading
+            icon: ''
             heading: Version
             heading_style: title
             badges:
