@@ -4510,6 +4510,26 @@ views:
                 state_not: unavailable
           - type: heading
             icon: ''
+            heading: Optional packages
+            heading_style: title
+          - type: markdown
+            text_only: true
+            content: |-
+              {%- set p = [
+                ['Savings', 'sensor.zendure_savings', 'zendure_savings_global.yaml', 'Savings tab: what solar, the battery and a dynamic contract earn, payback time.'],
+                ['EV', 'sensor.ev_charge_plan', 'zendure_ev_global.yaml', 'Charge the car without the battery discharging into it, night or daytime session.'],
+                ['HVAC', 'binary_sensor.hvac_active', 'zendure_hvac_global.yaml', 'No discharging while the AC runs, per AC mode.'],
+                ['Diagnostics export', 'script.zendure_diagnostics_export', 'zendure_export_global.yaml', 'Export settings, sensors and logs for a question or issue.']
+              ] -%}
+              | | Package | What it does |
+              |:-:|:--|:--|
+              {%- for x in p %}
+              | {{ '✅' if expand(x[1]) | count > 0 else '➖' }} | **{{ x[0] }}**<br>`{{ x[2] }}` | {{ x[3] }} |
+              {%- endfor %}
+
+              ✅ loaded · ➖ not installed. To add one: put the file in the packages folder and restart Home Assistant. [Packages explained](https://github.com/cardinal808/Zendure-HA-zenSDK-with-Forecasting/blob/main/README.md#packages)
+          - type: heading
+            icon: ''
             heading: Version
             heading_style: title
             badges:

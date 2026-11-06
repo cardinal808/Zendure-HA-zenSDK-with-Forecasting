@@ -1,5 +1,8 @@
 # Zendure zenSDK (Gielz) + Forecasting 2026.11.3 | gebaseerd op Gielz v20261007
 # Gebaseerd op Gielz1986/Zendure-HA-zenSDK (Michiel Hofker). Zie README.md voor licentie en wijzigingen.
+# OPTIONEEL PAKKET - niet nodig voor Dynamisch NOM + Forecasting. Weglaten = functie uit.
+# Toevoegen of weghalen: zet het bestand in (of haal het uit) de map packages en herstart Home Assistant.
+# Nodig: een vermogensmeting van de lader (bv. Shelly 1PM); voor een laadsessie ook een schakelaar.
 # =====================================================================
 # Zendure EV - elektrische auto laden zonder de thuisaccu leeg te trekken (optioneel)
 #

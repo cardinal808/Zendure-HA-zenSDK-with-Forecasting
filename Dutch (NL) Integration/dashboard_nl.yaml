@@ -4516,6 +4516,26 @@ views:
                 state_not: unavailable
           - type: heading
             icon: ''
+            heading: Optionele pakketten
+            heading_style: title
+          - type: markdown
+            text_only: true
+            content: |-
+              {%- set p = [
+                ['Besparing', 'sensor.zendure_besparing', 'zendure_besparing.yaml', 'Tab Besparing: wat zon, accu en dynamisch contract opleveren, terugverdientijd.'],
+                ['EV', 'sensor.ev_laadplan', 'zendure_ev.yaml', 'Auto laden zonder dat de accu erin ontlaadt, laadsessie nacht of overdag.'],
+                ['HVAC', 'binary_sensor.hvac_actief', 'zendure_hvac.yaml', 'Niet ontladen terwijl de airco draait, per airco-modus.'],
+                ['Diagnose-export', 'script.zendure_diagnose_export', 'zendure_export.yaml', 'Instellingen, sensoren en logs exporteren voor een vraag of issue.']
+              ] -%}
+              | | Pakket | Wat het doet |
+              |:-:|:--|:--|
+              {%- for x in p %}
+              | {{ '✅' if expand(x[1]) | count > 0 else '➖' }} | **{{ x[0] }}**<br>`{{ x[2] }}` | {{ x[3] }} |
+              {%- endfor %}
+
+              ✅ geladen · ➖ niet geïnstalleerd. Toevoegen: zet het bestand in de map packages en herstart Home Assistant. [Uitleg per pakket](https://github.com/cardinal808/Zendure-HA-zenSDK-with-Forecasting/blob/main/README.nl.md#pakketten)
+          - type: heading
+            icon: ''
             heading: Versiebeheer
             heading_style: title
             badges:
