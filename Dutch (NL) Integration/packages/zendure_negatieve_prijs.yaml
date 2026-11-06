@@ -8,7 +8,9 @@
 #
 # Terugleverprijs (sensor.zendure_terugleverprijs_nu), per kwartier:
 #   marktprijs + bonus % (alleen bij positieve marktprijs) + opslag teruglevering
-#   Marktprijs uit de Nordpool-sensor van Gielz; bonus en opslag uit Forecasting Configuratie (Besparing).
+#   Marktprijs uit de Nordpool-sensor van Gielz. Opslag en bonus teruglevering staan in dit pakket
+#   (zodat ze er ook zonder het besparingspakket zijn); op het dashboard in Forecasting Configuratie
+#   (Besparing), of in (Negatieve Prijs) als het besparingspakket ontbreekt.
 # binary_sensor.zendure_export_geblokkeerd_negatieve_prijs staat aan als de functie aanstaat
 # en de terugleverprijs negatief is.
 #
@@ -118,6 +120,26 @@ input_select:
       - Exportlimiet (GoodWe, Growatt)
 
 input_number:
+  # Tarieven teruglevering (ook gebruikt door het besparingspakket). Stonden tot 2026.11.3 in
+  # zendure_besparing.yaml; zelfde entiteit-id, dus ingestelde waarden blijven bewaard.
+  besparing_dyn_opslag_teruglevering:
+    name: Besparing Dynamisch Opslag Teruglevering
+    icon: mdi:cash-minus
+    min: -1
+    max: 1
+    step: 0.0001
+    mode: box
+    unit_of_measurement: "€/kWh"
+
+  besparing_dyn_bonus_teruglevering:
+    name: Besparing Dynamisch Bonus Teruglevering
+    icon: mdi:percent
+    min: 0
+    max: 100
+    step: 0.5
+    mode: box
+    unit_of_measurement: "%"
+
   # Vooraf ontladen: deel van het verwachte zon-overschot dat meetelt (%). 0 = standaard (75%).
   # Hoger = dieper ontladen en meer ruimte voor de zon; lager = voorzichtiger bij een te optimistische forecast.
   negatieve_prijs_vooraf_zonkrediet:

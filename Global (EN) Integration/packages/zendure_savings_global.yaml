@@ -38,6 +38,8 @@
 # =====================================================================
 
 input_number:
+  # Feed-in markup and bonus live in zendure_negative_price_global.yaml (required package), so the
+  # feed-in price is right without this package too. Same entities, so values are kept.
   savings_setting_fixed_supply_price:
     name: Savings Fixed Supply Price
     icon: mdi:cash-lock
@@ -64,24 +66,6 @@ input_number:
     step: 0.0001
     mode: box
     unit_of_measurement: "€/kWh"
-
-  savings_setting_dynamic_feedin_markup:
-    name: Savings Dynamic Feed-in Markup
-    icon: mdi:cash-minus
-    min: -1
-    max: 1
-    step: 0.0001
-    mode: box
-    unit_of_measurement: "€/kWh"
-
-  savings_setting_dynamic_feedin_bonus:
-    name: Savings Dynamic Feed-in Bonus
-    icon: mdi:percent
-    min: 0
-    max: 100
-    step: 0.5
-    mode: box
-    unit_of_measurement: "%"
 
   savings_setting_battery_purchase_price:
     name: Savings Battery Purchase Price

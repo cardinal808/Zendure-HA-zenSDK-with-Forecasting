@@ -20,10 +20,11 @@ Versions follow `year.month.sequence`; the sequence restarts at 1 every month. E
 **Negative price**
 - New switch **Disable Zendure Pro PV export** (`input_boolean.negative_price_zendure_pv_export`): choose whether, at a negative price, the feature also disables the PV export of the Zendure Pro (solar inputs) via Gielz' *PV Export Disabled*. Turns on by itself as soon as you switch on *No export*; off = only limit the external inverters, e.g. with a Zendure without solar panels.
 - The settings for the Zendure Pro and the external inverter are now together in one card.
+- **Feed-in markup and bonus** (`input_number.savings_setting_dynamic_feedin_markup`, `..._bonus`) now live in `zendure_negative_price_global.yaml` instead of the optional savings package, so the feed-in price is right without that package too. Same entities: configured values are kept. On the dashboard they are in Forecasting Configuration (Savings), or in (Negative Price) when the savings package is missing.
 - **New: pre-discharge** (switch *Pre-discharge*, mode Dynamic Smart Matching + Forecasting, needs a detailed solar forecast such as Solcast). If a window with a negative feed-in price and expected solar surplus is coming, the planner makes sure the battery is empty enough at its start for 75% of that surplus. You set that percentage with **Solar credit** (`input_number.negative_price_pre_discharge_solar_credit`, 0 = 75%): higher = discharge deeper and more room for solar, lower = more careful with an optimistic forecast. More solar then fits into the battery and the inverter needs to throttle less.
   - For this the battery only discharges for the house (no export), in the most expensive quarter hours before the window: the hold (cheap dip, smart hold) is lifted there. If it cannot reach the target even discharging everywhere, it discharges in all quarter hours.
   - Grid charging before the window only stays when it fits within the room (cheapest slots first), e.g. charging at night for an expensive morning peak.
-  - If solar fills the battery again before the window anyway, it does nothing. Min. SOC always stays. Feed-in markup and bonus from Forecasting Configuration (Savings) count in the feed-in price.
+  - If solar fills the battery again before the window anyway, it does nothing. Min. SOC always stays. Feed-in markup and bonus count in the feed-in price.
   - *Plan for today* explains what it does; new attributes `pre_discharge`, `pre_discharge_now`, `pre_discharge_window_start`/`_end`, `pre_discharge_solar_surplus_kwh`, `pre_discharge_target_kwh`, `pre_discharge_expected_kwh`, `pre_discharge_price_limit`, `pre_discharge_solar_credit_pct` and `pre_discharge_grid_dropped`.
 
 **New: diagnostics export** *(optional package)*
@@ -65,8 +66,9 @@ Versions follow `year.month.sequence`; the sequence restarts at 1 every month. E
 
 **Upgrading**
 - Replace all files and **restart** Home Assistant.
+- Always replace `zendure_savings_global.yaml` and `zendure_negative_price_global.yaml` together: if old and new versions are mixed, feed-in markup and bonus are defined twice and Home Assistant rejects the configuration.
 - If `zendure_negative_price_global.yaml` is not yet in your `packages` folder, add it: it is now part of the base. The feature only acts once you turn on *No export at negative price*.
-- `zendure_savings_global.yaml` is optional: if you do not want the Savings tab you can remove it. *No export at negative price* then uses the bare market price (no feed-in markup or bonus).
+- `zendure_savings_global.yaml` is optional: if you do not want the Savings tab you can remove it. Feed-in markup and bonus are now in `zendure_negative_price_global.yaml` and keep working; without the savings package you enter them in Forecasting Configuration (Negative Price).
 - Optional: put `zendure_ev_global.yaml`, `zendure_hvac_global.yaml` and/or `zendure_export_global.yaml` (Global) or `zendure_ev.yaml`, `zendure_hvac.yaml` and/or `zendure_export.yaml` (NL) in the `packages` folder. If you already have `system_log:` in `configuration.yaml`, remove the `system_log` block from the export package and set `fire_event: true` there.
 - If you use *No export at negative price*: **Disable Zendure Pro PV export** turns on by itself once after the restart. Turn it off if your Zendure has no solar panels.
 - Optional: turn on **Pre-discharge** in Forecasting Configuration (Negative Price) (off by default).

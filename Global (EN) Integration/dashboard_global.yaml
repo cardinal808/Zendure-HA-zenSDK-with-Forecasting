@@ -4059,7 +4059,8 @@ views:
               price is negative, the installation does not export. Feed-in
               price = market price + bonus % (only when the market price is
               positive) + feed-in markup, using the values from
-              **Forecasting Configuration (Savings)**.
+              **Forecasting Configuration (Savings)** (without the savings
+              package those two fields are below).
 
 
               **Zendure Pro:** when **Disable Zendure Pro PV export** is on, PV
@@ -4139,6 +4140,27 @@ views:
                 name: Pre-discharge
               - entity: input_number.negative_price_pre_discharge_solar_credit
                 name: Solar credit (%, 0 = 75%)
+              - type: conditional
+                conditions:
+                  - entity: input_number.savings_setting_fixed_supply_price
+                    state: unavailable
+                row:
+                  type: section
+                  label: Feed-in price (without savings package)
+              - type: conditional
+                conditions:
+                  - entity: input_number.savings_setting_fixed_supply_price
+                    state: unavailable
+                row:
+                  entity: input_number.savings_setting_dynamic_feedin_markup
+                  name: Dynamic feed-in markup
+              - type: conditional
+                conditions:
+                  - entity: input_number.savings_setting_fixed_supply_price
+                    state: unavailable
+                row:
+                  entity: input_number.savings_setting_dynamic_feedin_bonus
+                  name: Dynamic feed-in bonus % (of market price)
               - type: section
                 label: External inverter (optional)
               - entity: input_select.negative_price_inverter_count

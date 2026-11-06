@@ -4065,7 +4065,8 @@ views:
               terugleverprijs negatief, dan levert de installatie niet terug.
               Terugleverprijs = marktprijs + bonus % (alleen bij een positieve
               marktprijs) + opslag teruglevering, met de waarden uit
-              **Forecasting Configuratie (Besparing)**.
+              **Forecasting Configuratie (Besparing)** (zonder besparingspakket
+              staan die twee velden hieronder).
 
 
               **Zendure Pro:** staat **Zendure Pro PV-export uitschakelen** aan,
@@ -4146,6 +4147,27 @@ views:
                 name: Vooraf ontladen
               - entity: input_number.negatieve_prijs_vooraf_zonkrediet
                 name: Zonkrediet (%, 0 = 75%)
+              - type: conditional
+                conditions:
+                  - entity: input_number.besparing_vast_leveringsprijs
+                    state: unavailable
+                row:
+                  type: section
+                  label: Terugleverprijs (zonder besparingspakket)
+              - type: conditional
+                conditions:
+                  - entity: input_number.besparing_vast_leveringsprijs
+                    state: unavailable
+                row:
+                  entity: input_number.besparing_dyn_opslag_teruglevering
+                  name: Dynamisch opslag teruglevering
+              - type: conditional
+                conditions:
+                  - entity: input_number.besparing_vast_leveringsprijs
+                    state: unavailable
+                row:
+                  entity: input_number.besparing_dyn_bonus_teruglevering
+                  name: Dynamisch bonus teruglevering % (over marktprijs)
               - type: section
                 label: Externe omvormer (optioneel)
               - entity: input_select.negatieve_prijs_omvormer_aantal

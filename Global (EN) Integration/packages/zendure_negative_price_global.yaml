@@ -8,7 +8,9 @@
 #
 # Feed-in price (sensor.zendure_feedin_price_now), per quarter hour:
 #   market price + bonus % (only when the market price is positive) + feed-in markup
-#   Market price from Gielz' Nordpool sensor; bonus and markup from Forecasting Configuration (Savings).
+#   Market price from Gielz' Nordpool sensor. Feed-in markup and bonus live in this package (so they
+#   exist without the savings package too); on the dashboard in Forecasting Configuration (Savings),
+#   or in (Negative Price) when the savings package is missing.
 # binary_sensor.zendure_export_blocked_negative_price is on when the feature is enabled
 # and the feed-in price is negative.
 #
@@ -118,6 +120,26 @@ input_select:
       - Export limit (GoodWe, Growatt)
 
 input_number:
+  # Feed-in tariffs (also used by the savings package). Were in zendure_savings_global.yaml until
+  # 2026.11.3; same entity id, so configured values are kept.
+  savings_setting_dynamic_feedin_markup:
+    name: Savings Dynamic Feed-in Markup
+    icon: mdi:cash-minus
+    min: -1
+    max: 1
+    step: 0.0001
+    mode: box
+    unit_of_measurement: "€/kWh"
+
+  savings_setting_dynamic_feedin_bonus:
+    name: Savings Dynamic Feed-in Bonus
+    icon: mdi:percent
+    min: 0
+    max: 100
+    step: 0.5
+    mode: box
+    unit_of_measurement: "%"
+
   # Pre-discharge: share of the expected solar surplus that counts (%). 0 = default (75%).
   # Higher = discharge deeper and more room for solar; lower = more careful with an optimistic forecast.
   negative_price_pre_discharge_solar_credit:

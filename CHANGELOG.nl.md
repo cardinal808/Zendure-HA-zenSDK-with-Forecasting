@@ -21,10 +21,11 @@ Versies volgen `jaar.maand.volgnummer`; het volgnummer begint elke maand bij 1. 
 **Negatieve prijs**
 - Nieuwe schakelaar **Zendure Pro PV-export uitschakelen** (`input_boolean.negatieve_prijs_zendure_pv_export`): kies of de functie bij een negatieve prijs ook de PV-export van de Zendure Pro (zon-ingangen) uitschakelt via Gielz' *PV Export Uitgeschakeld*. Gaat vanzelf aan zodra je *Niet terugleveren* aanzet; uit = alleen de externe omvormers begrenzen, bv. bij een Zendure zonder zonnepanelen.
 - De instellingen voor de Zendure Pro en de externe omvormer staan nu samen in één kaart.
+- **Opslag en bonus teruglevering** (`input_number.besparing_dyn_opslag_teruglevering`, `..._bonus_teruglevering`) staan nu in `zendure_negatieve_prijs.yaml` in plaats van in het optionele besparingspakket, zodat de terugleverprijs ook zonder dat pakket klopt. Zelfde entiteiten: ingestelde waarden blijven bewaard. Op het dashboard staan ze in Forecasting Configuratie (Besparing), of in (Negatieve Prijs) als het besparingspakket ontbreekt.
 - **Nieuw: vooraf ontladen** (schakelaar *Vooraf ontladen*, modus Dynamisch NOM + Forecasting, zon-detailvoorspelling zoals Solcast nodig). Komt er een venster met een negatieve terugleverprijs en verwacht zon-overschot, dan zorgt de planner dat de accu bij het begin leeg genoeg is voor 75% van dat overschot. Dat percentage stel je in met **Zonkrediet** (`input_number.negatieve_prijs_vooraf_zonkrediet`, 0 = 75%): hoger = dieper ontladen en meer ruimte voor de zon, lager = voorzichtiger bij een te optimistische forecast. Zo kan meer zon de accu in en hoeft de omvormer minder te knijpen.
   - De accu ontlaadt daarvoor alleen voor het huis (geen teruglevering), in de duurste kwartieren vóór het venster: daar vervalt het vasthouden (goedkoop dal, slim vasthouden). Haalt hij het doel ook met overal ontladen niet, dan ontlaadt hij in alle kwartieren.
   - Netladen vóór het venster blijft alleen staan als het binnen de ruimte past (goedkoopste slots eerst), bv. 's nachts laden voor een dure ochtendpiek.
-  - Laadt de zon de accu vóór het venster toch weer vol, dan doet hij niets. Min. SOC blijft altijd staan. Opslag en bonus teruglevering uit Forecasting Configuratie (Besparing) tellen mee in de terugleverprijs.
+  - Laadt de zon de accu vóór het venster toch weer vol, dan doet hij niets. Min. SOC blijft altijd staan. Opslag en bonus teruglevering tellen mee in de terugleverprijs.
   - *Plan vandaag* legt uit wat hij doet; nieuwe attributen `vooraf_ontladen`, `vooraf_ontladen_nu`, `vooraf_venster_start`/`_eind`, `vooraf_zon_overschot_kwh`, `vooraf_doel_kwh`, `vooraf_verwacht_kwh`, `vooraf_grensprijs`, `vooraf_zonkrediet_pct` en `vooraf_netladen_vervallen`.
 
 **Nieuw: diagnose-export** *(optioneel pakket)*
@@ -66,8 +67,9 @@ Versies volgen `jaar.maand.volgnummer`; het volgnummer begint elke maand bij 1. 
 
 **Upgraden**
 - Vervang alle bestanden en **herstart** Home Assistant.
+- Vervang `zendure_besparing.yaml` en `zendure_negatieve_prijs.yaml` altijd samen: staan beide versies door elkaar, dan zijn opslag en bonus teruglevering dubbel gedefinieerd en start Home Assistant de configuratie niet.
 - Staat `zendure_negatieve_prijs.yaml` nog niet in je map `packages`, zet hem er dan bij: hij hoort nu bij de basis. De functie staat pas aan als je *Niet terugleveren bij negatieve prijs* aanzet.
-- `zendure_besparing.yaml` is optioneel: wil je de tab Besparing niet, dan mag je hem weghalen. *Niet terugleveren bij negatieve prijs* rekent dan met de kale marktprijs (geen opslag of bonus teruglevering).
+- `zendure_besparing.yaml` is optioneel: wil je de tab Besparing niet, dan mag je hem weghalen. Opslag en bonus teruglevering staan sinds deze versie in `zendure_negatieve_prijs.yaml` en blijven dus gewoon werken; zonder besparingspakket vul je ze in bij Forecasting Configuratie (Negatieve Prijs).
 - Optioneel: zet `zendure_ev.yaml`, `zendure_hvac.yaml` en/of `zendure_export.yaml` (NL) of `zendure_ev_global.yaml`, `zendure_hvac_global.yaml` en/of `zendure_export_global.yaml` (Global) in de map `packages`. Heb je zelf al `system_log:` in `configuration.yaml`, haal dan het blok `system_log` uit het exportpakket en zet daar `fire_event: true`. Gebruikte je de complete set: `input_boolean.hvac_tonen_op_dashboard` bestaat niet meer en kan weg.
 - Gebruik je *Niet terugleveren bij negatieve prijs*: **Zendure Pro PV-export uitschakelen** gaat na de herstart vanzelf één keer aan. Zet hem uit als je Zendure geen zonnepanelen heeft.
 - Optioneel: zet in Forecasting Configuratie (Negatieve Prijs) **Vooraf ontladen** aan (staat standaard uit).
