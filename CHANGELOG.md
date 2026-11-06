@@ -34,6 +34,11 @@ Versions follow `year.month.sequence`; the sequence restarts at 1 every month. E
 - `sensor.forecast_counter_solar_production` now adds up the increase of your production sensor instead of copying its value, like the grid counters. Entering another sensor, a counter that briefly reports 0 or jumps back, or a replaced inverter no longer counts as production. This could make the 7-day solar production (and so the average daily usage) far too high. An ignored jump is shown in the attribute `last_jump`.
 - Right after a reset (no history yet) the planner no longer assumes 7 days of history but uses the start values.
 
+**Grid meter: enter your own kWh counters**
+- Two new input fields in Forecasting Configuration (Basic): **Grid import counter** and **Grid export counter** (`input_text.forecast_setting_grid_import_counter_sensor` / `..._export_...`). For meters that are not detected automatically, e.g. a Shelly Pro 3EM (current clamps), P1 Monitor or DSMR Reader. Several sensors separated by a comma are added up (e.g. tariff 1 and 2); Wh and MWh are converted. Empty = detect automatically as before (SlimmeLezer, HomeWizard, DSMR integration).
+- Without a detected or entered counter the set calculates import and export from power. That is less accurate; *Collected data* then shows *Calculated from power (no kWh counter found or entered)*.
+- Switching source (automatic ↔ entered, or another sensor) does not cause a jump in the grid counters: the new attribute `meter_sensors` remembers which sensors supplied the reading.
+
 **Dashboard**
 - **Optional packages show themselves:** Configuration (EV), (HVAC), (Negative Price), (Savings) and Diagnostics export are only on the Settings tab when the package is loaded. Without `zendure_savings_global.yaml` the Savings tab only shows a notice instead of empty cards.
 - **Plan Timeline** back in the first column below PV, as one card (`custom:mod-card`, needs card-mod), without the separate colour line below it.
@@ -46,6 +51,7 @@ Versions follow `year.month.sequence`; the sequence restarts at 1 every month. E
 - If you use *No export at negative price*: **Disable Zendure Pro PV export** turns on by itself once after the restart. Turn it off if your Zendure has no solar panels.
 - First test whether your car resumes charging when power returns, before letting the charger be switched.
 - If your 7-day solar production or average usage is too high because of an earlier jump: press **Reset usage data** once after the update.
+- If *Collected data → Grid* says "Calculated from power", enter your own grid counters in Forecasting Configuration (Basic).
 
 ## 2026.11.2 — based on Gielz v20261007
 

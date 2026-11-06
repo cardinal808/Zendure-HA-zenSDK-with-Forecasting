@@ -35,6 +35,11 @@ Versies volgen `jaar.maand.volgnummer`; het volgnummer begint elke maand bij 1. 
 - `sensor.forecast_teller_zon_productie` telt nu de toename van je productiesensor op in plaats van de stand over te nemen, net als de P1-tellers. Een andere sensor invullen, een teller die even 0 meldt of terugspringt, of een vervangen omvormer telt niet meer als productie. Daardoor kon de zonproductie over 7 dagen (en dus het gemiddelde dagverbruik) veel te hoog uitvallen. Een genegeerde sprong staat in het attribuut `laatste_sprong`.
 - Net na een reset (nog geen historie) rekent de planner niet meer met 7 dagen historie maar met de startwaarden.
 
+**Netmeter: eigen kWh-tellers invullen**
+- Twee nieuwe invoervelden in Forecasting Configuratie (Basis): **Net import teller** en **Net export teller** (`input_text.forecast_net_import_teller_sensor` / `..._export_...`). Voor meters die niet automatisch herkend worden, bv. een Shelly Pro 3EM (stroomtangen), P1 Monitor of DSMR Reader. Meerdere sensoren met een komma worden opgeteld (bv. tarief 1 en 2); Wh en MWh worden omgerekend. Leeg = automatisch herkennen zoals voorheen (SlimmeLezer, HomeWizard, DSMR-integratie).
+- Zonder herkende of ingevulde teller rekent de set import en export uit het vermogen. Dat is minder nauwkeurig; *Verzamelde gegevens* toont dan *Berekend uit vermogen (geen kWh-teller gevonden of ingevuld)*.
+- Een wissel van bron (automatisch ↔ ingevuld, of een andere sensor) geeft geen sprong in de net-tellers: het nieuwe attribuut `meter_sensoren` onthoudt welke sensoren de stand leverden.
+
 **Dashboard**
 - **Optionele pakketten tonen zich vanzelf:** Configuratie (EV), (HVAC), (Negatieve Prijs), (Besparing) en Diagnose-export staan alleen op de tab Configuratie als het pakket geladen is. Ontbreekt `zendure_besparing.yaml`, dan toont de tab Besparing alleen een melding in plaats van lege kaarten.
 - **Plan Tijdlijn** weer in de eerste kolom onder PV, als één kaart (`custom:mod-card`, card-mod nodig), zonder de losse kleurenregel eronder.
@@ -47,6 +52,7 @@ Versies volgen `jaar.maand.volgnummer`; het volgnummer begint elke maand bij 1. 
 - Gebruik je *Niet terugleveren bij negatieve prijs*: **Zendure Pro PV-export uitschakelen** gaat na de herstart vanzelf één keer aan. Zet hem uit als je Zendure geen zonnepanelen heeft.
 - Test eerst of je auto het laden hervat als de stroom terugkomt, voordat je de lader laat schakelen.
 - Is je zonproductie of gemiddeld gebruik over 7 dagen te hoog door een eerdere sprong: druk na de update één keer op **Verbruiksgegevens resetten**.
+- Staat bij *Verzamelde gegevens → Net* "Berekend uit vermogen", vul dan je eigen net-tellers in bij Forecasting Configuratie (Basis).
 
 ## 2026.11.2 — gebaseerd op Gielz v20261007
 

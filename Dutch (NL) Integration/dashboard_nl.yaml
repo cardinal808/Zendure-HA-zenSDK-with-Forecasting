@@ -3991,7 +3991,10 @@ views:
               een totaalteller (kWh) van je zonnepanelen. Zelfverbruik zon en
               dagverbruik worden vanaf dag 1 automatisch berekend uit je eigen
               metingen en worden elke dag nauwkeuriger (tot 7 dagen). De laadmarge is een extra buffer als percentage van de
-              batterijcapaciteit.
+              batterijcapaciteit. De kWh-tellers van je netmeter worden automatisch herkend
+              (SlimmeLezer, HomeWizard, DSMR-integratie). Heb je een andere meter, bv.
+              een Shelly Pro 3EM, vul dan de net import- en exportteller in (meerdere
+              sensoren met een komma, bv. tarief 1 en 2).
             text_only: true
             visibility:
               - condition: state
@@ -4008,6 +4011,10 @@ views:
                 name: Zon morgen sensor
               - entity: input_text.forecast_zon_productie_sensor
                 name: Zonnepanelen productie sensor (totaal kWh)
+              - entity: input_text.forecast_net_import_teller_sensor
+                name: Net import teller (kWh, leeg = automatisch)
+              - entity: input_text.forecast_net_export_teller_sensor
+                name: Net export teller (kWh, leeg = automatisch)
               - entity: input_number.forecast_laad_marge
                 name: Batterij laadmarge %
               - entity: input_number.forecast_betrouwbaarheid

@@ -3985,7 +3985,10 @@ views:
               and daily usage are calculated automatically from day 1 from your own
               measurements and get more accurate every day (up to 7 days). The
               charge margin is an extra buffer as a percentage of the battery
-              capacity.
+              capacity. The kWh counters of your grid meter are detected automatically
+              (SlimmeLezer, HomeWizard, DSMR integration). With another meter, e.g. a
+              Shelly Pro 3EM, enter the grid import and export counter (several
+              sensors separated by a comma, e.g. tariff 1 and 2).
             text_only: true
             visibility:
               - condition: state
@@ -4002,6 +4005,10 @@ views:
                 name: Solar tomorrow sensor
               - entity: input_text.forecast_setting_solar_production_sensor
                 name: Solar panels production sensor (total kWh)
+              - entity: input_text.forecast_setting_grid_import_counter_sensor
+                name: Grid import counter (kWh, empty = automatic)
+              - entity: input_text.forecast_setting_grid_export_counter_sensor
+                name: Grid export counter (kWh, empty = automatic)
               - entity: input_number.forecast_setting_charge_margin
                 name: Battery charge margin %
               - entity: input_number.forecast_setting_solar_reliability

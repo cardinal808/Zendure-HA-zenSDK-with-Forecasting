@@ -38,6 +38,21 @@ input_text:
     max: 250
     mode: text
 
+  # Optional: your own kWh counters for grid import and export (e.g. Shelly Pro 3EM, P1 Monitor,
+  # DSMR Reader). Several sensors separated by a comma are added up (e.g. tariff 1 and 2).
+  # Empty = detect automatically (SlimmeLezer, HomeWizard, DSMR integration).
+  forecast_setting_grid_import_counter_sensor:
+    name: Forecast Grid Import Counter Sensor (total kWh)
+    icon: mdi:transmission-tower-import
+    max: 250
+    mode: text
+
+  forecast_setting_grid_export_counter_sensor:
+    name: Forecast Grid Export Counter Sensor (total kWh)
+    icon: mdi:transmission-tower-export
+    max: 250
+    mode: text
+
 input_number:
   forecast_setting_charge_margin:
     name: Forecast Battery Charge Margin
@@ -376,7 +391,8 @@ template:
       c_max_solar_kwh_per_hour: 50       # solar: a larger increase per hour counts as a jump (other sensor, reset)
       c_meter_max_gone_s: 21600          # meter gone for more than 6 hours: back to calculation from power
       now_ts: "{{ as_timestamp(now()) }}"
-      # kWh counters of the P1 meter, detected automatically (first group in which all sensors have a value):
+      # kWh counters of the grid meter. Entered in Forecasting Configuration (Basic) takes precedence;
+      # otherwise detected automatically (first group in which all sensors have a value):
       # SlimmeLezer/ESPHome DSMR, HomeWizard P1, DSMR integration
       p1_import_groups:
         - ['sensor.energy_consumed_tariff_1', 'sensor.energy_consumed_tariff_2']
@@ -386,32 +402,50 @@ template:
         - ['sensor.energy_produced_tariff_1', 'sensor.energy_produced_tariff_2']
         - ['sensor.p1_meter_energy_export']
         - ['sensor.electricity_meter_energy_production_tarif_1', 'sensor.electricity_meter_energy_production_tarif_2']
-      # Sum of the first complete group in kWh; -1 = no meter found
+      p1_import_own: >
+        {{ (states('input_text.forecast_setting_grid_import_counter_sensor') | lower).split(',') | map('trim') | select('match', '^sensor\\.[a-z0-9_]+$') | list }}
+      p1_export_own: >
+        {{ (states('input_text.forecast_setting_grid_export_counter_sensor') | lower).split(',') | map('trim') | select('match', '^sensor\\.[a-z0-9_]+$') | list }}
+      # Which sensors are used: the entered ones (comma separated), otherwise the first complete group
+      p1_import_ids: >
+        {%- set ns = namespace(g=[]) -%}
+        {%- if p1_import_own | length > 0 -%}{%- set ns.g = p1_import_own -%}
+        {%- else -%}
+          {%- for g in p1_import_groups -%}
+            {%- if ns.g | length == 0 and g | select('has_value') | list | length == g | length -%}{%- set ns.g = g -%}{%- endif -%}
+          {%- endfor -%}
+        {%- endif -%}
+        {{ ns.g }}
+      p1_export_ids: >
+        {%- set ns = namespace(g=[]) -%}
+        {%- if p1_export_own | length > 0 -%}{%- set ns.g = p1_export_own -%}
+        {%- else -%}
+          {%- for g in p1_export_groups -%}
+            {%- if ns.g | length == 0 and g | select('has_value') | list | length == g | length -%}{%- set ns.g = g -%}{%- endif -%}
+          {%- endfor -%}
+        {%- endif -%}
+        {{ ns.g }}
+      # Sum in kWh (Wh and MWh are converted); -1 = no meter found or not available
       meter_import: >
-        {%- set ns = namespace(v=-1) -%}
-        {%- for g in p1_import_groups -%}
-          {%- if ns.v < 0 and g | select('has_value') | list | length == g | length -%}
-            {%- set ns.v = g | map('states') | map('float', 0) | sum -%}
-          {%- endif -%}
-        {%- endfor -%}
-        {{ ns.v | round(3) }}
+        {%- if p1_import_ids | length > 0 and p1_import_ids | select('has_value') | list | length == p1_import_ids | length -%}
+          {%- set ns = namespace(v=0) -%}
+          {%- for e in p1_import_ids -%}
+            {%- set u = state_attr(e, 'unit_of_measurement') -%}
+            {%- set v = states(e) | float(0) -%}
+            {%- set ns.v = ns.v + (v / 1000 if u == 'Wh' else (v * 1000 if u == 'MWh' else v)) -%}
+          {%- endfor -%}
+          {{ ns.v | round(3) }}
+        {%- else -%}-1{%- endif -%}
       meter_export: >
-        {%- set ns = namespace(v=-1) -%}
-        {%- for g in p1_export_groups -%}
-          {%- if ns.v < 0 and g | select('has_value') | list | length == g | length -%}
-            {%- set ns.v = g | map('states') | map('float', 0) | sum -%}
-          {%- endif -%}
-        {%- endfor -%}
-        {{ ns.v | round(3) }}
-      # Solar panel counter (kWh) of the configured sensor; -1 = not available
-      solar_entity: "{{ states('input_text.forecast_setting_solar_production_sensor') | trim }}"
-      solar_source: >
-        {% set e = solar_entity %}
-        {% if e | lower | regex_match('^sensor\\..+') and has_value(e) %}
-          {% set u = state_attr(e, 'unit_of_measurement') %}
-          {% set v = states(e) | float(-1) %}
-          {% if v < 0 %}-1{% elif u == 'Wh' %}{{ (v / 1000) | round(3) }}{% elif u == 'MWh' %}{{ (v * 1000) | round(3) }}{% else %}{{ v | round(3) }}{% endif %}
-        {% else %}-1{% endif %}
+        {%- if p1_export_ids | length > 0 and p1_export_ids | select('has_value') | list | length == p1_export_ids | length -%}
+          {%- set ns = namespace(v=0) -%}
+          {%- for e in p1_export_ids -%}
+            {%- set u = state_attr(e, 'unit_of_measurement') -%}
+            {%- set v = states(e) | float(0) -%}
+            {%- set ns.v = ns.v + (v / 1000 if u == 'Wh' else (v * 1000 if u == 'MWh' else v)) -%}
+          {%- endfor -%}
+          {{ ns.v | round(3) }}
+        {%- else -%}-1{%- endif -%}
       int_import: "{{ states('sensor.forecast_grid_import_total') | float(-1) }}"
       int_export: "{{ states('sensor.forecast_grid_export_total') | float(-1) }}"
     sensor:
@@ -472,7 +506,7 @@ template:
           {% set prev = prev if prev >= 0 else ([int_import, 0] | max) %}
           {% set m_old = this.attributes.get('meter') %}
           {% set m_ts = this.attributes.get('meter_ts') | float(0) %}
-          {% set m_valid = m_old is number and (now_ts - m_ts) <= c_meter_max_gone_s %}
+          {% set m_valid = m_old is number and (now_ts - m_ts) <= c_meter_max_gone_s and this.attributes.get('meter_sensors') in [none, p1_import_ids] %}
           {% set i_old = this.attributes.get('integration') %}
           {% if meter_import >= 0 %}
             {% set d = (meter_import - m_old) if m_valid else 0 %}
@@ -499,11 +533,13 @@ template:
             {% elif m_ts > 0 and (now_ts - m_ts) <= c_meter_max_gone_s %}{{ m_ts }}
             {% else %}{{ none }}{% endif %}
           integration: "{{ int_import if int_import >= 0 else none }}"
+          # Which sensors supply the meter reading; another source does not cause a jump
+          meter_sensors: "{{ p1_import_ids if meter_import >= 0 else this.attributes.get('meter_sensors') }}"
           source: >
             {% set m_ts = this.attributes.get('meter_ts') | float(0) %}
-            {% if meter_import >= 0 %}P1 meter (kWh counters)
-            {% elif m_ts > 0 and (now_ts - m_ts) <= c_meter_max_gone_s %}P1 meter briefly unreachable (will be added)
-            {% else %}Calculated from power (no P1 counter found){% endif %}
+            {% if meter_import >= 0 %}{{ 'Entered counter (kWh)' if p1_import_own | length > 0 else 'P1 meter (kWh counters)' }}
+            {% elif m_ts > 0 and (now_ts - m_ts) <= c_meter_max_gone_s %}Meter briefly unreachable (will be added)
+            {% else %}Calculated from power (no kWh counter found or entered){% endif %}
 
       # Adds up the increase of the P1 meter (exact, same source as the energy dashboard).
       # Without a meter: the increase of the integration from power. By adding up instead of
@@ -522,7 +558,7 @@ template:
           {% set prev = prev if prev >= 0 else ([int_export, 0] | max) %}
           {% set m_old = this.attributes.get('meter') %}
           {% set m_ts = this.attributes.get('meter_ts') | float(0) %}
-          {% set m_valid = m_old is number and (now_ts - m_ts) <= c_meter_max_gone_s %}
+          {% set m_valid = m_old is number and (now_ts - m_ts) <= c_meter_max_gone_s and this.attributes.get('meter_sensors') in [none, p1_export_ids] %}
           {% set i_old = this.attributes.get('integration') %}
           {% if meter_export >= 0 %}
             {% set d = (meter_export - m_old) if m_valid else 0 %}
@@ -549,11 +585,13 @@ template:
             {% elif m_ts > 0 and (now_ts - m_ts) <= c_meter_max_gone_s %}{{ m_ts }}
             {% else %}{{ none }}{% endif %}
           integration: "{{ int_export if int_export >= 0 else none }}"
+          # Which sensors supply the meter reading; another source does not cause a jump
+          meter_sensors: "{{ p1_export_ids if meter_export >= 0 else this.attributes.get('meter_sensors') }}"
           source: >
             {% set m_ts = this.attributes.get('meter_ts') | float(0) %}
-            {% if meter_export >= 0 %}P1 meter (kWh counters)
-            {% elif m_ts > 0 and (now_ts - m_ts) <= c_meter_max_gone_s %}P1 meter briefly unreachable (will be added)
-            {% else %}Calculated from power (no P1 counter found){% endif %}
+            {% if meter_export >= 0 %}{{ 'Entered counter (kWh)' if p1_export_own | length > 0 else 'P1 meter (kWh counters)' }}
+            {% elif m_ts > 0 and (now_ts - m_ts) <= c_meter_max_gone_s %}Meter briefly unreachable (will be added)
+            {% else %}Calculated from power (no kWh counter found or entered){% endif %}
 
       - name: "Forecast Counter Grid Export From Solar"
         unique_id: forecast_counter_grid_export_from_solar
