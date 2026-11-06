@@ -3958,6 +3958,27 @@ views:
             icon: ''
             heading: Forecasting Configuratie (Basis)
             heading_style: title
+            badges:
+              - type: button
+                icon: mdi:restore-alert
+                tap_action:
+                  action: perform-action
+                  perform_action: input_button.press
+                  target:
+                    entity_id: input_button.forecast_verbruiksgegevens_resetten
+                  data: {}
+                  confirmation:
+                    title: Verbruiksgegevens resetten?
+                    text: >-
+                      Het geleerde verbruiksprofiel (per uur en per kwartier) en de
+                      historie van 7 dagen (zonproductie, net, accu, gemiddeld gebruik
+                      en zelfverbruik) worden gewist. De planner rekent daarna eerst met
+                      startwaarden en leert alles opnieuw. Dit kan niet ongedaan worden
+                      gemaakt. De besparing blijft bewaard.
+                    confirm_text: Resetten
+                    dismiss_text: Annuleren
+                color: '#01a180'
+                text: Verbruiksgegevens resetten
             visibility:
               - condition: state
                 entity: input_boolean.forecast_tonen_op_dashboard

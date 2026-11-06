@@ -69,6 +69,10 @@ input_button:
   forecast_recalculate:
     name: Forecast Recalculate
     icon: mdi:calculator-variant
+  # Clears the learned usage profile and the 7-day history (see the automation at the bottom)
+  forecast_reset_usage_data:
+    name: Forecast Reset Usage Data
+    icon: mdi:restore-alert
 
 # ---------------------------------------------------------------------
 # 2. Integration sensors (kWh counters, derived from power sensors)
@@ -369,6 +373,7 @@ template:
         event: start
     variables:
       c_max_kwh_per_hour: 15             # a larger increase per hour counts as a meter swap or error
+      c_max_solar_kwh_per_hour: 50       # solar: a larger increase per hour counts as a jump (other sensor, reset)
       c_meter_max_gone_s: 21600          # meter gone for more than 6 hours: back to calculation from power
       now_ts: "{{ as_timestamp(now()) }}"
       # kWh counters of the P1 meter, detected automatically (first group in which all sensors have a value):
@@ -398,28 +403,57 @@ template:
           {%- endif -%}
         {%- endfor -%}
         {{ ns.v | round(3) }}
+      # Solar panel counter (kWh) of the configured sensor; -1 = not available
+      solar_entity: "{{ states('input_text.forecast_setting_solar_production_sensor') | trim }}"
+      solar_source: >
+        {% set e = solar_entity %}
+        {% if e | lower | regex_match('^sensor\\..+') and has_value(e) %}
+          {% set u = state_attr(e, 'unit_of_measurement') %}
+          {% set v = states(e) | float(-1) %}
+          {% if v < 0 %}-1{% elif u == 'Wh' %}{{ (v / 1000) | round(3) }}{% elif u == 'MWh' %}{{ (v * 1000) | round(3) }}{% else %}{{ v | round(3) }}{% endif %}
+        {% else %}-1{% endif %}
       int_import: "{{ states('sensor.forecast_grid_import_total') | float(-1) }}"
       int_export: "{{ states('sensor.forecast_grid_export_total') | float(-1) }}"
     sensor:
+      # Solar production: adds up the increase of the configured production sensor instead of
+      # copying its value. A jump then does not count as production: another sensor entered, a
+      # counter that briefly reports 0 or jumps back, a replaced inverter. If the sensor drops out
+      # (e.g. at night), the missed part is added once it is back. An ignored jump is shown in the
+      # attribute last_jump.
       - name: "Forecast Counter Solar Production"
         unique_id: forecast_counter_solar_production
         unit_of_measurement: "kWh"
         device_class: energy
         state_class: total_increasing
-        availability: >
-          {% set e = states('input_text.forecast_setting_solar_production_sensor') %}
-          {{ e | lower | regex_match('^sensor\\..+') and has_value(e) }}
+        availability: "{{ solar_entity | lower | regex_match('^sensor\\..+') }}"
         state: >
-          {% set e = states('input_text.forecast_setting_solar_production_sensor') %}
-          {% set u = state_attr(e, 'unit_of_measurement') %}
-          {% set v = states(e) | float(0) %}
-          {% if u == 'Wh' %}
-            {{ (v / 1000) | round(3) }}
-          {% elif u == 'MWh' %}
-            {{ (v * 1000) | round(3) }}
-          {% else %}
-            {{ v | round(3) }}
-          {% endif %}
+          {% set prev_v = this.state | float(-1) %}
+          {% set prev_v = prev_v if prev_v >= 0 else 0 %}
+          {% set s_old = this.attributes.get('source') %}
+          {% set s_ts = this.attributes.get('source_ts') | float(0) %}
+          {% if solar_source >= 0 and s_old is number and this.attributes.get('source_entity') == solar_entity %}
+            {% set d = solar_source - s_old %}
+            {% set max_d = c_max_solar_kwh_per_hour * ([(now_ts - s_ts) / 3600, 1] | max) %}
+            {{ (prev_v + (d if 0 <= d <= max_d else 0)) | round(3) }}
+          {% else %}{{ prev_v | round(3) }}{% endif %}
+        attributes:
+          # Last value of the source sensor (kWh), when it was read and which sensor it was
+          source: >
+            {% if solar_source >= 0 %}{{ solar_source }}
+            {% elif this.attributes.get('source_entity') == solar_entity %}{{ this.attributes.get('source') }}
+            {% else %}{{ none }}{% endif %}
+          source_ts: >
+            {% if solar_source >= 0 %}{{ now_ts | round(0) }}
+            {% elif this.attributes.get('source_entity') == solar_entity %}{{ this.attributes.get('source_ts') }}
+            {% else %}{{ none }}{% endif %}
+          source_entity: "{{ solar_entity }}"
+          last_jump: >
+            {% set s_old = this.attributes.get('source') %}
+            {% set s_ts = this.attributes.get('source_ts') | float(0) %}
+            {% set d = (solar_source - s_old) if (solar_source >= 0 and s_old is number and this.attributes.get('source_entity') == solar_entity) else 0 %}
+            {% set max_d = c_max_solar_kwh_per_hour * ([(now_ts - s_ts) / 3600, 1] | max) %}
+            {% if d < 0 or d > max_d %}{{ now().strftime('%Y-%m-%d %H:%M') }}: {{ d | round(1) }} kWh ignored
+            {% else %}{{ this.attributes.get('last_jump') }}{% endif %}
 
       # Adds up the increase of the P1 meter (exact, same source as the energy dashboard).
       # Without a meter: the increase of the integration from power. By adding up instead of
@@ -568,12 +602,23 @@ template:
   #     whether it is a workday. Otherwise Mon-Fri counts as a workday.
   #     The values are kept after a restart.
   #     Note: the entity must be named sensor.forecast_usage_profile (it reads its own previous values).
+  #     Reset: button Reset Usage Data (input_button.forecast_reset_usage_data).
   # -------------------------------------------------------------------
   - trigger:
       - platform: time_pattern
         minutes: "/15"
         seconds: 5
+      # Button Reset Usage Data: the profile starts over
+      - platform: state
+        entity_id: input_button.forecast_reset_usage_data
+        not_from:
+          - unknown
+          - unavailable
+        id: reset
     variables:
+      # On a reset the sensor does not read its own previous values (an entity that does not exist),
+      # so all values fall back to empty / 0 / evenly spread.
+      profile: "{{ 'sensor.forecast_usage_profile_reset' if trigger.id == 'reset' else 'sensor.forecast_usage_profile' }}"
       # Weight of a new measurement once there are enough measurements (memory = about 1 / weight measurements):
       c_alpha_min_workday: 0.1           # workday: ~10 measurements = about 2 weeks
       c_alpha_min_weekend: 0.2           # weekend: ~5 measurements = about 2.5 weeks
@@ -597,8 +642,8 @@ template:
           {% set v = states(e) | float(-1) %}
           {% if v < 0 %}-1{% elif u == 'Wh' %}{{ v / 1000 }}{% elif u == 'MWh' %}{{ v * 1000 }}{% else %}{{ v }}{% endif %}
         {% else %}-1{% endif %}
-      prev: "{{ state_attr('sensor.forecast_usage_profile', 'measurement') }}"
-      prev_q: "{{ state_attr('sensor.forecast_usage_profile', 'measurement_quarter') }}"
+      prev: "{{ state_attr(profile, 'measurement') }}"
+      prev_q: "{{ state_attr(profile, 'measurement_quarter') }}"
       # At night the inverter may be offline: then the previous value applies (no production)
       prod_now: >
         {% if t_prod >= 0 %}{{ t_prod }}
@@ -638,7 +683,7 @@ template:
       quarter_idx: "{{ (((prev_q.ts | float(0)) % 3600) // 900) | int if prev_q is mapping else 0 }}"
       quarter_type: "{{ (prev_q.daytype if prev_q is mapping and prev_q.daytype is defined else daytype_now) }}"
       # The quarters of the running hour, until they are complete
-      buffer_old: "{{ state_attr('sensor.forecast_usage_profile', 'quarter_buffer') }}"
+      buffer_old: "{{ state_attr(profile, 'quarter_buffer') }}"
       buffer_new: >
         {%- if quarter_kwh >= 0 -%}
           {%- set same = buffer_old is mapping and (buffer_old.u | int(0)) == quarter_hour_ts and buffer_old.k is defined and buffer_old.k | length == 4 -%}
@@ -665,16 +710,16 @@ template:
         icon: mdi:chart-timeline-variant
         unit_of_measurement: "h"
         state: >
-          {% set n1 = state_attr('sensor.forecast_usage_profile', 'n_workday') or [0] * 24 %}
-          {% set n2 = state_attr('sensor.forecast_usage_profile', 'n_weekend') or [0] * 24 %}
+          {% set n1 = state_attr(profile, 'n_workday') or [0] * 24 %}
+          {% set n2 = state_attr(profile, 'n_weekend') or [0] * 24 %}
           {% set ns = namespace(k=0) %}
           {% for i in range(24) %}{% if n1[i] | int(0) >= 3 %}{% set ns.k = ns.k + 1 %}{% endif %}{% if n2[i] | int(0) >= 2 %}{% set ns.k = ns.k + 1 %}{% endif %}{% endfor %}
           {{ ns.k }}
         attributes:
           # Average usage (kWh) per hour of the day, index 0 = 00:00-01:00
           workday: >
-            {% set old = state_attr('sensor.forecast_usage_profile', 'workday') or [none] * 24 %}
-            {% set n = state_attr('sensor.forecast_usage_profile', 'n_workday') or [0] * 24 %}
+            {% set old = state_attr(profile, 'workday') or [none] * 24 %}
+            {% set n = state_attr(profile, 'n_workday') or [0] * 24 %}
             {% set ns = namespace(l=[]) %}
             {% for i in range(24) %}
               {% set w = old[i] if old | length == 24 else none %}
@@ -687,8 +732,8 @@ template:
             {% endfor %}
             {{ ns.l }}
           weekend: >
-            {% set old = state_attr('sensor.forecast_usage_profile', 'weekend') or [none] * 24 %}
-            {% set n = state_attr('sensor.forecast_usage_profile', 'n_weekend') or [0] * 24 %}
+            {% set old = state_attr(profile, 'weekend') or [none] * 24 %}
+            {% set n = state_attr(profile, 'n_weekend') or [0] * 24 %}
             {% set ns = namespace(l=[]) %}
             {% for i in range(24) %}
               {% set w = old[i] if old | length == 24 else none %}
@@ -702,7 +747,7 @@ template:
             {{ ns.l }}
           # Number of measurements per hour
           n_workday: >
-            {% set n = state_attr('sensor.forecast_usage_profile', 'n_workday') or [0] * 24 %}
+            {% set n = state_attr(profile, 'n_workday') or [0] * 24 %}
             {% set ns = namespace(l=[]) %}
             {% for i in range(24) %}
               {% set k = (n[i] | int(0)) if n | length == 24 else 0 %}
@@ -710,7 +755,7 @@ template:
             {% endfor %}
             {{ ns.l }}
           n_weekend: >
-            {% set n = state_attr('sensor.forecast_usage_profile', 'n_weekend') or [0] * 24 %}
+            {% set n = state_attr(profile, 'n_weekend') or [0] * 24 %}
             {% set ns = namespace(l=[]) %}
             {% for i in range(24) %}
               {% set k = (n[i] | int(0)) if n | length == 24 else 0 %}
@@ -720,9 +765,9 @@ template:
           # Shape factor per quarter of the day (96 values, index 0 = 00:00-00:15; 1 = evenly spread,
           # the four quarters of an hour add up to 4)
           shape_workday: >
-            {% set old = state_attr('sensor.forecast_usage_profile', 'shape_workday') or [] %}
+            {% set old = state_attr(profile, 'shape_workday') or [] %}
             {% set old = old if old | length == 96 else [1.0] * 96 %}
-            {% set n = state_attr('sensor.forecast_usage_profile', 'n_shape_workday') or [] %}
+            {% set n = state_attr(profile, 'n_shape_workday') or [] %}
             {% set ok = shape_measurement is mapping and shape_measurement.type == 'workday' %}
             {% set ns = namespace(l=[]) %}
             {% for i in range(96) %}
@@ -735,9 +780,9 @@ template:
             {% endfor %}
             {{ ns.l }}
           shape_weekend: >
-            {% set old = state_attr('sensor.forecast_usage_profile', 'shape_weekend') or [] %}
+            {% set old = state_attr(profile, 'shape_weekend') or [] %}
             {% set old = old if old | length == 96 else [1.0] * 96 %}
-            {% set n = state_attr('sensor.forecast_usage_profile', 'n_shape_weekend') or [] %}
+            {% set n = state_attr(profile, 'n_shape_weekend') or [] %}
             {% set ok = shape_measurement is mapping and shape_measurement.type == 'weekend' %}
             {% set ns = namespace(l=[]) %}
             {% for i in range(96) %}
@@ -751,7 +796,7 @@ template:
             {{ ns.l }}
           # Number of complete hours (four quarters measured) per hour of the day
           n_shape_workday: >
-            {% set n = state_attr('sensor.forecast_usage_profile', 'n_shape_workday') or [] %}
+            {% set n = state_attr(profile, 'n_shape_workday') or [] %}
             {% set ns = namespace(l=[]) %}
             {% for i in range(24) %}
               {% set k = (n[i] | int(0)) if n | length == 24 else 0 %}
@@ -759,7 +804,7 @@ template:
             {% endfor %}
             {{ ns.l }}
           n_shape_weekend: >
-            {% set n = state_attr('sensor.forecast_usage_profile', 'n_shape_weekend') or [] %}
+            {% set n = state_attr(profile, 'n_shape_weekend') or [] %}
             {% set ns = namespace(l=[]) %}
             {% for i in range(24) %}
               {% set k = (n[i] | int(0)) if n | length == 24 else 0 %}
@@ -768,10 +813,10 @@ template:
             {{ ns.l }}
           last_hour_kwh: >
             {% if full_hour %}{{ hour_kwh if hour_kwh >= 0 else none }}
-            {% else %}{{ state_attr('sensor.forecast_usage_profile', 'last_hour_kwh') }}{% endif %}
+            {% else %}{{ state_attr(profile, 'last_hour_kwh') }}{% endif %}
           last_hour: >
             {% if full_hour %}{{ ('%02d:00 (%s)' | format(hour_idx, hour_type)) if hour_idx >= 0 and hour_kwh >= 0 else none }}
-            {% else %}{{ state_attr('sensor.forecast_usage_profile', 'last_hour') }}{% endif %}
+            {% else %}{{ state_attr(profile, 'last_hour') }}{% endif %}
           last_quarter_kwh: "{{ quarter_kwh if quarter_kwh >= 0 else none }}"
           quarter_buffer: "{{ buffer_new }}"
           # Counter values for the calculation an hour from now (only updated on the full hour)
@@ -914,7 +959,8 @@ template:
       ev_solar7: "{{ states('sensor.ev_charged_from_solar_7_days') | float(0) }}"
       hist_days: >
         {% set c = state_attr('sensor.forecast_solar_production_7_days', 'age_coverage_ratio') %}
-        {{ (7 * (c | float(1) if c is not none else 1)) | round(2) }}
+        {# No value (e.g. right after a reset): no history yet #}
+        {{ (7 * (c | float(0) if c is not none else 0)) | round(2) }}
 
       # Directly used solar in 7 days = production - export from solar - charging from solar - car from solar
       direct_7_kwh: "{{ [prod7 - exp_solar7 - charge_solar7 - ev_solar7, 0] | max }}"
@@ -1866,3 +1912,54 @@ template:
         device_class: energy
         icon: mdi:battery-arrow-up
         state: "{{ solar_dc }}"
+
+# ---------------------------------------------------------------------
+# 5. Reset usage data (button in Forecasting Configuration (Basic))
+#    The usage profile resets itself via the same button (see 3b). This automation clears
+#    the stored history of the counters the 7-day statistics are based on and reloads those
+#    statistics: solar production, grid, battery, average usage and self-consumption then
+#    start over (the planner first uses the start values). The counters themselves keep
+#    running; the savings (zendure_savings_global.yaml) keep their own totals and are kept.
+#    Forecast Measured Charge Power is kept as well.
+# ---------------------------------------------------------------------
+automation:
+  - id: forecast_reset_usage_data
+    alias: Forecast Reset Usage Data
+    description: >-
+      Forecasting 2026.11.3 - Clears the 7-day history (solar, grid, battery and the car if
+      zendure_ev_global.yaml is loaded) and reloads the statistics. The usage profile resets
+      itself via the same button.
+    mode: single
+    triggers:
+      - trigger: state
+        entity_id: input_button.forecast_reset_usage_data
+        not_from:
+          - unknown
+          - unavailable
+    conditions: []
+    actions:
+      - variables:
+          counters: >
+            {{ ['sensor.forecast_counter_solar_production', 'sensor.forecast_counter_grid_import',
+                'sensor.forecast_counter_grid_export', 'sensor.forecast_counter_grid_export_from_solar',
+                'sensor.forecast_counter_zendure_charge', 'sensor.forecast_counter_zendure_discharge',
+                'sensor.forecast_counter_zendure_charge_from_solar',
+                'sensor.ev_counter_charged', 'sensor.ev_counter_charged_from_solar']
+               | select('in', states.sensor | map(attribute='entity_id') | list) | list }}
+      - action: recorder.purge_entities
+        target:
+          entity_id: "{{ counters }}"
+        data:
+          keep_days: 0
+      # The recorder purges in the background; wait a moment before reloading the statistics
+      - delay:
+          seconds: 15
+      - action: statistics.reload
+      - action: input_button.press
+        target:
+          entity_id: input_button.forecast_recalculate
+      - action: logbook.log
+        data:
+          name: Zendure Forecasting
+          message: Usage data reset (usage profile and 7-day history)
+          entity_id: input_button.forecast_reset_usage_data

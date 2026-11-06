@@ -69,6 +69,10 @@ input_button:
   forecast_herberekenen:
     name: Forecast Herberekenen
     icon: mdi:calculator-variant
+  # Wist het geleerde verbruiksprofiel en de historie van 7 dagen (zie de automation onderaan)
+  forecast_verbruiksgegevens_resetten:
+    name: Forecast Verbruiksgegevens Resetten
+    icon: mdi:restore-alert
 
 # ---------------------------------------------------------------------
 # 2. Integratiesensoren (kWh-tellers, afgeleid van vermogens-sensoren)
@@ -369,6 +373,7 @@ template:
         event: start
     variables:
       c_max_kwh_per_uur: 15              # grotere toename per uur geldt als meterwissel of fout
+      c_max_zon_kwh_per_uur: 50          # zon: grotere toename per uur geldt als sprong (andere sensor, reset)
       c_meter_max_weg_s: 21600           # meter langer dan 6 uur weg: terug naar berekening uit vermogen
       nu_ts: "{{ as_timestamp(now()) }}"
       # kWh-tellers van de P1-meter, automatisch herkend (eerste groep waarvan alle sensoren een waarde hebben):
@@ -398,28 +403,57 @@ template:
           {%- endif -%}
         {%- endfor -%}
         {{ ns.v | round(3) }}
+      # Zonnepanelen-teller (kWh) van de ingevulde sensor; -1 = niet beschikbaar
+      zon_entiteit: "{{ states('input_text.forecast_zon_productie_sensor') | trim }}"
+      zon_bron: >
+        {% set e = zon_entiteit %}
+        {% if e | lower | regex_match('^sensor\\..+') and has_value(e) %}
+          {% set u = state_attr(e, 'unit_of_measurement') %}
+          {% set v = states(e) | float(-1) %}
+          {% if v < 0 %}-1{% elif u == 'Wh' %}{{ (v / 1000) | round(3) }}{% elif u == 'MWh' %}{{ (v * 1000) | round(3) }}{% else %}{{ v | round(3) }}{% endif %}
+        {% else %}-1{% endif %}
       int_import: "{{ states('sensor.forecast_p1_import_totaal') | float(-1) }}"
       int_export: "{{ states('sensor.forecast_p1_export_totaal') | float(-1) }}"
     sensor:
+      # Zonproductie: telt de toename van de ingevulde productiesensor op, in plaats van de stand
+      # over te nemen. Een sprong telt zo niet als productie: een andere sensor ingevuld, een teller
+      # die even 0 meldt of terugspringt, een vervangen omvormer. Valt de sensor weg (bv. 's nachts),
+      # dan wordt het gemiste stuk opgeteld zodra hij terug is. Een genegeerde sprong staat in het
+      # attribuut laatste_sprong.
       - name: "Forecast Teller Zon Productie"
         unique_id: forecast_teller_zon_productie
         unit_of_measurement: "kWh"
         device_class: energy
         state_class: total_increasing
-        availability: >
-          {% set e = states('input_text.forecast_zon_productie_sensor') %}
-          {{ e | lower | regex_match('^sensor\\..+') and has_value(e) }}
+        availability: "{{ zon_entiteit | lower | regex_match('^sensor\\..+') }}"
         state: >
-          {% set e = states('input_text.forecast_zon_productie_sensor') %}
-          {% set u = state_attr(e, 'unit_of_measurement') %}
-          {% set v = states(e) | float(0) %}
-          {% if u == 'Wh' %}
-            {{ (v / 1000) | round(3) }}
-          {% elif u == 'MWh' %}
-            {{ (v * 1000) | round(3) }}
-          {% else %}
-            {{ v | round(3) }}
-          {% endif %}
+          {% set vorig = this.state | float(-1) %}
+          {% set vorig = vorig if vorig >= 0 else 0 %}
+          {% set b_oud = this.attributes.get('bron') %}
+          {% set b_ts = this.attributes.get('bron_ts') | float(0) %}
+          {% if zon_bron >= 0 and b_oud is number and this.attributes.get('bron_entiteit') == zon_entiteit %}
+            {% set d = zon_bron - b_oud %}
+            {% set max_d = c_max_zon_kwh_per_uur * ([(nu_ts - b_ts) / 3600, 1] | max) %}
+            {{ (vorig + (d if 0 <= d <= max_d else 0)) | round(3) }}
+          {% else %}{{ vorig | round(3) }}{% endif %}
+        attributes:
+          # Laatste stand van de bronsensor (kWh), het moment daarvan en welke sensor het was
+          bron: >
+            {% if zon_bron >= 0 %}{{ zon_bron }}
+            {% elif this.attributes.get('bron_entiteit') == zon_entiteit %}{{ this.attributes.get('bron') }}
+            {% else %}{{ none }}{% endif %}
+          bron_ts: >
+            {% if zon_bron >= 0 %}{{ nu_ts | round(0) }}
+            {% elif this.attributes.get('bron_entiteit') == zon_entiteit %}{{ this.attributes.get('bron_ts') }}
+            {% else %}{{ none }}{% endif %}
+          bron_entiteit: "{{ zon_entiteit }}"
+          laatste_sprong: >
+            {% set b_oud = this.attributes.get('bron') %}
+            {% set b_ts = this.attributes.get('bron_ts') | float(0) %}
+            {% set d = (zon_bron - b_oud) if (zon_bron >= 0 and b_oud is number and this.attributes.get('bron_entiteit') == zon_entiteit) else 0 %}
+            {% set max_d = c_max_zon_kwh_per_uur * ([(nu_ts - b_ts) / 3600, 1] | max) %}
+            {% if d < 0 or d > max_d %}{{ now().strftime('%Y-%m-%d %H:%M') }}: {{ d | round(1) }} kWh genegeerd
+            {% else %}{{ this.attributes.get('laatste_sprong') }}{% endif %}
 
       # Telt de toename van de P1-meter op (exact, zelfde bron als het energiedashboard).
       # Zonder meter: de toename van de integratie uit het vermogen. Door op te tellen in
@@ -568,12 +602,23 @@ template:
   #     dan bepaalt die of het een werkdag is. Anders geldt ma-vr als werkdag.
   #     De waarden blijven bewaard na een herstart.
   #     Let op: de entiteit moet sensor.forecast_verbruiksprofiel heten (leest zijn eigen vorige waarden).
+  #     Resetten: knop Verbruiksgegevens Resetten (input_button.forecast_verbruiksgegevens_resetten).
   # -------------------------------------------------------------------
   - trigger:
       - platform: time_pattern
         minutes: "/15"
         seconds: 5
+      # Knop Verbruiksgegevens Resetten: het profiel begint opnieuw
+      - platform: state
+        entity_id: input_button.forecast_verbruiksgegevens_resetten
+        not_from:
+          - unknown
+          - unavailable
+        id: reset
     variables:
+      # Bij een reset leest de sensor zijn eigen vorige waarden niet (een entiteit die niet bestaat),
+      # zodat alle waarden terugvallen op leeg / 0 / gelijk verdeeld.
+      profiel: "{{ 'sensor.forecast_verbruiksprofiel_gereset' if trigger.id == 'reset' else 'sensor.forecast_verbruiksprofiel' }}"
       # Gewicht van een nieuwe meting zodra er genoeg metingen zijn (geheugen = ongeveer 1 / gewicht metingen):
       c_alpha_min_werkdag: 0.1           # werkdag: ~10 metingen = ongeveer 2 weken
       c_alpha_min_weekend: 0.2           # weekend: ~5 metingen = ongeveer 2,5 week
@@ -597,8 +642,8 @@ template:
           {% set v = states(e) | float(-1) %}
           {% if v < 0 %}-1{% elif u == 'Wh' %}{{ v / 1000 }}{% elif u == 'MWh' %}{{ v * 1000 }}{% else %}{{ v }}{% endif %}
         {% else %}-1{% endif %}
-      vorige: "{{ state_attr('sensor.forecast_verbruiksprofiel', 'meting') }}"
-      vorige_k: "{{ state_attr('sensor.forecast_verbruiksprofiel', 'meting_kwartier') }}"
+      vorige: "{{ state_attr(profiel, 'meting') }}"
+      vorige_k: "{{ state_attr(profiel, 'meting_kwartier') }}"
       # 's Nachts mag de omvormer offline zijn: dan geldt de vorige stand (geen productie)
       prod_nu: >
         {% if t_prod >= 0 %}{{ t_prod }}
@@ -638,7 +683,7 @@ template:
       kwart_idx: "{{ (((vorige_k.ts | float(0)) % 3600) // 900) | int if vorige_k is mapping else 0 }}"
       kwart_type: "{{ (vorige_k.dagtype if vorige_k is mapping and vorige_k.dagtype is defined else dagtype_nu) }}"
       # De kwartieren van het lopende uur, tot ze compleet zijn
-      buffer_oud: "{{ state_attr('sensor.forecast_verbruiksprofiel', 'kwartier_buffer') }}"
+      buffer_oud: "{{ state_attr(profiel, 'kwartier_buffer') }}"
       buffer_nieuw: >
         {%- if kwart_kwh >= 0 -%}
           {%- set zelfde = buffer_oud is mapping and (buffer_oud.u | int(0)) == kwart_uur_ts and buffer_oud.k is defined and buffer_oud.k | length == 4 -%}
@@ -665,16 +710,16 @@ template:
         icon: mdi:chart-timeline-variant
         unit_of_measurement: "uur"
         state: >
-          {% set n1 = state_attr('sensor.forecast_verbruiksprofiel', 'n_werkdag') or [0] * 24 %}
-          {% set n2 = state_attr('sensor.forecast_verbruiksprofiel', 'n_weekend') or [0] * 24 %}
+          {% set n1 = state_attr(profiel, 'n_werkdag') or [0] * 24 %}
+          {% set n2 = state_attr(profiel, 'n_weekend') or [0] * 24 %}
           {% set ns = namespace(k=0) %}
           {% for i in range(24) %}{% if n1[i] | int(0) >= 3 %}{% set ns.k = ns.k + 1 %}{% endif %}{% if n2[i] | int(0) >= 2 %}{% set ns.k = ns.k + 1 %}{% endif %}{% endfor %}
           {{ ns.k }}
         attributes:
           # Gemiddeld verbruik (kWh) per uur van de dag, index 0 = 00:00-01:00
           werkdag: >
-            {% set oud = state_attr('sensor.forecast_verbruiksprofiel', 'werkdag') or [none] * 24 %}
-            {% set n = state_attr('sensor.forecast_verbruiksprofiel', 'n_werkdag') or [0] * 24 %}
+            {% set oud = state_attr(profiel, 'werkdag') or [none] * 24 %}
+            {% set n = state_attr(profiel, 'n_werkdag') or [0] * 24 %}
             {% set ns = namespace(l=[]) %}
             {% for i in range(24) %}
               {% set w = oud[i] if oud | length == 24 else none %}
@@ -687,8 +732,8 @@ template:
             {% endfor %}
             {{ ns.l }}
           weekend: >
-            {% set oud = state_attr('sensor.forecast_verbruiksprofiel', 'weekend') or [none] * 24 %}
-            {% set n = state_attr('sensor.forecast_verbruiksprofiel', 'n_weekend') or [0] * 24 %}
+            {% set oud = state_attr(profiel, 'weekend') or [none] * 24 %}
+            {% set n = state_attr(profiel, 'n_weekend') or [0] * 24 %}
             {% set ns = namespace(l=[]) %}
             {% for i in range(24) %}
               {% set w = oud[i] if oud | length == 24 else none %}
@@ -702,7 +747,7 @@ template:
             {{ ns.l }}
           # Aantal metingen per uur
           n_werkdag: >
-            {% set n = state_attr('sensor.forecast_verbruiksprofiel', 'n_werkdag') or [0] * 24 %}
+            {% set n = state_attr(profiel, 'n_werkdag') or [0] * 24 %}
             {% set ns = namespace(l=[]) %}
             {% for i in range(24) %}
               {% set k = (n[i] | int(0)) if n | length == 24 else 0 %}
@@ -710,7 +755,7 @@ template:
             {% endfor %}
             {{ ns.l }}
           n_weekend: >
-            {% set n = state_attr('sensor.forecast_verbruiksprofiel', 'n_weekend') or [0] * 24 %}
+            {% set n = state_attr(profiel, 'n_weekend') or [0] * 24 %}
             {% set ns = namespace(l=[]) %}
             {% for i in range(24) %}
               {% set k = (n[i] | int(0)) if n | length == 24 else 0 %}
@@ -720,9 +765,9 @@ template:
           # Vormfactor per kwartier van de dag (96 waarden, index 0 = 00:00-00:15; 1 = gelijk verdeeld,
           # de vier kwartieren van een uur zijn samen 4)
           vorm_werkdag: >
-            {% set oud = state_attr('sensor.forecast_verbruiksprofiel', 'vorm_werkdag') or [] %}
+            {% set oud = state_attr(profiel, 'vorm_werkdag') or [] %}
             {% set oud = oud if oud | length == 96 else [1.0] * 96 %}
-            {% set n = state_attr('sensor.forecast_verbruiksprofiel', 'n_vorm_werkdag') or [] %}
+            {% set n = state_attr(profiel, 'n_vorm_werkdag') or [] %}
             {% set ok = vorm_meting is mapping and vorm_meting.type == 'werkdag' %}
             {% set ns = namespace(l=[]) %}
             {% for i in range(96) %}
@@ -735,9 +780,9 @@ template:
             {% endfor %}
             {{ ns.l }}
           vorm_weekend: >
-            {% set oud = state_attr('sensor.forecast_verbruiksprofiel', 'vorm_weekend') or [] %}
+            {% set oud = state_attr(profiel, 'vorm_weekend') or [] %}
             {% set oud = oud if oud | length == 96 else [1.0] * 96 %}
-            {% set n = state_attr('sensor.forecast_verbruiksprofiel', 'n_vorm_weekend') or [] %}
+            {% set n = state_attr(profiel, 'n_vorm_weekend') or [] %}
             {% set ok = vorm_meting is mapping and vorm_meting.type == 'weekend' %}
             {% set ns = namespace(l=[]) %}
             {% for i in range(96) %}
@@ -751,7 +796,7 @@ template:
             {{ ns.l }}
           # Aantal complete uren (vier kwartieren gemeten) per uur van de dag
           n_vorm_werkdag: >
-            {% set n = state_attr('sensor.forecast_verbruiksprofiel', 'n_vorm_werkdag') or [] %}
+            {% set n = state_attr(profiel, 'n_vorm_werkdag') or [] %}
             {% set ns = namespace(l=[]) %}
             {% for i in range(24) %}
               {% set k = (n[i] | int(0)) if n | length == 24 else 0 %}
@@ -759,7 +804,7 @@ template:
             {% endfor %}
             {{ ns.l }}
           n_vorm_weekend: >
-            {% set n = state_attr('sensor.forecast_verbruiksprofiel', 'n_vorm_weekend') or [] %}
+            {% set n = state_attr(profiel, 'n_vorm_weekend') or [] %}
             {% set ns = namespace(l=[]) %}
             {% for i in range(24) %}
               {% set k = (n[i] | int(0)) if n | length == 24 else 0 %}
@@ -768,10 +813,10 @@ template:
             {{ ns.l }}
           laatste_uur_kwh: >
             {% if heel_uur %}{{ uur_kwh if uur_kwh >= 0 else none }}
-            {% else %}{{ state_attr('sensor.forecast_verbruiksprofiel', 'laatste_uur_kwh') }}{% endif %}
+            {% else %}{{ state_attr(profiel, 'laatste_uur_kwh') }}{% endif %}
           laatste_uur: >
             {% if heel_uur %}{{ ('%02d:00 (%s)' | format(uur_idx, uur_type)) if uur_idx >= 0 and uur_kwh >= 0 else none }}
-            {% else %}{{ state_attr('sensor.forecast_verbruiksprofiel', 'laatste_uur') }}{% endif %}
+            {% else %}{{ state_attr(profiel, 'laatste_uur') }}{% endif %}
           laatste_kwartier_kwh: "{{ kwart_kwh if kwart_kwh >= 0 else none }}"
           kwartier_buffer: "{{ buffer_nieuw }}"
           # Tellerstand voor de berekening over een uur (alleen op het hele uur bijgewerkt)
@@ -914,7 +959,8 @@ template:
       ev_zon7: "{{ states('sensor.ev_geladen_uit_zon_7_dagen') | float(0) }}"
       hist_dagen: >
         {% set c = state_attr('sensor.forecast_zon_productie_7_dagen', 'age_coverage_ratio') %}
-        {{ (7 * (c | float(1) if c is not none else 1)) | round(2) }}
+        {# Geen waarde (bv. net na een reset): nog geen historie #}
+        {{ (7 * (c | float(0) if c is not none else 0)) | round(2) }}
 
       # Direct verbruikte zon in 7 dagen = productie - teruglevering uit zon - laden uit zon - auto uit zon
       direct_7_kwh: "{{ [prod7 - exp_zon7 - laden_zon7 - ev_zon7, 0] | max }}"
@@ -1864,3 +1910,54 @@ template:
         device_class: energy
         icon: mdi:battery-arrow-up
         state: "{{ zon_dc }}"
+
+# ---------------------------------------------------------------------
+# 5. Verbruiksgegevens resetten (knop in Forecasting Configuratie (Basis))
+#    Het verbruiksprofiel reset zichzelf via dezelfde knop (zie 3b). Deze automation wist
+#    de opgeslagen historie van de tellers waar de 7-daagse statistieken op rekenen en laadt
+#    die statistieken opnieuw: zonproductie, net, accu, gemiddeld gebruik en zelfverbruik
+#    beginnen dan opnieuw (de planner gebruikt eerst de startwaarden). De tellers zelf lopen
+#    gewoon door; de besparing (zendure_besparing.yaml) houdt zijn eigen totalen bij en
+#    blijft bewaard. Forecast Gemeten Laadvermogen blijft ook staan.
+# ---------------------------------------------------------------------
+automation:
+  - id: forecast_verbruiksgegevens_resetten
+    alias: Forecast Verbruiksgegevens Resetten
+    description: >-
+      Forecasting 2026.11.3 - Wist de historie van 7 dagen (zon, net, accu en de auto als
+      zendure_ev.yaml geladen is) en laadt de statistieken opnieuw. Het verbruiksprofiel
+      reset zichzelf via dezelfde knop.
+    mode: single
+    triggers:
+      - trigger: state
+        entity_id: input_button.forecast_verbruiksgegevens_resetten
+        not_from:
+          - unknown
+          - unavailable
+    conditions: []
+    actions:
+      - variables:
+          tellers: >
+            {{ ['sensor.forecast_teller_zon_productie', 'sensor.forecast_teller_p1_import',
+                'sensor.forecast_teller_p1_export', 'sensor.forecast_teller_p1_export_uit_zon',
+                'sensor.forecast_teller_zendure_laden', 'sensor.forecast_teller_zendure_ontladen',
+                'sensor.forecast_teller_zendure_laden_uit_zon',
+                'sensor.ev_teller_geladen', 'sensor.ev_teller_geladen_uit_zon']
+               | select('in', states.sensor | map(attribute='entity_id') | list) | list }}
+      - action: recorder.purge_entities
+        target:
+          entity_id: "{{ tellers }}"
+        data:
+          keep_days: 0
+      # De recorder wist op de achtergrond; even wachten voordat de statistieken opnieuw laden
+      - delay:
+          seconds: 15
+      - action: statistics.reload
+      - action: input_button.press
+        target:
+          entity_id: input_button.forecast_herberekenen
+      - action: logbook.log
+        data:
+          name: Zendure Forecasting
+          message: Verbruiksgegevens gereset (verbruiksprofiel en historie van 7 dagen)
+          entity_id: input_button.forecast_verbruiksgegevens_resetten

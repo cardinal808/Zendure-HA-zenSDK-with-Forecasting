@@ -3951,6 +3951,27 @@ views:
             icon: ''
             heading: Forecasting Configuration (Basic)
             heading_style: title
+            badges:
+              - type: button
+                icon: mdi:restore-alert
+                tap_action:
+                  action: perform-action
+                  perform_action: input_button.press
+                  target:
+                    entity_id: input_button.forecast_reset_usage_data
+                  data: {}
+                  confirmation:
+                    title: Reset usage data?
+                    text: >-
+                      The learned usage profile (per hour and per quarter) and the
+                      7-day history (solar production, grid, battery, average usage
+                      and self-consumption) are cleared. The planner then first uses
+                      start values and learns everything again. This cannot be undone.
+                      The savings are kept.
+                    confirm_text: Reset
+                    dismiss_text: Cancel
+                color: '#01a180'
+                text: Reset usage data
             visibility:
               - condition: state
                 entity: input_boolean.dashboard_setting_show_forecasting

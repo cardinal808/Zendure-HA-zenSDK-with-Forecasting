@@ -27,6 +27,14 @@ Versies volgen `jaar.maand.volgnummer`; het volgnummer begint elke maand bij 1. 
 - Het pakket verzamelt ook drie logs: elke regel die de automation in het logboek zet (laatste 50), elk kwartier een momentopname van modus, SOC, P1, vermogen, prijs en plan (laatste 24 uur) en waarschuwingen en fouten uit het HA-log die over deze set gaan (laatste 20). Daarvoor zet het pakket `system_log: fire_event: true` aan.
 - IP-adressen en serienummers worden weggelaten. De automation hoeft niet aangepast te worden.
 
+**Nieuw: verbruiksgegevens resetten**
+- Knop **Verbruiksgegevens resetten** in Forecasting Configuratie (Basis), met een bevestigingsvenster. Wist het geleerde verbruiksprofiel (per uur en per kwartier) en de historie van 7 dagen (zonproductie, net, accu, gemiddeld gebruik, zelfverbruik; ook de auto als het EV-pakket geladen is). De planner rekent daarna eerst met startwaarden en leert alles opnieuw. De besparing en het gemeten laadvermogen blijven bewaard.
+- Werkt via `input_button.forecast_verbruiksgegevens_resetten`: het profiel reset zichzelf, een nieuwe automation wist de tellerhistorie (`recorder.purge_entities`) en laadt de statistieken opnieuw (`statistics.reload`).
+
+**Zonproductie: geen sprongen meer**
+- `sensor.forecast_teller_zon_productie` telt nu de toename van je productiesensor op in plaats van de stand over te nemen, net als de P1-tellers. Een andere sensor invullen, een teller die even 0 meldt of terugspringt, of een vervangen omvormer telt niet meer als productie. Daardoor kon de zonproductie over 7 dagen (en dus het gemiddelde dagverbruik) veel te hoog uitvallen. Een genegeerde sprong staat in het attribuut `laatste_sprong`.
+- Net na een reset (nog geen historie) rekent de planner niet meer met 7 dagen historie maar met de startwaarden.
+
 **Dashboard**
 - **Optionele pakketten tonen zich vanzelf:** Configuratie (EV), (HVAC), (Negatieve Prijs), (Besparing) en Diagnose-export staan alleen op de tab Configuratie als het pakket geladen is. Ontbreekt `zendure_besparing.yaml`, dan toont de tab Besparing alleen een melding in plaats van lege kaarten.
 - **Plan Tijdlijn** weer in de eerste kolom onder PV, als één kaart (`custom:mod-card`, card-mod nodig), zonder de losse kleurenregel eronder.
@@ -38,6 +46,7 @@ Versies volgen `jaar.maand.volgnummer`; het volgnummer begint elke maand bij 1. 
 - Optioneel: zet `zendure_ev.yaml`, `zendure_hvac.yaml` en/of `zendure_export.yaml` (NL) of `zendure_ev_global.yaml`, `zendure_hvac_global.yaml` en/of `zendure_export_global.yaml` (Global) in de map `packages`. Heb je zelf al `system_log:` in `configuration.yaml`, haal dan het blok `system_log` uit het exportpakket en zet daar `fire_event: true`. Gebruikte je de complete set: `input_boolean.hvac_tonen_op_dashboard` bestaat niet meer en kan weg.
 - Gebruik je *Niet terugleveren bij negatieve prijs*: **Zendure Pro PV-export uitschakelen** gaat na de herstart vanzelf één keer aan. Zet hem uit als je Zendure geen zonnepanelen heeft.
 - Test eerst of je auto het laden hervat als de stroom terugkomt, voordat je de lader laat schakelen.
+- Is je zonproductie of gemiddeld gebruik over 7 dagen te hoog door een eerdere sprong: druk na de update één keer op **Verbruiksgegevens resetten**.
 
 ## 2026.11.2 — gebaseerd op Gielz v20261007
 

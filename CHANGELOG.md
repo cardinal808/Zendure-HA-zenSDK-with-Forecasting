@@ -26,6 +26,14 @@ Versions follow `year.month.sequence`; the sequence restarts at 1 every month. E
 - The package also collects three logs: every line the automation writes to the logbook (last 50), a snapshot of mode, SOC, grid meter, power, price and plan every quarter hour (last 24 hours) and warnings and errors from the HA log that concern this set (last 20). For this the package turns on `system_log: fire_event: true`.
 - IP addresses and serial numbers are left out. The automation does not need any changes.
 
+**New: reset usage data**
+- Button **Reset usage data** in Forecasting Configuration (Basic), with a confirmation dialog. Clears the learned usage profile (per hour and per quarter) and the 7-day history (solar production, grid, battery, average usage, self-consumption; also the car if the EV package is loaded). The planner then first uses start values and learns everything again. The savings and the measured charge power are kept.
+- Works via `input_button.forecast_reset_usage_data`: the profile resets itself, a new automation clears the counter history (`recorder.purge_entities`) and reloads the statistics (`statistics.reload`).
+
+**Solar production: no more jumps**
+- `sensor.forecast_counter_solar_production` now adds up the increase of your production sensor instead of copying its value, like the grid counters. Entering another sensor, a counter that briefly reports 0 or jumps back, or a replaced inverter no longer counts as production. This could make the 7-day solar production (and so the average daily usage) far too high. An ignored jump is shown in the attribute `last_jump`.
+- Right after a reset (no history yet) the planner no longer assumes 7 days of history but uses the start values.
+
 **Dashboard**
 - **Optional packages show themselves:** Configuration (EV), (HVAC), (Negative Price), (Savings) and Diagnostics export are only on the Settings tab when the package is loaded. Without `zendure_savings_global.yaml` the Savings tab only shows a notice instead of empty cards.
 - **Plan Timeline** back in the first column below PV, as one card (`custom:mod-card`, needs card-mod), without the separate colour line below it.
@@ -37,6 +45,7 @@ Versions follow `year.month.sequence`; the sequence restarts at 1 every month. E
 - Optional: put `zendure_ev_global.yaml`, `zendure_hvac_global.yaml` and/or `zendure_export_global.yaml` (Global) or `zendure_ev.yaml`, `zendure_hvac.yaml` and/or `zendure_export.yaml` (NL) in the `packages` folder. If you already have `system_log:` in `configuration.yaml`, remove the `system_log` block from the export package and set `fire_event: true` there.
 - If you use *No export at negative price*: **Disable Zendure Pro PV export** turns on by itself once after the restart. Turn it off if your Zendure has no solar panels.
 - First test whether your car resumes charging when power returns, before letting the charger be switched.
+- If your 7-day solar production or average usage is too high because of an earlier jump: press **Reset usage data** once after the update.
 
 ## 2026.11.2 — based on Gielz v20261007
 
