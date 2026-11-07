@@ -19,19 +19,21 @@
 # 3. Foutmeldingen (sensor.zendure_diagnose_fouten): waarschuwingen en fouten uit het
 #    Home Assistant-log die over deze set gaan (Zendure, Forecasting, Dynamisch, HVAC, EV, ...).
 #    De laatste 20. Daarvoor zet dit pakket system_log: fire_event: true aan (zie onderaan).
-# 4. Export (script.zendure_diagnose_export): schrijft één JSON-bestand met versies, actieve
+# 4. Export (script.zendure_diagnose_export): stelt één JSON-export samen met versies, actieve
 #    pakketten, alle instellingen van de set, de stand van alle sensoren, de details van de
 #    planner (sensor.zendure_forecast_plan e.a.), de ingevulde externe sensoren, de status van de
-#    Zendure-automatiseringen en de drie logs hierboven. Je krijgt een melding met een
-#    downloadlink. Na 1 uur (en bij elke herstart) wordt het bestand weer verwijderd.
+#    Zendure-automatiseringen en de drie logs hierboven, en geeft die als antwoord terug.
+#    Er wordt niets in Home Assistant opgeslagen.
+#
+# Downloaden naar je eigen apparaat:
+# - Knop Export downloaden op de tab Configuratie (blok Diagnose-export). Die roept het script aan
+#   en slaat het antwoord in de browser op als bestand. Nodig: button-card (HACS,
+#   https://github.com/custom-cards/button-card). Alleen dit blok gebruikt button-card.
+# - Zonder button-card (of als downloaden in de app niet lukt): Ontwikkelhulpmiddelen > Acties,
+#   kies Zendure Diagnose Exporteren, Actie uitvoeren en kopieer het antwoord.
 #
 # Privacy: IP-adressen en serienummers worden vervangen door *** of x.x.x.x. Er staan geen
 # wachtwoorden of tokens in de set. Kijk het bestand wel even door voordat je het deelt.
-# Het bestand staat in /config/www en is via /local/ zonder inloggen bereikbaar zolang het
-# bestaat; daarom heeft de naam een willekeurig stuk en wordt het na 1 uur verwijderd.
-#
-# Eenmalig: bestond de map /config/www nog niet, dan maakt de export hem aan. Home Assistant
-# kent /local/ pas na een herstart; werkt de downloadlink niet, herstart dan één keer.
 #
 # Heb je zelf al system_log: in configuration.yaml staan? Haal dan het blok system_log
 # onderaan dit bestand weg en zet fire_event: true in je eigen configuratie.
@@ -129,21 +131,17 @@ script:
   zendure_diagnose_export:
     alias: Zendure Diagnose Exporteren
     description: >-
-      Forecasting 2026.11.3 - Schrijft configuratie, sensorstanden, plannerdetails en logs naar
-      één JSON-bestand in /config/www en geeft een melding met de downloadlink. Het bestand wordt
-      na 1 uur verwijderd.
+      Forecasting 2026.11.3 - Stelt configuratie, sensorstanden, plannerdetails en logs samen tot
+      één export en geeft die als antwoord terug (bestand en export). De knop Export downloaden
+      op het dashboard slaat het antwoord op je apparaat op; zonder button-card: voer dit script
+      uit via Ontwikkelhulpmiddelen > Acties en kopieer het antwoord.
     icon: mdi:file-export-outline
-    mode: restart
+    mode: parallel
     sequence:
       - variables:
-          token: >-
-            {%- set ns = namespace(t='x') -%}
-            {%- for i in range(12) -%}{%- set ns.t = ns.t ~ ('abcdefghjkmnpqrstuvwxyz23456789' | random) -%}{%- endfor -%}
-            {{ ns.t }}
-          bestand: "zendure_export_{{ now().strftime('%Y%m%d_%H%M') }}_{{ token }}.json"
-          url: "/local/{{ bestand }}"
-          # De export zelf: JSON, IP-adressen gemaskeerd, base64 in stukken (voor de shell_command)
-          inhoud: >-
+          bestand: "zendure_export_{{ now().strftime('%Y%m%d_%H%M') }}.json"
+          # De export zelf: IP-adressen gemaskeerd
+          export: >-
             {%- set masker = '(?i)ip_adres|ip_address|serienummer|serial' -%}
             {%- set re_helper = '^(zendure_|dynamisch_|forecast_|besparing_|ev_|hvac_|negatieve_prijs_|help_tonen|pv_tonen|afwijkende_p1|homewizard_p1)' -%}
             {%- set re_sensor = '^(zendure_|forecast|dynamisch_|p1_|homewizard_|hvac_|ev_|github_zendure)' -%}
@@ -225,9 +223,9 @@ script:
                    'regels': state_attr('sensor.zendure_diagnose_fouten', 'regels') or []
                  }
                } -%}
-            {#- Home Assistant laat een template maximaal 256 kB opleveren (na base64). Te groot: details
-                alleen met de namen van de attributen. -#}
-            {%- if (export | to_json | length) > 170000 -%}
+            {#- Home Assistant laat een template maximaal 256 kB opleveren. Te groot: details alleen
+                met de namen van de attributen. -#}
+            {%- if (export | to_json | length) > 230000 -%}
               {%- set nk = namespace(d=[]) -%}
               {%- for e, v in ns.det -%}
                 {%- set nk.d = nk.d + [[e, {'state': v.state, 'attributes': v.attributes.keys() | list}]] -%}
@@ -237,115 +235,13 @@ script:
             {%- endif -%}
             {%- set tekst = export | to_json
                  | regex_replace('\\b(?:[0-9]{1,3}[.]){3}[0-9]{1,3}\\b', 'x.x.x.x') -%}
-            {%- set b = tekst | base64_encode -%}
-            {%- set stukken = namespace(l=[]) -%}
-            {%- for i in range(0, b | length, 100000) -%}
-              {%- set stukken.l = stukken.l + [b[i:i + 100000]] -%}
-            {%- endfor -%}
-            {{ stukken.l | join(' ') }}
-      - action: shell_command.zendure_diagnose_export
-        data:
-          actie: export
-          bestand: "{{ bestand }}"
-          inhoud: "{{ inhoud }}"
-        response_variable: resultaat
-        continue_on_error: true
-      - if:
-          - condition: template
-            value_template: "{{ resultaat is defined and resultaat.returncode | default(1) == 0 }}"
-        then:
-          - variables:
-              uit: "{{ (resultaat.stdout | default('0 1') | string).split(' ') }}"
-          - action: persistent_notification.create
-            data:
-              notification_id: zendure_diagnose_export
-              title: Zendure diagnose-export klaar
-              message: >-
-                **[Download de export]({{ url }})** ({{ ((uit[0] | int(0)) / 1024) | round(0) | int }} kB, JSON)
-
-
-                Configuratie, sensorstanden, plannerdetails en de logs van de afgelopen
-                24 uur. IP-adressen en serienummers zijn weggelaten; kijk het bestand even
-                door voordat je het deelt. Het bestand wordt over 1 uur automatisch
-                verwijderd (of nu via *Export verwijderen*).
-                {%- if uit[1] | default('1') == '0' %}
-
-
-                ⚠️ De map /config/www is net aangemaakt. Werkt de link niet, herstart Home
-                Assistant één keer en exporteer opnieuw.
-                {%- endif %}
-          - delay: "01:00:00"
-          - action: script.zendure_diagnose_export_wissen
-        else:
-          - action: persistent_notification.create
-            data:
-              notification_id: zendure_diagnose_export
-              title: Zendure diagnose-export mislukt
-              message: >-
-                Het exportbestand kon niet worden geschreven.
-                {% if resultaat is defined %}Foutcode {{ resultaat.returncode | default('?') }}:
-                {{ (resultaat.stderr | default('') | string)[-500:] }}{% else %}Bekijk
-                Instellingen → Systeem → Logboeken (zoek op shell_command).{% endif %}
-
-  zendure_diagnose_export_wissen:
-    alias: Zendure Diagnose Export Verwijderen
-    description: Forecasting 2026.11.3 - Verwijdert de exportbestanden uit de map www en de melding.
-    icon: mdi:file-remove-outline
-    mode: single
-    sequence:
-      - action: shell_command.zendure_diagnose_export
-        data:
-          actie: wissen
-        continue_on_error: true
-      - action: persistent_notification.dismiss
-        data:
-          notification_id: zendure_diagnose_export
-
-# Schrijft (actie export) of verwijdert (actie wissen) het exportbestand in <config>/www.
-# De inhoud komt als base64 binnen, zodat er geen aanhalingstekens of spaties in de argumenten
-# staan, en wordt hier netjes opgemaakt. Eerdere exports worden altijd eerst verwijderd.
-# De configuratiemap komt uit de opstartregel van Home Assistant (--config), anders /config of
-# ~/.homeassistant. Uitvoer bij export: <grootte in bytes> <1 als www al bestond, anders 0>
-shell_command:
-  zendure_diagnose_export: |-
-    python3 -c "
-    import base64, glob, json, os, sys
-    def configmap():
-        try:
-            a = open('/proc/%d/cmdline' % os.getppid(), 'rb').read().decode().split(chr(0))
-            for i, x in enumerate(a[:-1]):
-                if x in ('-c', '--config'):
-                    return a[i + 1]
-        except Exception:
-            pass
-        return '/config' if os.path.isdir('/config') else os.path.expanduser('~/.homeassistant')
-    www = os.path.join(configmap(), 'www')
-    bestond = int(os.path.isdir(www))
-    for f in glob.glob(os.path.join(www, 'zendure_export_*.json')):
-        os.remove(f)
-    if sys.argv[1] == 'export':
-        os.makedirs(www, exist_ok=True)
-        pad = os.path.join(www, os.path.basename(sys.argv[2]))
-        d = json.loads(base64.b64decode(''.join(sys.argv[3:])).decode('utf-8'))
-        with open(pad, 'w', encoding='utf-8') as f:
-            json.dump(d, f, indent=2, ensure_ascii=False)
-        print(os.path.getsize(pad), bestond)
-    " {{ actie | default('wissen') }} {{ bestand | default('-') }} {{ inhoud | default('') }}
-
-automation:
-  - id: zendure_diagnose_export_opruimen
-    alias: Zendure Diagnose Export Opruimen
-    description: >-
-      Forecasting 2026.11.3 - Verwijdert achtergebleven exportbestanden na een herstart van
-      Home Assistant.
-    mode: single
-    triggers:
-      - trigger: homeassistant
-        event: start
-    conditions: []
-    actions:
-      - delay: "00:00:30"
-      - action: script.zendure_diagnose_export_wissen
+            {{ tekst | from_json }}
+      - variables:
+          antwoord:
+            bestand: "{{ bestand }}"
+            export: "{{ export }}"
+      - stop: Export klaar
+        response_variable: antwoord
 
 # Nodig voor het foutlog (sensor.zendure_diagnose_fouten): stuurt waarschuwingen en fouten uit
 # het HA-log als event door. Staat system_log al in je configuration.yaml? Haal dit blok dan weg

@@ -20,19 +20,21 @@
 # 3. Errors (sensor.zendure_diagnostics_errors): warnings and errors from the Home Assistant log
 #    that concern this set (Zendure, Forecasting, Dynamic, HVAC, EV, ...). The last 20.
 #    For this the package turns on system_log: fire_event: true (see the bottom of this file).
-# 4. Export (script.zendure_diagnostics_export): writes one JSON file with versions, active
+# 4. Export (script.zendure_diagnostics_export): builds one JSON export with versions, active
 #    packages, all settings of the set, the state of all sensors, the planner details
 #    (sensor.zendure_forecast_plan and others), the external sensors you entered, the state of
-#    the Zendure automations and the three logs above. You get a notification with a download
-#    link. After 1 hour (and at every restart) the file is deleted again.
+#    the Zendure automations and the three logs above, and returns it as its response.
+#    Nothing is stored in Home Assistant.
+#
+# Downloading to your own device:
+# - Button Download export on the Settings tab (Diagnostics export block). It calls the script
+#   and saves the response in the browser as a file. Needs button-card (HACS,
+#   https://github.com/custom-cards/button-card). Only this block uses button-card.
+# - Without button-card (or if downloading does not work in the app): Developer tools > Actions,
+#   choose Zendure Diagnostics Export, Perform action and copy the response.
 #
 # Privacy: IP addresses and serial numbers are replaced by *** or x.x.x.x. The set contains no
 # passwords or tokens. Still, have a quick look at the file before you share it.
-# The file is stored in /config/www and can be reached via /local/ without logging in while it
-# exists; that is why the name contains a random part and the file is deleted after 1 hour.
-#
-# Once: if the folder /config/www did not exist yet, the export creates it. Home Assistant only
-# serves /local/ after a restart; if the download link does not work, restart once.
 #
 # Already have system_log: in configuration.yaml? Then remove the system_log block at the
 # bottom of this file and set fire_event: true in your own configuration.
@@ -130,21 +132,17 @@ script:
   zendure_diagnostics_export:
     alias: Zendure Diagnostics Export
     description: >-
-      Forecasting 2026.11.3 - Writes configuration, sensor states, planner details and logs to
-      one JSON file in /config/www and shows a notification with the download link. The file is
-      deleted after 1 hour.
+      Forecasting 2026.11.3 - Builds configuration, sensor states, planner details and logs into
+      one export and returns it as its response (file and export). The Download export button
+      on the dashboard saves the response on your device; without button-card: run this script
+      via Developer tools > Actions and copy the response.
     icon: mdi:file-export-outline
-    mode: restart
+    mode: parallel
     sequence:
       - variables:
-          token: >-
-            {%- set ns = namespace(t='x') -%}
-            {%- for i in range(12) -%}{%- set ns.t = ns.t ~ ('abcdefghjkmnpqrstuvwxyz23456789' | random) -%}{%- endfor -%}
-            {{ ns.t }}
-          file: "zendure_export_{{ now().strftime('%Y%m%d_%H%M') }}_{{ token }}.json"
-          url: "/local/{{ file }}"
-          # The export itself: JSON, IP addresses masked, base64 in chunks (for the shell_command)
-          content: >-
+          file: "zendure_export_{{ now().strftime('%Y%m%d_%H%M') }}.json"
+          # The export itself: IP addresses masked
+          export: >-
             {%- set mask = '(?i)ip_adres|ip_address|serienummer|serial' -%}
             {%- set re_helper = '^(zendure_|dynamic_|dashboard_|home_energy_|forecast_|savings_|ev_|hvac_|negative_price_)' -%}
             {%- set re_sensor = '^(zendure_|forecast|dynamic_|home_energy_|homewizard_|hvac_|ev_|github_zendure)' -%}
@@ -226,9 +224,9 @@ script:
                    'regels': state_attr('sensor.zendure_diagnostics_errors', 'rows') or []
                  }
                } -%}
-            {#- Home Assistant limits template output to 256 kB (after base64). Too large: details
-                with attribute names only. -#}
-            {%- if (export | to_json | length) > 170000 -%}
+            {#- Home Assistant limits template output to 256 kB. Too large: details with attribute
+                names only. -#}
+            {%- if (export | to_json | length) > 230000 -%}
               {%- set nk = namespace(d=[]) -%}
               {%- for e, v in ns.det -%}
                 {%- set nk.d = nk.d + [[e, {'state': v.state, 'attributes': v.attributes.keys() | list}]] -%}
@@ -238,114 +236,13 @@ script:
             {%- endif -%}
             {%- set txt = export | to_json
                  | regex_replace('\\b(?:[0-9]{1,3}[.]){3}[0-9]{1,3}\\b', 'x.x.x.x') -%}
-            {%- set b = txt | base64_encode -%}
-            {%- set chunks = namespace(l=[]) -%}
-            {%- for i in range(0, b | length, 100000) -%}
-              {%- set chunks.l = chunks.l + [b[i:i + 100000]] -%}
-            {%- endfor -%}
-            {{ chunks.l | join(' ') }}
-      - action: shell_command.zendure_diagnostics_export
-        data:
-          action: export
-          file: "{{ file }}"
-          content: "{{ content }}"
-        response_variable: result
-        continue_on_error: true
-      - if:
-          - condition: template
-            value_template: "{{ result is defined and result.returncode | default(1) == 0 }}"
-        then:
-          - variables:
-              out: "{{ (result.stdout | default('0 1') | string).split(' ') }}"
-          - action: persistent_notification.create
-            data:
-              notification_id: zendure_diagnostics_export
-              title: Zendure diagnostics export ready
-              message: >-
-                **[Download the export]({{ url }})** ({{ ((out[0] | int(0)) / 1024) | round(0) | int }} kB, JSON)
-
-
-                Configuration, sensor states, planner details and the logs of the last
-                24 hours. IP addresses and serial numbers are left out; have a quick look
-                at the file before you share it. The file is deleted automatically in
-                1 hour (or now via *Delete export*).
-                {%- if out[1] | default('1') == '0' %}
-
-
-                ⚠️ The folder /config/www was just created. If the link does not work,
-                restart Home Assistant once and export again.
-                {%- endif %}
-          - delay: "01:00:00"
-          - action: script.zendure_diagnostics_export_delete
-        else:
-          - action: persistent_notification.create
-            data:
-              notification_id: zendure_diagnostics_export
-              title: Zendure diagnostics export failed
-              message: >-
-                The export file could not be written.
-                {% if result is defined %}Return code {{ result.returncode | default('?') }}:
-                {{ (result.stderr | default('') | string)[-500:] }}{% else %}Check
-                Settings → System → Logs (search for shell_command).{% endif %}
-
-  zendure_diagnostics_export_delete:
-    alias: Zendure Diagnostics Export Delete
-    description: Forecasting 2026.11.3 - Deletes the export files from the www folder and the notification.
-    icon: mdi:file-remove-outline
-    mode: single
-    sequence:
-      - action: shell_command.zendure_diagnostics_export
-        data:
-          action: delete
-        continue_on_error: true
-      - action: persistent_notification.dismiss
-        data:
-          notification_id: zendure_diagnostics_export
-
-# Writes (action export) or deletes (action delete) the export file in <config>/www.
-# The content arrives as base64, so the arguments contain no quotes or spaces, and is formatted
-# here. Earlier exports are always deleted first.
-# The config folder comes from Home Assistant's command line (--config), otherwise /config or
-# ~/.homeassistant. Output on export: <size in bytes> <1 if www already existed, otherwise 0>
-shell_command:
-  zendure_diagnostics_export: |-
-    python3 -c "
-    import base64, glob, json, os, sys
-    def configmap():
-        try:
-            a = open('/proc/%d/cmdline' % os.getppid(), 'rb').read().decode().split(chr(0))
-            for i, x in enumerate(a[:-1]):
-                if x in ('-c', '--config'):
-                    return a[i + 1]
-        except Exception:
-            pass
-        return '/config' if os.path.isdir('/config') else os.path.expanduser('~/.homeassistant')
-    www = os.path.join(configmap(), 'www')
-    bestond = int(os.path.isdir(www))
-    for f in glob.glob(os.path.join(www, 'zendure_export_*.json')):
-        os.remove(f)
-    if sys.argv[1] == 'export':
-        os.makedirs(www, exist_ok=True)
-        pad = os.path.join(www, os.path.basename(sys.argv[2]))
-        d = json.loads(base64.b64decode(''.join(sys.argv[3:])).decode('utf-8'))
-        with open(pad, 'w', encoding='utf-8') as f:
-            json.dump(d, f, indent=2, ensure_ascii=False)
-        print(os.path.getsize(pad), bestond)
-    " {{ action | default('delete') }} {{ file | default('-') }} {{ content | default('') }}
-
-automation:
-  - id: zendure_diagnostics_export_cleanup
-    alias: Zendure Diagnostics Export Cleanup
-    description: >-
-      Forecasting 2026.11.3 - Deletes leftover export files after a Home Assistant restart.
-    mode: single
-    triggers:
-      - trigger: homeassistant
-        event: start
-    conditions: []
-    actions:
-      - delay: "00:00:30"
-      - action: script.zendure_diagnostics_export_delete
+            {{ txt | from_json }}
+      - variables:
+          response:
+            file: "{{ file }}"
+            export: "{{ export }}"
+      - stop: Export ready
+        response_variable: response
 
 # Needed for the error log (sensor.zendure_diagnostics_errors): passes warnings and errors from
 # the HA log on as events. Already have system_log in your configuration.yaml? Remove this block

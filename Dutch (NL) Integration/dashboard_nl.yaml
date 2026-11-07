@@ -4540,12 +4540,20 @@ views:
                 state_not: unavailable
           - type: markdown
             content: >-
-              <ha-alert alert-type="info">Helptekst</ha-alert>Met **Export maken**
-              schrijf je één bestand met je instellingen, de stand van alle
-              sensoren, de details van de planner en de logs van de afgelopen 24
-              uur. Je krijgt een melding met een downloadlink; stuur het bestand
-              mee met je vraag of GitHub-issue. IP-adressen en serienummers worden
-              weggelaten. Het bestand wordt na 1 uur vanzelf verwijderd.
+              <ha-alert alert-type="info">Helptekst</ha-alert>**Export downloaden**
+              slaat één bestand op je eigen apparaat op met je instellingen, de
+              stand van alle sensoren, de details van de planner en de logs van de
+              afgelopen 24 uur. Stuur het mee met je vraag of GitHub-issue.
+              IP-adressen en serienummers worden weggelaten. In Home Assistant
+              wordt niets opgeslagen.
+
+
+              Voor de knop is [button-card](https://github.com/custom-cards/button-card)
+              (HACS) nodig. Zonder button-card, of als downloaden in de app niet
+              lukt: Ontwikkelhulpmiddelen → Acties → *Zendure Diagnose Exporteren* →
+              Actie uitvoeren, en kopieer het antwoord.
+
+
               Beslissingen, momentopnames en foutmeldingen worden verzameld vanaf
               het moment dat dit pakket geladen is.
             text_only: true
@@ -4556,14 +4564,57 @@ views:
               - condition: state
                 entity: script.zendure_diagnose_export
                 state_not: unavailable
+          - type: custom:button-card
+            name: Export downloaden
+            icon: mdi:download
+            layout: icon_name
+            show_state: false
+            tap_action:
+              action: javascript
+              javascript: |
+                [[[
+                  (async () => {
+                    try {
+                      const r = await hass.callWS({
+                        type: 'call_service', domain: 'script', service: 'zendure_diagnose_export',
+                        service_data: {}, return_response: true });
+                      const d = r.response;
+                      const blob = new Blob([JSON.stringify(d.export, null, 2)],
+                        { type: 'application/json' });
+                      const url = URL.createObjectURL(blob);
+                      const a = document.createElement('a');
+                      a.href = url;
+                      a.download = d.bestand;
+                      document.body.appendChild(a);
+                      a.click();
+                      a.remove();
+                      setTimeout(() => URL.revokeObjectURL(url), 30000);
+                    } catch (e) {
+                      hass.callService('persistent_notification', 'create', {
+                        notification_id: 'zendure_diagnose_export',
+                        title: 'Zendure diagnose-export mislukt',
+                        message: 'Downloaden lukte niet. Gebruik Ontwikkelhulpmiddelen > Acties > Zendure Diagnose Exporteren en kopieer het antwoord. (' + (e && e.message ? e.message : e) + ')' });
+                    }
+                  })();
+                ]]]
+            styles:
+              card:
+                - height: 56px
+                - padding: 0 16px
+              grid:
+                - grid-template-columns: 40px 1fr
+              name:
+                - justify-self: start
+                - font-size: 14px
+              icon:
+                - width: 24px
+                - color: var(--primary-color)
+            visibility:
+              - condition: state
+                entity: script.zendure_diagnose_export
+                state_not: unavailable
           - type: entities
             entities:
-              - entity: script.zendure_diagnose_export
-                name: Export maken
-              - entity: script.zendure_diagnose_export_wissen
-                name: Export verwijderen
-              - type: section
-                label: Verzameld
               - entity: sensor.zendure_diagnose_beslissingen
                 name: Beslissingen (laatste 50)
               - entity: sensor.zendure_diagnose_momentopnames
