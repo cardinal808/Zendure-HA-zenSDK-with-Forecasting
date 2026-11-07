@@ -224,16 +224,18 @@ template:
         unit_of_measurement: "kWh"
         device_class: energy
         state_class: total_increasing
-        availability: "{{ has_value('sensor.ev_geladen_totaal') }}"
-        state: "{{ states('sensor.ev_geladen_totaal') | float(0) }}"
+        # Bron even weg (bv. net na een herstart): vorige stand houden, niet unavailable
+        availability: "{{ has_value('sensor.ev_geladen_totaal') or this.state | is_number }}"
+        state: "{{ states('sensor.ev_geladen_totaal') | float(0) if has_value('sensor.ev_geladen_totaal') else this.state }}"
 
       - name: "EV Teller Geladen Uit Zon"
         unique_id: ev_teller_geladen_uit_zon
         unit_of_measurement: "kWh"
         device_class: energy
         state_class: total_increasing
-        availability: "{{ has_value('sensor.ev_geladen_uit_zon_totaal') }}"
-        state: "{{ states('sensor.ev_geladen_uit_zon_totaal') | float(0) }}"
+        # Bron even weg (bv. net na een herstart): vorige stand houden, niet unavailable
+        availability: "{{ has_value('sensor.ev_geladen_uit_zon_totaal') or this.state | is_number }}"
+        state: "{{ states('sensor.ev_geladen_uit_zon_totaal') | float(0) if has_value('sensor.ev_geladen_uit_zon_totaal') else this.state }}"
 
   # -------------------------------------------------------------------
   # Laadplan

@@ -3,7 +3,7 @@
 # OPTIONAL PACKAGE - not needed for Dynamic Smart Matching + Forecasting. Leave it out = feature off.
 # Add or remove: put this file in (or take it out of) the packages folder and restart Home Assistant.
 # Needs: a climate entity, power sensor or switch of the AC; for "AC not from battery" and the
-# separate counting also a power measurement (W or kW).
+# separate counting also a power measurement (W or kW) or a kWh counter of the AC.
 # =====================================================================
 # Zendure HVAC (air conditioning) - do not run the AC from the battery (optional)
 #
@@ -40,7 +40,9 @@ input_text:
     max: 250
     mode: text
   # Power of the AC (W or kW), e.g. a Shelly or the power sensor of the AC integration.
-  # Empty: the HVAC Sensor if that is a power sensor.
+  # A kWh counter (e.g. the AC's Energy consumption total) works too: the power is then calculated
+  # from the counter's steps (sensor.hvac_power_from_counter). Use a total counter, not a
+  # per-cycle counter. Empty: the HVAC Sensor if that is a power sensor.
   hvac_power_sensor:
     name: HVAC Power Sensor
     icon: mdi:flash
@@ -139,16 +141,87 @@ template:
         unit_of_measurement: "kWh"
         device_class: energy
         state_class: total_increasing
-        availability: "{{ has_value('sensor.hvac_separate_total') }}"
-        state: "{{ states('sensor.hvac_separate_total') | float(0) }}"
+        # Source briefly gone (e.g. right after a restart): keep the previous value, not unavailable
+        availability: "{{ has_value('sensor.hvac_separate_total') or this.state | is_number }}"
+        state: "{{ states('sensor.hvac_separate_total') | float(0) if has_value('sensor.hvac_separate_total') else this.state }}"
 
       - name: "HVAC Counter Separate From Solar"
         unique_id: hvac_counter_separate_from_solar
         unit_of_measurement: "kWh"
         device_class: energy
         state_class: total_increasing
-        availability: "{{ has_value('sensor.hvac_separate_from_solar_total') }}"
-        state: "{{ states('sensor.hvac_separate_from_solar_total') | float(0) }}"
+        # Source briefly gone (e.g. right after a restart): keep the previous value, not unavailable
+        availability: "{{ has_value('sensor.hvac_separate_from_solar_total') or this.state | is_number }}"
+        state: "{{ states('sensor.hvac_separate_from_solar_total') | float(0) if has_value('sensor.hvac_separate_from_solar_total') else this.state }}"
+
+  # Power from a kWh counter of the AC (when the AC integration gives no power in W, e.g.
+  # Energy consumption total). The counter goes up in small steps; the power is the last step
+  # divided by the time since the previous step (or since the AC came on). Without a new step the
+  # power goes down with it; after an hour without a step it is 0. Until the first step after
+  # switching on, the power of the previous time is used.
+  - trigger:
+      - trigger: time_pattern
+        seconds: "/15"
+      - trigger: homeassistant
+        event: start
+    variables:
+      t_e: >
+        {% set e = states('input_text.hvac_power_sensor') | trim | lower %}
+        {{ e if e != '' else (states('input_text.hvac_sensor') | trim | lower) }}
+      t_u: "{{ state_attr(t_e, 'unit_of_measurement') if t_e | regex_match('^sensor\\..+') else none }}"
+      t_kwh: >
+        {% set v = states(t_e) | float(-1) if t_u in ['kWh', 'Wh', 'MWh'] else -1 %}
+        {{ -1 if v < 0 else (v / 1000 if t_u == 'Wh' else (v * 1000 if t_u == 'MWh' else v)) }}
+      t_old_kwh: "{{ state_attr('sensor.hvac_power_from_counter', 'counter_kwh') | float(-1) }}"
+      t_old_ts: "{{ state_attr('sensor.hvac_power_from_counter', 'step_ts') | float(0) }}"
+      t_step_w: "{{ state_attr('sensor.hvac_power_from_counter', 'step_w') | float(-1) }}"
+      t_step_kwh: "{{ state_attr('sensor.hvac_power_from_counter', 'step_kwh') | float(0) }}"
+      t_learned_w: "{{ state_attr('sensor.hvac_power_from_counter', 'learned_w') | float(0) }}"
+      t_now: "{{ as_timestamp(now()) }}"
+      t_active: "{{ is_state('binary_sensor.hvac_active', 'on') }}"
+      t_active_ts: >
+        {{ as_timestamp(states.binary_sensor.hvac_active.last_changed, 0)
+           if states.binary_sensor.hvac_active is not none else 0 }}
+      # Did the counter change? Down or a large jump (other sensor, per-cycle counter starting
+      # at 0) does not count as usage, only as a new reference point.
+      t_changed: "{{ t_kwh >= 0 and t_old_kwh >= 0 and t_kwh != t_old_kwh }}"
+      t_delta: "{{ (t_kwh - t_old_kwh) if t_changed else 0 }}"
+      t_start: "{{ [t_old_ts, t_active_ts] | max }}"
+      t_p: >
+        {% set dt = t_now - t_start %}
+        {{ (t_delta * 3600000 / dt) | round(0)
+           if t_changed and t_active and 0 < t_delta <= 2 and t_old_ts > 0 and 20 <= dt <= 3600 else -1 }}
+      n_step_w: "{{ t_p if t_p >= 0 else (-1 if t_changed else t_step_w) }}"
+      n_step_kwh: "{{ t_delta if t_p >= 0 else (0 if t_changed else t_step_kwh) }}"
+      n_ts: "{{ t_now if (t_changed or t_old_ts == 0) else t_old_ts }}"
+      n_learned_w: "{{ t_p if t_p >= 0 else t_learned_w }}"
+    sensor:
+      - name: "HVAC Power From Counter"
+        unique_id: hvac_power_from_counter
+        icon: mdi:air-conditioner
+        unit_of_measurement: "W"
+        device_class: power
+        state_class: measurement
+        availability: "{{ t_kwh >= 0 }}"
+        state: >
+          {% set since = t_now - n_ts %}
+          {% if not t_active %}0
+          {% elif n_ts < t_active_ts or n_step_w < 0 %}
+            {# No step yet since the AC came on: power of the previous time #}
+            {{ n_learned_w | round(0) }}
+          {% elif since > 3600 %}0
+          {% else %}
+            {% set interval = n_step_kwh * 3600000 / n_step_w if n_step_w > 0 else 0 %}
+            {% set p = n_step_w if since <= interval else [n_step_w, n_step_kwh * 3600000 / since] | min %}
+            {{ p | round(0) }}
+          {% endif %}
+        attributes:
+          source: "{{ t_e }}"
+          counter_kwh: "{{ t_kwh if t_kwh >= 0 else (t_old_kwh if t_old_kwh >= 0 else none) }}"
+          step_ts: "{{ n_ts }}"
+          step_w: "{{ n_step_w }}"
+          step_kwh: "{{ n_step_kwh | round(4) }}"
+          learned_w: "{{ n_learned_w }}"
 
   - sensor:
       # What is the AC doing?
@@ -196,16 +269,25 @@ template:
         unit_of_measurement: "W"
         device_class: power
         state_class: measurement
+        # Power sensor (W/kW) directly; a kWh counter via sensor.hvac_power_from_counter
         availability: >
           {% set e = states('input_text.hvac_power_sensor') | trim | lower %}
           {% set e = e if e != '' else (states('input_text.hvac_sensor') | trim | lower) %}
-          {{ e | regex_match('^sensor\\..+') and has_value(e) }}
+          {% if state_attr(e, 'unit_of_measurement') in ['kWh', 'Wh', 'MWh'] %}
+            {{ has_value('sensor.hvac_power_from_counter') }}
+          {% else %}
+            {{ e | regex_match('^sensor\\..+') and has_value(e) }}
+          {% endif %}
         state: >
           {% set e = states('input_text.hvac_power_sensor') | trim | lower %}
           {% set e = e if e != '' else (states('input_text.hvac_sensor') | trim | lower) %}
           {% set u = state_attr(e, 'unit_of_measurement') %}
-          {% set v = states(e) | float(0) %}
-          {{ ([v * 1000 if u == 'kW' else v, 0] | max) | round(0) }}
+          {% if u in ['kWh', 'Wh', 'MWh'] %}
+            {{ states('sensor.hvac_power_from_counter') | float(0) | round(0) }}
+          {% else %}
+            {% set v = states(e) | float(0) %}
+            {{ ([v * 1000 if u == 'kW' else v, 0] | max) | round(0) }}
+          {% endif %}
 
       # What the Smart Matching discharge blocks subtract from the grid meter (approach AC not from battery)
       - name: "HVAC Discharge Correction"

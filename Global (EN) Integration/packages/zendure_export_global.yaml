@@ -62,25 +62,38 @@ template:
         value_template: >-
           {{ trigger.id != 'error'
              or (trigger.event.data | string) is search('(?i)zendure|gielz|forecast|\\b(dynamic|hvac|ev|negative_price|savings|homewizard|home_energy)_') }}
+    # Decision log: repeats of the same message (only the numbers differ, e.g. "Discharge balancing
+    # power set to 726 watt" every 5 s) are merged into one row with from, until, count and the
+    # last message. That way 50 rows cover hours instead of minutes.
+    variables:
+      d_rows: >-
+        {%- set oud = state_attr('sensor.zendure_diagnostics_decisions', 'rows') or [] -%}
+        {%- set oud = oud if (state_attr('sensor.zendure_diagnostics_decisions', 'columns') or []) | length == 6 else [] -%}
+        {%- if trigger.id == 'decision' -%}
+          {%- set nu = now().strftime('%Y-%m-%d %H:%M:%S') -%}
+          {%- set melding = (trigger.event.data.message | default('') | string)
+               | regex_replace('\\s+', ' ') | replace(' —', '') | trim -%}
+          {%- set modus = states('input_select.zendure_operation_mode') -%}
+          {%- set soc = states('sensor.zendure_total_state_of_charge') | float(none) -%}
+          {%- set sleutel = melding | regex_replace('[-+]?[0-9]+([.,][0-9]+)?', '#') -%}
+          {%- set l = oud[-1] if oud | length > 0 else none -%}
+          {%- if l is not none and (l[3] | regex_replace('[-+]?[0-9]+([.,][0-9]+)?', '#')) == sleutel and l[4] == modus -%}
+            {{ oud[:-1] + [[l[0], nu, l[2] + 1, melding[:300], modus, soc]] }}
+          {%- else -%}
+            {{ (oud + [[nu, nu, 1, melding[:300], modus, soc]])[-50:] }}
+          {%- endif -%}
+        {%- else -%}
+          {{ oud }}
+        {%- endif -%}
     sensor:
       - name: "Zendure Diagnostics Decisions"
         unique_id: zendure_diagnostics_decisions
         icon: mdi:script-text-outline
         state: >-
-          {{ [((this.attributes.get('rows') or []) | length) + (1 if trigger.id == 'decision' else 0), 50] | min }}
+          {{ d_rows | length }}
         attributes:
-          columns: "{{ ['time', 'message', 'mode', 'soc'] }}"
-          rows: >-
-            {%- set old = this.attributes.get('rows') or [] -%}
-            {%- if trigger.id == 'decision' -%}
-              {%- set msg = (trigger.event.data.message | default('') | string)
-                   | regex_replace('\\s+', ' ') | replace(' —', '') | trim -%}
-              {{ (old + [[now().strftime('%Y-%m-%d %H:%M:%S'), msg[:300],
-                         states('input_select.zendure_operation_mode'),
-                         states('sensor.zendure_total_state_of_charge') | float(none)]])[-50:] }}
-            {%- else -%}
-              {{ old }}
-            {%- endif -%}
+          columns: "{{ ['from', 'until', 'count', 'message', 'mode', 'soc'] }}"
+          rows: "{{ d_rows }}"
 
       - name: "Zendure Diagnostics Snapshots"
         unique_id: zendure_diagnostics_snapshots

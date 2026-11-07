@@ -4427,7 +4427,10 @@ views:
               vermogen van de airco af van de P1-meter (zoals bij de auto): de
               accu voedt de rest van het huis gewoon. Daarvoor is een
               vermogensmeting nodig (**Vermogen sensor**, W of kW, bv. een
-              Shelly; leeg = de HVAC sensor als dat een vermogenssensor is).
+              Shelly; leeg = de HVAC sensor als dat een vermogenssensor is). Een
+              kWh-teller van de airco kan ook (neem de totaalteller, niet die per
+              cyclus): het vermogen wordt dan uit de stappen van de teller
+              berekend en loopt een paar minuten achter.
               Met een vermogensmeting telt het airco-verbruik in die tijd ook
               niet mee in het verbruiksprofiel en het dagverbruik, zodat de
               planner niet rekent met stroom die de accu toch niet levert.
@@ -4446,7 +4449,7 @@ views:
               - entity: input_number.hvac_drempel_vermogen
                 name: Drempel vermogen W (alleen bij vermogenssensor, 0 = 50 W)
               - entity: input_text.hvac_vermogen_sensor
-                name: Vermogen sensor (W/kW, leeg = HVAC sensor)
+                name: Vermogen sensor (W/kW of kWh-teller, leeg = HVAC sensor)
               - entity: input_select.hvac_aanpak
                 name: Aanpak als de airco niet uit de accu mag
               - type: section

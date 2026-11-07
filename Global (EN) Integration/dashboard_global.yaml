@@ -4422,7 +4422,10 @@ views:
               subtracts the AC power from the grid meter (as for the car): the
               battery keeps supplying the rest of the house. That needs a power
               measurement (**Power sensor**, W or kW, e.g. a Shelly; empty =
-              the HVAC sensor if that is a power sensor). With a power
+              the HVAC sensor if that is a power sensor). A kWh counter of the
+              AC works too (use the total counter, not the per-cycle one): the
+              power is then calculated from the counter's steps and lags a few
+              minutes. With a power
               measurement the AC usage during that time also does not count in
               the usage profile and the daily usage, so the planner does not
               count on power the battery will not supply anyway.
@@ -4441,7 +4444,7 @@ views:
               - entity: input_number.hvac_threshold_power
                 name: Threshold power W (power sensor only, 0 = 50 W)
               - entity: input_text.hvac_power_sensor
-                name: Power sensor (W/kW, empty = HVAC sensor)
+                name: Power sensor (W/kW or kWh counter, empty = HVAC sensor)
               - entity: input_select.hvac_approach
                 name: Approach when the AC may not run from the battery
               - type: section

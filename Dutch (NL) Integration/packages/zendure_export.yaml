@@ -61,25 +61,38 @@ template:
         value_template: >-
           {{ trigger.id != 'fout'
              or (trigger.event.data | string) is search('(?i)zendure|gielz|forecast|\\b(dynamisch|hvac|ev|negatieve_prijs|besparing|homewizard|p1)_') }}
+    # Beslissingslog: herhalingen van dezelfde melding (alleen de getallen anders, bv. "Ontladen
+    # balanceren Vermogen ingesteld op 726 watt" elke 5 s) worden samengevoegd tot één regel met
+    # van, tot, aantal en de laatste melding. Zo beslaan 50 regels uren in plaats van minuten.
+    variables:
+      b_regels: >-
+        {%- set oud = state_attr('sensor.zendure_diagnose_beslissingen', 'regels') or [] -%}
+        {%- set oud = oud if (state_attr('sensor.zendure_diagnose_beslissingen', 'kolommen') or []) | length == 6 else [] -%}
+        {%- if trigger.id == 'beslissing' -%}
+          {%- set nu = now().strftime('%Y-%m-%d %H:%M:%S') -%}
+          {%- set melding = (trigger.event.data.message | default('') | string)
+               | regex_replace('\\s+', ' ') | replace(' —', '') | trim -%}
+          {%- set modus = states('input_select.zendure_2400_ac_modus_selecteren') -%}
+          {%- set soc = states('sensor.zendure_2400_ac_laadpercentage') | float(none) -%}
+          {%- set sleutel = melding | regex_replace('[-+]?[0-9]+([.,][0-9]+)?', '#') -%}
+          {%- set l = oud[-1] if oud | length > 0 else none -%}
+          {%- if l is not none and (l[3] | regex_replace('[-+]?[0-9]+([.,][0-9]+)?', '#')) == sleutel and l[4] == modus -%}
+            {{ oud[:-1] + [[l[0], nu, l[2] + 1, melding[:300], modus, soc]] }}
+          {%- else -%}
+            {{ (oud + [[nu, nu, 1, melding[:300], modus, soc]])[-50:] }}
+          {%- endif -%}
+        {%- else -%}
+          {{ oud }}
+        {%- endif -%}
     sensor:
       - name: "Zendure Diagnose Beslissingen"
         unique_id: zendure_diagnose_beslissingen
         icon: mdi:script-text-outline
         state: >-
-          {{ [((this.attributes.get('regels') or []) | length) + (1 if trigger.id == 'beslissing' else 0), 50] | min }}
+          {{ b_regels | length }}
         attributes:
-          kolommen: "{{ ['tijd', 'melding', 'modus', 'soc'] }}"
-          regels: >-
-            {%- set oud = this.attributes.get('regels') or [] -%}
-            {%- if trigger.id == 'beslissing' -%}
-              {%- set melding = (trigger.event.data.message | default('') | string)
-                   | regex_replace('\\s+', ' ') | replace(' —', '') | trim -%}
-              {{ (oud + [[now().strftime('%Y-%m-%d %H:%M:%S'), melding[:300],
-                         states('input_select.zendure_2400_ac_modus_selecteren'),
-                         states('sensor.zendure_2400_ac_laadpercentage') | float(none)]])[-50:] }}
-            {%- else -%}
-              {{ oud }}
-            {%- endif -%}
+          kolommen: "{{ ['van', 'tot', 'aantal', 'melding', 'modus', 'soc'] }}"
+          regels: "{{ b_regels }}"
 
       - name: "Zendure Diagnose Momentopnames"
         unique_id: zendure_diagnose_momentopnames

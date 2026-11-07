@@ -614,32 +614,36 @@ template:
         unit_of_measurement: "kWh"
         device_class: energy
         state_class: total_increasing
-        availability: "{{ has_value('sensor.forecast_grid_export_from_solar_total') }}"
-        state: "{{ states('sensor.forecast_grid_export_from_solar_total') | float(0) }}"
+        # Source briefly gone (e.g. right after a restart): keep the previous value, not unavailable
+        availability: "{{ has_value('sensor.forecast_grid_export_from_solar_total') or this.state | is_number }}"
+        state: "{{ states('sensor.forecast_grid_export_from_solar_total') | float(0) if has_value('sensor.forecast_grid_export_from_solar_total') else this.state }}"
 
       - name: "Forecast Counter Zendure Charge"
         unique_id: forecast_counter_zendure_charge
         unit_of_measurement: "kWh"
         device_class: energy
         state_class: total_increasing
-        availability: "{{ has_value('sensor.forecast_zendure_charge_total') }}"
-        state: "{{ states('sensor.forecast_zendure_charge_total') | float(0) }}"
+        # Source briefly gone (e.g. right after a restart): keep the previous value, not unavailable
+        availability: "{{ has_value('sensor.forecast_zendure_charge_total') or this.state | is_number }}"
+        state: "{{ states('sensor.forecast_zendure_charge_total') | float(0) if has_value('sensor.forecast_zendure_charge_total') else this.state }}"
 
       - name: "Forecast Counter Zendure Discharge"
         unique_id: forecast_counter_zendure_discharge
         unit_of_measurement: "kWh"
         device_class: energy
         state_class: total_increasing
-        availability: "{{ has_value('sensor.forecast_zendure_discharge_total') }}"
-        state: "{{ states('sensor.forecast_zendure_discharge_total') | float(0) }}"
+        # Source briefly gone (e.g. right after a restart): keep the previous value, not unavailable
+        availability: "{{ has_value('sensor.forecast_zendure_discharge_total') or this.state | is_number }}"
+        state: "{{ states('sensor.forecast_zendure_discharge_total') | float(0) if has_value('sensor.forecast_zendure_discharge_total') else this.state }}"
 
       - name: "Forecast Counter Zendure Charge From Solar"
         unique_id: forecast_counter_zendure_charge_from_solar
         unit_of_measurement: "kWh"
         device_class: energy
         state_class: total_increasing
-        availability: "{{ has_value('sensor.forecast_zendure_charge_from_solar_total') }}"
-        state: "{{ states('sensor.forecast_zendure_charge_from_solar_total') | float(0) }}"
+        # Source briefly gone (e.g. right after a restart): keep the previous value, not unavailable
+        availability: "{{ has_value('sensor.forecast_zendure_charge_from_solar_total') or this.state | is_number }}"
+        state: "{{ states('sensor.forecast_zendure_charge_from_solar_total') | float(0) if has_value('sensor.forecast_zendure_charge_from_solar_total') else this.state }}"
 
   # -------------------------------------------------------------------
   # 3b. Usage profile per hour (workday and weekend) + shape per quarter
@@ -1013,19 +1017,53 @@ template:
       solar_tomorrow: "{{ ([solar_tomorrow_raw, 0] | max * reliab) | round(2) }}"
 
       # ---- History over 7 days ----------------------------------------
-      prod7: "{{ states('sensor.forecast_solar_production_7_days') | float(0) }}"
-      imp7: "{{ states('sensor.forecast_grid_import_7_days') | float(0) }}"
-      exp7: "{{ states('sensor.forecast_grid_export_7_days') | float(0) }}"
-      exp_solar7: "{{ states('sensor.forecast_grid_export_from_solar_7_days') | float(0) }}"
-      charge7: "{{ states('sensor.forecast_zendure_charge_7_days') | float(0) }}"
-      discharge7: "{{ states('sensor.forecast_zendure_discharge_7_days') | float(0) }}"
-      charge_solar7: "{{ states('sensor.forecast_zendure_charge_from_solar_7_days') | float(0) }}"
+      # Previous 7-day values (attribute history_7_days of the plan). If a 7-day sensor is briefly
+      # unavailable (e.g. right after a restart), the previous value is used instead of 0, so the
+      # daily usage and the self-consumption do not get skewed. A sensor that does not exist (any
+      # more) (package removed) counts as 0.
+      hist_7_prev: "{{ state_attr('sensor.zendure_forecast_plan', 'history_7_days') or {} }}"
+      prod7: >
+        {% set e = 'sensor.forecast_solar_production_7_days' %}
+        {{ states(e) | float(hist_7_prev.get('prod7', 0) if states[e] is not none and not state_attr(e, 'restored') else 0) }}
+      imp7: >
+        {% set e = 'sensor.forecast_grid_import_7_days' %}
+        {{ states(e) | float(hist_7_prev.get('imp7', 0) if states[e] is not none and not state_attr(e, 'restored') else 0) }}
+      exp7: >
+        {% set e = 'sensor.forecast_grid_export_7_days' %}
+        {{ states(e) | float(hist_7_prev.get('exp7', 0) if states[e] is not none and not state_attr(e, 'restored') else 0) }}
+      exp_solar7: >
+        {% set e = 'sensor.forecast_grid_export_from_solar_7_days' %}
+        {{ states(e) | float(hist_7_prev.get('exp_solar7', 0) if states[e] is not none and not state_attr(e, 'restored') else 0) }}
+      charge7: >
+        {% set e = 'sensor.forecast_zendure_charge_7_days' %}
+        {{ states(e) | float(hist_7_prev.get('charge7', 0) if states[e] is not none and not state_attr(e, 'restored') else 0) }}
+      discharge7: >
+        {% set e = 'sensor.forecast_zendure_discharge_7_days' %}
+        {{ states(e) | float(hist_7_prev.get('discharge7', 0) if states[e] is not none and not state_attr(e, 'restored') else 0) }}
+      charge_solar7: >
+        {% set e = 'sensor.forecast_zendure_charge_from_solar_7_days' %}
+        {{ states(e) | float(hist_7_prev.get('charge_solar7', 0) if states[e] is not none and not state_attr(e, 'restored') else 0) }}
       # Car (zendure_ev_global.yaml): not house usage and not direct solar usage. Without the package 0.
-      ev7: "{{ states('sensor.ev_charged_7_days') | float(0) }}"
-      ev_solar7: "{{ states('sensor.ev_charged_from_solar_7_days') | float(0) }}"
+      ev7: >
+        {% set e = 'sensor.ev_charged_7_days' %}
+        {{ states(e) | float(hist_7_prev.get('ev7', 0) if states[e] is not none and not state_attr(e, 'restored') else 0) }}
+      ev_solar7: >
+        {% set e = 'sensor.ev_charged_from_solar_7_days' %}
+        {{ states(e) | float(hist_7_prev.get('ev_solar7', 0) if states[e] is not none and not state_attr(e, 'restored') else 0) }}
       # The AC while it may not run from the battery (zendure_hvac_global.yaml): same treatment. Without package 0.
-      hvac7: "{{ states('sensor.hvac_separate_7_days') | float(0) }}"
-      hvac_solar7: "{{ states('sensor.hvac_separate_from_solar_7_days') | float(0) }}"
+      hvac7: >
+        {% set e = 'sensor.hvac_separate_7_days' %}
+        {{ states(e) | float(hist_7_prev.get('hvac7', 0) if states[e] is not none and not state_attr(e, 'restored') else 0) }}
+      hvac_solar7: >
+        {% set e = 'sensor.hvac_separate_from_solar_7_days' %}
+        {{ states(e) | float(hist_7_prev.get('hvac_solar7', 0) if states[e] is not none and not state_attr(e, 'restored') else 0) }}
+      # Which 7-day figures currently use the previous value
+      hist_7_missing: >
+        {%- set ns = namespace(l=[]) -%}
+        {%- for k, e in [['prod7', 'sensor.forecast_solar_production_7_days'], ['imp7', 'sensor.forecast_grid_import_7_days'], ['exp7', 'sensor.forecast_grid_export_7_days'], ['exp_solar7', 'sensor.forecast_grid_export_from_solar_7_days'], ['charge7', 'sensor.forecast_zendure_charge_7_days'], ['discharge7', 'sensor.forecast_zendure_discharge_7_days'], ['charge_solar7', 'sensor.forecast_zendure_charge_from_solar_7_days'], ['ev7', 'sensor.ev_charged_7_days'], ['ev_solar7', 'sensor.ev_charged_from_solar_7_days'], ['hvac7', 'sensor.hvac_separate_7_days'], ['hvac_solar7', 'sensor.hvac_separate_from_solar_7_days']] -%}
+          {%- if states[e] is not none and not state_attr(e, 'restored') and not has_value(e) -%}{%- set ns.l = ns.l + [k] -%}{%- endif -%}
+        {%- endfor -%}
+        {{ ns.l }}
       hist_days: >
         {# Largest coverage of solar, grid import and battery charging: without solar panels (or
            when the solar counter is temporarily missing) the history of the other counters
@@ -1057,7 +1095,7 @@ template:
         {% else %}-1{% endif %}
       direct_model_kwh: "{{ direct_day_kwh >= 0 }}"
       self_consumption_source: >
-        {% if direct_model_kwh %}Calculated (kWh per day, {{ [hist_days, 7] | min | round(1) }} of 7 days)
+        {% if direct_model_kwh %}Calculated (kWh per day, {{ [hist_days, 7] | min | round(1) }} of 7 days{{ ', partly previous values' if hist_7_missing | length > 0 else '' }})
         {% elif self_consumption_calculated >= 0 %}Calculated (% of production, day 1)
         {% else %}Starting value {{ c_self_consumption_default_pct }}% (no solar production measured yet){% endif %}
 
@@ -1069,7 +1107,7 @@ template:
         {% else %}-1{% endif %}
       usage_day: "{{ usage_day_calculated if usage_day_calculated >= c_min_usage_kwh else c_usage_start_kwh }}"
       usage_source: >
-        {% if usage_day_calculated >= c_min_usage_kwh %}Calculated ({{ [hist_days, 7] | min | round(1) }} of 7 days{{ ', day 1' if hist_days < 1 else '' }})
+        {% if usage_day_calculated >= c_min_usage_kwh %}Calculated ({{ [hist_days, 7] | min | round(1) }} of 7 days{{ ', day 1' if hist_days < 1 else '' }}{{ ', partly previous values' if hist_7_missing | length > 0 else '' }})
         {% else %}Starting value {{ c_usage_start_kwh }} kWh (first hours, history is being built){% endif %}
       l_hour: "{{ usage_day / 24 }}"
 
@@ -2137,6 +2175,8 @@ template:
           shape_quarter_share_pct: "{{ shape_share }}"
           usage_next_24h_kwh: "{{ (hour_load[:24] | map(attribute='kw') | sum) | round(2) }}"
           history_days: "{{ hist_days }}"
+          history_7_days: "{{ {'prod7': prod7, 'imp7': imp7, 'exp7': exp7, 'exp_solar7': exp_solar7, 'charge7': charge7, 'discharge7': discharge7, 'charge_solar7': charge_solar7, 'ev7': ev7, 'ev_solar7': ev_solar7, 'hvac7': hvac7, 'hvac_solar7': hvac_solar7} }}"
+          history_7_days_previous_value: "{{ hist_7_missing }}"
           margin_pct: "{{ margin_pct }}"
           margin_kwh: "{{ margin_dc }}"
           efficiency_charge_pct: "{{ (eff_in * 100) | round(1) }}"

@@ -222,16 +222,18 @@ template:
         unit_of_measurement: "kWh"
         device_class: energy
         state_class: total_increasing
-        availability: "{{ has_value('sensor.ev_charged_total') }}"
-        state: "{{ states('sensor.ev_charged_total') | float(0) }}"
+        # Source briefly gone (e.g. right after a restart): keep the previous value, not unavailable
+        availability: "{{ has_value('sensor.ev_charged_total') or this.state | is_number }}"
+        state: "{{ states('sensor.ev_charged_total') | float(0) if has_value('sensor.ev_charged_total') else this.state }}"
 
       - name: "EV Counter Charged From Solar"
         unique_id: ev_counter_charged_from_solar
         unit_of_measurement: "kWh"
         device_class: energy
         state_class: total_increasing
-        availability: "{{ has_value('sensor.ev_charged_from_solar_total') }}"
-        state: "{{ states('sensor.ev_charged_from_solar_total') | float(0) }}"
+        # Source briefly gone (e.g. right after a restart): keep the previous value, not unavailable
+        availability: "{{ has_value('sensor.ev_charged_from_solar_total') or this.state | is_number }}"
+        state: "{{ states('sensor.ev_charged_from_solar_total') | float(0) if has_value('sensor.ev_charged_from_solar_total') else this.state }}"
 
   # -------------------------------------------------------------------
   # Charge plan

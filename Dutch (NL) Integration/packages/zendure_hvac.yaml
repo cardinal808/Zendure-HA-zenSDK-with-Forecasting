@@ -3,7 +3,7 @@
 # OPTIONEEL PAKKET - niet nodig voor Dynamisch NOM + Forecasting. Weglaten = functie uit.
 # Toevoegen of weghalen: zet het bestand in (of haal het uit) de map packages en herstart Home Assistant.
 # Nodig: een climate-entiteit, vermogenssensor of schakelaar van de airco; voor "Airco niet uit
-# accu" en het apart tellen ook een vermogensmeting (W of kW).
+# accu" en het apart tellen ook een vermogensmeting (W of kW) of een kWh-teller van de airco.
 # =====================================================================
 # Zendure HVAC (airco) - de airco niet uit de accu laten draaien (optioneel)
 #
@@ -41,7 +41,9 @@ input_text:
     max: 250
     mode: text
   # Vermogen van de airco (W of kW), bv. een Shelly of de vermogenssensor van de airco-integratie.
-  # Leeg: de HVAC Sensor als dat een vermogenssensor is.
+  # Een kWh-teller (bv. Energieverbruik totaal van de airco) kan ook: het vermogen wordt dan uit de
+  # stappen van de teller berekend (sensor.hvac_vermogen_uit_teller). Neem een totaalteller, niet
+  # een teller per cyclus. Leeg: de HVAC Sensor als dat een vermogenssensor is.
   hvac_vermogen_sensor:
     name: HVAC Vermogen Sensor
     icon: mdi:flash
@@ -140,16 +142,87 @@ template:
         unit_of_measurement: "kWh"
         device_class: energy
         state_class: total_increasing
-        availability: "{{ has_value('sensor.hvac_apart_totaal') }}"
-        state: "{{ states('sensor.hvac_apart_totaal') | float(0) }}"
+        # Bron even weg (bv. net na een herstart): vorige stand houden, niet unavailable
+        availability: "{{ has_value('sensor.hvac_apart_totaal') or this.state | is_number }}"
+        state: "{{ states('sensor.hvac_apart_totaal') | float(0) if has_value('sensor.hvac_apart_totaal') else this.state }}"
 
       - name: "HVAC Teller Apart Uit Zon"
         unique_id: hvac_teller_apart_uit_zon
         unit_of_measurement: "kWh"
         device_class: energy
         state_class: total_increasing
-        availability: "{{ has_value('sensor.hvac_apart_uit_zon_totaal') }}"
-        state: "{{ states('sensor.hvac_apart_uit_zon_totaal') | float(0) }}"
+        # Bron even weg (bv. net na een herstart): vorige stand houden, niet unavailable
+        availability: "{{ has_value('sensor.hvac_apart_uit_zon_totaal') or this.state | is_number }}"
+        state: "{{ states('sensor.hvac_apart_uit_zon_totaal') | float(0) if has_value('sensor.hvac_apart_uit_zon_totaal') else this.state }}"
+
+  # Vermogen uit een kWh-teller van de airco (als de airco-integratie geen vermogen in W geeft,
+  # bv. Energieverbruik totaal). De teller loopt in stapjes op; het vermogen is de laatste stap
+  # gedeeld door de tijd sinds de vorige stap (of sinds de airco aanging). Komt er langer geen
+  # stap, dan zakt het vermogen mee; na een uur zonder stap is het 0. Voor de eerste stap na het
+  # aangaan geldt het vermogen van de vorige keer.
+  - trigger:
+      - trigger: time_pattern
+        seconds: "/15"
+      - trigger: homeassistant
+        event: start
+    variables:
+      t_e: >
+        {% set e = states('input_text.hvac_vermogen_sensor') | trim | lower %}
+        {{ e if e != '' else (states('input_text.hvac_sensor') | trim | lower) }}
+      t_u: "{{ state_attr(t_e, 'unit_of_measurement') if t_e | regex_match('^sensor\\..+') else none }}"
+      t_kwh: >
+        {% set v = states(t_e) | float(-1) if t_u in ['kWh', 'Wh', 'MWh'] else -1 %}
+        {{ -1 if v < 0 else (v / 1000 if t_u == 'Wh' else (v * 1000 if t_u == 'MWh' else v)) }}
+      t_oud_kwh: "{{ state_attr('sensor.hvac_vermogen_uit_teller', 'teller_kwh') | float(-1) }}"
+      t_oud_ts: "{{ state_attr('sensor.hvac_vermogen_uit_teller', 'stap_ts') | float(0) }}"
+      t_stap_w: "{{ state_attr('sensor.hvac_vermogen_uit_teller', 'stap_w') | float(-1) }}"
+      t_stap_kwh: "{{ state_attr('sensor.hvac_vermogen_uit_teller', 'stap_kwh') | float(0) }}"
+      t_geleerd_w: "{{ state_attr('sensor.hvac_vermogen_uit_teller', 'geleerd_w') | float(0) }}"
+      t_nu: "{{ as_timestamp(now()) }}"
+      t_actief: "{{ is_state('binary_sensor.hvac_actief', 'on') }}"
+      t_actief_ts: >
+        {{ as_timestamp(states.binary_sensor.hvac_actief.last_changed, 0)
+           if states.binary_sensor.hvac_actief is not none else 0 }}
+      # Is de teller veranderd? Omlaag of een grote sprong (andere sensor, teller per cyclus die
+      # op 0 begint) telt niet als verbruik, alleen als nieuw ijkpunt.
+      t_veranderd: "{{ t_kwh >= 0 and t_oud_kwh >= 0 and t_kwh != t_oud_kwh }}"
+      t_delta: "{{ (t_kwh - t_oud_kwh) if t_veranderd else 0 }}"
+      t_begin: "{{ [t_oud_ts, t_actief_ts] | max }}"
+      t_p: >
+        {% set dt = t_nu - t_begin %}
+        {{ (t_delta * 3600000 / dt) | round(0)
+           if t_veranderd and t_actief and 0 < t_delta <= 2 and t_oud_ts > 0 and 20 <= dt <= 3600 else -1 }}
+      n_stap_w: "{{ t_p if t_p >= 0 else (-1 if t_veranderd else t_stap_w) }}"
+      n_stap_kwh: "{{ t_delta if t_p >= 0 else (0 if t_veranderd else t_stap_kwh) }}"
+      n_ts: "{{ t_nu if (t_veranderd or t_oud_ts == 0) else t_oud_ts }}"
+      n_geleerd_w: "{{ t_p if t_p >= 0 else t_geleerd_w }}"
+    sensor:
+      - name: "HVAC Vermogen Uit Teller"
+        unique_id: hvac_vermogen_uit_teller
+        icon: mdi:air-conditioner
+        unit_of_measurement: "W"
+        device_class: power
+        state_class: measurement
+        availability: "{{ t_kwh >= 0 }}"
+        state: >
+          {% set sinds = t_nu - n_ts %}
+          {% if not t_actief %}0
+          {% elif n_ts < t_actief_ts or n_stap_w < 0 %}
+            {# Nog geen stap sinds de airco aanging: vermogen van de vorige keer #}
+            {{ n_geleerd_w | round(0) }}
+          {% elif sinds > 3600 %}0
+          {% else %}
+            {% set interval = n_stap_kwh * 3600000 / n_stap_w if n_stap_w > 0 else 0 %}
+            {% set p = n_stap_w if sinds <= interval else [n_stap_w, n_stap_kwh * 3600000 / sinds] | min %}
+            {{ p | round(0) }}
+          {% endif %}
+        attributes:
+          bron: "{{ t_e }}"
+          teller_kwh: "{{ t_kwh if t_kwh >= 0 else (t_oud_kwh if t_oud_kwh >= 0 else none) }}"
+          stap_ts: "{{ n_ts }}"
+          stap_w: "{{ n_stap_w }}"
+          stap_kwh: "{{ n_stap_kwh | round(4) }}"
+          geleerd_w: "{{ n_geleerd_w }}"
 
   - sensor:
       # Wat doet de airco?
@@ -197,16 +270,25 @@ template:
         unit_of_measurement: "W"
         device_class: power
         state_class: measurement
+        # Vermogenssensor (W/kW) direct; een kWh-teller via sensor.hvac_vermogen_uit_teller
         availability: >
           {% set e = states('input_text.hvac_vermogen_sensor') | trim | lower %}
           {% set e = e if e != '' else (states('input_text.hvac_sensor') | trim | lower) %}
-          {{ e | regex_match('^sensor\\..+') and has_value(e) }}
+          {% if state_attr(e, 'unit_of_measurement') in ['kWh', 'Wh', 'MWh'] %}
+            {{ has_value('sensor.hvac_vermogen_uit_teller') }}
+          {% else %}
+            {{ e | regex_match('^sensor\\..+') and has_value(e) }}
+          {% endif %}
         state: >
           {% set e = states('input_text.hvac_vermogen_sensor') | trim | lower %}
           {% set e = e if e != '' else (states('input_text.hvac_sensor') | trim | lower) %}
           {% set u = state_attr(e, 'unit_of_measurement') %}
-          {% set v = states(e) | float(0) %}
-          {{ ([v * 1000 if u == 'kW' else v, 0] | max) | round(0) }}
+          {% if u in ['kWh', 'Wh', 'MWh'] %}
+            {{ states('sensor.hvac_vermogen_uit_teller') | float(0) | round(0) }}
+          {% else %}
+            {% set v = states(e) | float(0) %}
+            {{ ([v * 1000 if u == 'kW' else v, 0] | max) | round(0) }}
+          {% endif %}
 
       # Wat de NOM-ontlaadblokken van de P1-meter aftrekken (aanpak Airco niet uit accu)
       - name: "HVAC Ontlaad Correctie"

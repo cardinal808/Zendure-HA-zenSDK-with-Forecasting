@@ -614,32 +614,36 @@ template:
         unit_of_measurement: "kWh"
         device_class: energy
         state_class: total_increasing
-        availability: "{{ has_value('sensor.forecast_p1_export_uit_zon_totaal') }}"
-        state: "{{ states('sensor.forecast_p1_export_uit_zon_totaal') | float(0) }}"
+        # Bron even weg (bv. net na een herstart): vorige stand houden, niet unavailable
+        availability: "{{ has_value('sensor.forecast_p1_export_uit_zon_totaal') or this.state | is_number }}"
+        state: "{{ states('sensor.forecast_p1_export_uit_zon_totaal') | float(0) if has_value('sensor.forecast_p1_export_uit_zon_totaal') else this.state }}"
 
       - name: "Forecast Teller Zendure Laden"
         unique_id: forecast_teller_zendure_laden
         unit_of_measurement: "kWh"
         device_class: energy
         state_class: total_increasing
-        availability: "{{ has_value('sensor.forecast_zendure_laden_totaal') }}"
-        state: "{{ states('sensor.forecast_zendure_laden_totaal') | float(0) }}"
+        # Bron even weg (bv. net na een herstart): vorige stand houden, niet unavailable
+        availability: "{{ has_value('sensor.forecast_zendure_laden_totaal') or this.state | is_number }}"
+        state: "{{ states('sensor.forecast_zendure_laden_totaal') | float(0) if has_value('sensor.forecast_zendure_laden_totaal') else this.state }}"
 
       - name: "Forecast Teller Zendure Ontladen"
         unique_id: forecast_teller_zendure_ontladen
         unit_of_measurement: "kWh"
         device_class: energy
         state_class: total_increasing
-        availability: "{{ has_value('sensor.forecast_zendure_ontladen_totaal') }}"
-        state: "{{ states('sensor.forecast_zendure_ontladen_totaal') | float(0) }}"
+        # Bron even weg (bv. net na een herstart): vorige stand houden, niet unavailable
+        availability: "{{ has_value('sensor.forecast_zendure_ontladen_totaal') or this.state | is_number }}"
+        state: "{{ states('sensor.forecast_zendure_ontladen_totaal') | float(0) if has_value('sensor.forecast_zendure_ontladen_totaal') else this.state }}"
 
       - name: "Forecast Teller Zendure Laden Uit Zon"
         unique_id: forecast_teller_zendure_laden_uit_zon
         unit_of_measurement: "kWh"
         device_class: energy
         state_class: total_increasing
-        availability: "{{ has_value('sensor.forecast_zendure_laden_uit_zon_totaal') }}"
-        state: "{{ states('sensor.forecast_zendure_laden_uit_zon_totaal') | float(0) }}"
+        # Bron even weg (bv. net na een herstart): vorige stand houden, niet unavailable
+        availability: "{{ has_value('sensor.forecast_zendure_laden_uit_zon_totaal') or this.state | is_number }}"
+        state: "{{ states('sensor.forecast_zendure_laden_uit_zon_totaal') | float(0) if has_value('sensor.forecast_zendure_laden_uit_zon_totaal') else this.state }}"
 
   # -------------------------------------------------------------------
   # 3b. Verbruiksprofiel per uur (werkdag en weekend) + vorm per kwartier
@@ -1013,19 +1017,53 @@ template:
       zon_morgen: "{{ ([zon_morgen_raw, 0] | max * betr) | round(2) }}"
 
       # ---- Historie over 7 dagen --------------------------------------
-      prod7: "{{ states('sensor.forecast_zon_productie_7_dagen') | float(0) }}"
-      imp7: "{{ states('sensor.forecast_p1_import_7_dagen') | float(0) }}"
-      exp7: "{{ states('sensor.forecast_p1_export_7_dagen') | float(0) }}"
-      exp_zon7: "{{ states('sensor.forecast_p1_export_uit_zon_7_dagen') | float(0) }}"
-      laden7: "{{ states('sensor.forecast_zendure_laden_7_dagen') | float(0) }}"
-      ontladen7: "{{ states('sensor.forecast_zendure_ontladen_7_dagen') | float(0) }}"
-      laden_zon7: "{{ states('sensor.forecast_zendure_laden_uit_zon_7_dagen') | float(0) }}"
+      # Vorige 7-dagen-waarden (attribuut historie_7_dagen van het plan). Is een 7-dagen-sensor even
+      # niet beschikbaar (bv. net na een herstart), dan geldt de vorige waarde in plaats van 0, zodat
+      # het dagverbruik en het zelfverbruik niet scheef gaan. Een sensor die niet (meer) bestaat
+      # (pakket weggehaald) telt als 0.
+      hist_7_vorig: "{{ state_attr('sensor.zendure_forecast_plan', 'historie_7_dagen') or {} }}"
+      prod7: >
+        {% set e = 'sensor.forecast_zon_productie_7_dagen' %}
+        {{ states(e) | float(hist_7_vorig.get('prod7', 0) if states[e] is not none and not state_attr(e, 'restored') else 0) }}
+      imp7: >
+        {% set e = 'sensor.forecast_p1_import_7_dagen' %}
+        {{ states(e) | float(hist_7_vorig.get('imp7', 0) if states[e] is not none and not state_attr(e, 'restored') else 0) }}
+      exp7: >
+        {% set e = 'sensor.forecast_p1_export_7_dagen' %}
+        {{ states(e) | float(hist_7_vorig.get('exp7', 0) if states[e] is not none and not state_attr(e, 'restored') else 0) }}
+      exp_zon7: >
+        {% set e = 'sensor.forecast_p1_export_uit_zon_7_dagen' %}
+        {{ states(e) | float(hist_7_vorig.get('exp_zon7', 0) if states[e] is not none and not state_attr(e, 'restored') else 0) }}
+      laden7: >
+        {% set e = 'sensor.forecast_zendure_laden_7_dagen' %}
+        {{ states(e) | float(hist_7_vorig.get('laden7', 0) if states[e] is not none and not state_attr(e, 'restored') else 0) }}
+      ontladen7: >
+        {% set e = 'sensor.forecast_zendure_ontladen_7_dagen' %}
+        {{ states(e) | float(hist_7_vorig.get('ontladen7', 0) if states[e] is not none and not state_attr(e, 'restored') else 0) }}
+      laden_zon7: >
+        {% set e = 'sensor.forecast_zendure_laden_uit_zon_7_dagen' %}
+        {{ states(e) | float(hist_7_vorig.get('laden_zon7', 0) if states[e] is not none and not state_attr(e, 'restored') else 0) }}
       # Auto (zendure_ev.yaml): telt niet als huisverbruik en niet als direct zonneverbruik. Zonder pakket 0.
-      ev7: "{{ states('sensor.ev_geladen_7_dagen') | float(0) }}"
-      ev_zon7: "{{ states('sensor.ev_geladen_uit_zon_7_dagen') | float(0) }}"
+      ev7: >
+        {% set e = 'sensor.ev_geladen_7_dagen' %}
+        {{ states(e) | float(hist_7_vorig.get('ev7', 0) if states[e] is not none and not state_attr(e, 'restored') else 0) }}
+      ev_zon7: >
+        {% set e = 'sensor.ev_geladen_uit_zon_7_dagen' %}
+        {{ states(e) | float(hist_7_vorig.get('ev_zon7', 0) if states[e] is not none and not state_attr(e, 'restored') else 0) }}
       # Airco zolang hij niet uit de accu mag (zendure_hvac.yaml): zelfde behandeling. Zonder pakket 0.
-      hvac7: "{{ states('sensor.hvac_apart_7_dagen') | float(0) }}"
-      hvac_zon7: "{{ states('sensor.hvac_apart_uit_zon_7_dagen') | float(0) }}"
+      hvac7: >
+        {% set e = 'sensor.hvac_apart_7_dagen' %}
+        {{ states(e) | float(hist_7_vorig.get('hvac7', 0) if states[e] is not none and not state_attr(e, 'restored') else 0) }}
+      hvac_zon7: >
+        {% set e = 'sensor.hvac_apart_uit_zon_7_dagen' %}
+        {{ states(e) | float(hist_7_vorig.get('hvac_zon7', 0) if states[e] is not none and not state_attr(e, 'restored') else 0) }}
+      # Welke 7-dagen-cijfers nu de vorige waarde gebruiken
+      hist_7_ontbreekt: >
+        {%- set ns = namespace(l=[]) -%}
+        {%- for k, e in [['prod7', 'sensor.forecast_zon_productie_7_dagen'], ['imp7', 'sensor.forecast_p1_import_7_dagen'], ['exp7', 'sensor.forecast_p1_export_7_dagen'], ['exp_zon7', 'sensor.forecast_p1_export_uit_zon_7_dagen'], ['laden7', 'sensor.forecast_zendure_laden_7_dagen'], ['ontladen7', 'sensor.forecast_zendure_ontladen_7_dagen'], ['laden_zon7', 'sensor.forecast_zendure_laden_uit_zon_7_dagen'], ['ev7', 'sensor.ev_geladen_7_dagen'], ['ev_zon7', 'sensor.ev_geladen_uit_zon_7_dagen'], ['hvac7', 'sensor.hvac_apart_7_dagen'], ['hvac_zon7', 'sensor.hvac_apart_uit_zon_7_dagen']] -%}
+          {%- if states[e] is not none and not state_attr(e, 'restored') and not has_value(e) -%}{%- set ns.l = ns.l + [k] -%}{%- endif -%}
+        {%- endfor -%}
+        {{ ns.l }}
       hist_dagen: >
         {# Grootste dekking van zon, net-import en accu laden: zonder zonnepanelen (of als de
            zon-teller tijdelijk ontbreekt) telt de historie van de andere tellers. Geen enkele
@@ -1057,7 +1095,7 @@ template:
         {% else %}-1{% endif %}
       direct_model_kwh: "{{ direct_dag_kwh >= 0 }}"
       zelfverbruik_bron: >
-        {% if direct_model_kwh %}Berekend (kWh per dag, {{ [hist_dagen, 7] | min | round(1) }} van 7 dagen)
+        {% if direct_model_kwh %}Berekend (kWh per dag, {{ [hist_dagen, 7] | min | round(1) }} van 7 dagen{{ ', deels vorige waarden' if hist_7_ontbreekt | length > 0 else '' }})
         {% elif zelfverbruik_berekend >= 0 %}Berekend (% van de productie, dag 1)
         {% else %}Startwaarde {{ c_zelfverbruik_standaard_pct }}% (nog geen zonproductie gemeten){% endif %}
 
@@ -1069,7 +1107,7 @@ template:
         {% else %}-1{% endif %}
       gebruik_dag: "{{ gebruik_dag_berekend if gebruik_dag_berekend >= c_min_gebruik_kwh else c_gebruik_start_kwh }}"
       gebruik_bron: >
-        {% if gebruik_dag_berekend >= c_min_gebruik_kwh %}Berekend ({{ [hist_dagen, 7] | min | round(1) }} van 7 dagen{{ ', dag 1' if hist_dagen < 1 else '' }})
+        {% if gebruik_dag_berekend >= c_min_gebruik_kwh %}Berekend ({{ [hist_dagen, 7] | min | round(1) }} van 7 dagen{{ ', dag 1' if hist_dagen < 1 else '' }}{{ ', deels vorige waarden' if hist_7_ontbreekt | length > 0 else '' }})
         {% else %}Startwaarde {{ c_gebruik_start_kwh }} kWh (eerste uren, historie wordt opgebouwd){% endif %}
       l_uur: "{{ gebruik_dag / 24 }}"
 
@@ -2135,6 +2173,8 @@ template:
           vorm_kwartier_aandeel_pct: "{{ vorm_aandeel }}"
           verbruik_komende_24u_kwh: "{{ (uur_last[:24] | map(attribute='kw') | sum) | round(2) }}"
           historie_dagen: "{{ hist_dagen }}"
+          historie_7_dagen: "{{ {'prod7': prod7, 'imp7': imp7, 'exp7': exp7, 'exp_zon7': exp_zon7, 'laden7': laden7, 'ontladen7': ontladen7, 'laden_zon7': laden_zon7, 'ev7': ev7, 'ev_zon7': ev_zon7, 'hvac7': hvac7, 'hvac_zon7': hvac_zon7} }}"
+          historie_7_dagen_vorige_waarde: "{{ hist_7_ontbreekt }}"
           marge_pct: "{{ marge_pct }}"
           marge_kwh: "{{ marge_dc }}"
           efficientie_laden_pct: "{{ (eff_in * 100) | round(1) }}"
