@@ -292,6 +292,7 @@ template:
             {% if states.binary_sensor.hvac_active is not none %}{% set ns.l = ns.l + ['HVAC'] %}{% endif %}
             {% if states.sensor.ev_charge_plan is not none %}{% set ns.l = ns.l + ['EV'] %}{% endif %}
             {% if states.script.zendure_diagnostics_export is not none %}{% set ns.l = ns.l + ['Export'] %}{% endif %}
+            {% if states.input_number.nordpool_setting_energy_tax is not none %}{% set ns.l = ns.l + ['Nordpool'] %}{% endif %}
             {{ ns.l }}
           github: "https://github.com/cardinal808/Zendure-HA-zenSDK-with-Forecasting"
 

@@ -1,0 +1,81 @@
+# Zendure zenSDK (Gielz) + Forecasting 2026.11.3 | based on Gielz v20261007
+# Based on Gielz1986/Zendure-HA-zenSDK (Michiel Hofker). See README.md for license and changes.
+# OPTIONAL PACKAGE - not needed for Dynamic Smart Matching + Forecasting. Leave it out = feature off.
+# In the repo this file is in the "optional packages" folder. To add it: copy it to your packages folder
+# and restart Home Assistant. Removing it and restarting turns the feature off again.
+# Needs: the Nord Pool integration from HACS (custom-components/nordpool).
+# =====================================================================
+# Nord Pool: two price sensors for a dynamic contract
+#
+# 1. All-in price for supply = (market price + energy tax + supplier markup) x (1 + VAT)
+#    -> sensor.nordpool_kwh_nl_eur_5_09_0
+#    Enter it in Gielz Configuration (Dynamic), field Dynamic Nordpool Sensor.
+#    Then leave Dynamic Supply Markup (Savings) at 0.
+# 2. Bare market price including VAT, for export
+#    -> sensor.nordpool_kwh_nl_eur_5_10_021
+#    Enter it in Forecasting Configuration (Negative Price), field Market price sensor.
+#    You only pay energy tax and markup for supply, not for export.
+#    If your supplier pays the market price without VAT, set VAT: False on sensor 2
+#    (the entity is then sensor.nordpool_kwh_nl_eur_5_10_0).
+#
+# Check the names after a restart in Developer tools > States.
+# Enter the amounts in Forecasting Configuration (Nordpool) excluding VAT (the sensor adds the VAT).
+#
+# Note: if you already configured the Nord Pool integration in YAML with the same settings, remove
+# that; the same sensor twice gives an error. Region other than NL: change region (and currency);
+# the entity names change accordingly.
+# =====================================================================
+
+input_number:
+  nordpool_setting_energy_tax:
+    name: Nordpool Energy Tax
+    icon: mdi:bank
+    min: 0
+    max: 1
+    step: 0.00001
+    mode: box
+    unit_of_measurement: "€/kWh"
+
+  nordpool_setting_supplier_markup:
+    name: Nordpool Supplier Markup
+    icon: mdi:cash-plus
+    min: 0
+    max: 1
+    step: 0.00001
+    mode: box
+    unit_of_measurement: "€/kWh"
+
+  nordpool_setting_vat_percentage:
+    name: Nordpool VAT Percentage
+    icon: mdi:percent
+    min: 0
+    max: 100
+    step: 1
+    mode: box
+    unit_of_measurement: "%"
+
+sensor:
+  # 1. All-in price for supply
+  - platform: nordpool
+    region: "NL"
+    currency: "EUR"
+    VAT: False
+    precision: 5
+    low_price_cutoff: 0.9
+    price_in_cents: false
+    price_type: kWh
+    additional_costs: >
+      {% set vat = states('input_number.nordpool_setting_vat_percentage') | float(0) / 100 %}
+      {% set tax = states('input_number.nordpool_setting_energy_tax') | float(0) %}
+      {% set markup = states('input_number.nordpool_setting_supplier_markup') | float(0) %}
+      {{ ((current_price + tax + markup) * (1 + vat)) - current_price }}
+
+  # 2. Bare market price including VAT, for export
+  - platform: nordpool
+    region: "NL"
+    currency: "EUR"
+    VAT: True
+    precision: 5
+    low_price_cutoff: 1.0
+    price_in_cents: false
+    price_type: kWh

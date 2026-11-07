@@ -4236,6 +4236,50 @@ views:
                 state: 'on'
           - type: heading
             icon: ''
+            heading: Forecasting Configuratie (Nordpool)
+            heading_style: title
+            visibility:
+              - condition: state
+                entity: input_number.nordpool_energiebelasting
+                state_not: unavailable
+          - type: markdown
+            content: >-
+              <ha-alert alert-type="info">Helptekst</ha-alert>Bedragen
+              **zonder btw**; de sensor rekent de btw erbij. All-in prijs
+              (levering) = (marktprijs + energiebelasting + opslag) × (1 +
+              btw): vul die sensor in bij Gielz Configuratie (Dynamisch) en zet
+              Dynamisch opslag levering op 0. Kale marktprijs incl. btw
+              (teruglevering): vul die in bij Marktprijs sensor in Forecasting
+              Configuratie (Negatieve Prijs). Energiebelasting 2026: € 0,09161
+              per kWh zonder btw.
+            text_only: true
+            visibility:
+              - condition: state
+                entity: input_number.nordpool_energiebelasting
+                state_not: unavailable
+              - condition: state
+                entity: input_boolean.help_tonen_op_dashboard
+                state: 'on'
+          - type: entities
+            entities:
+              - entity: input_number.nordpool_energiebelasting
+                name: Energiebelasting (zonder btw)
+              - entity: input_number.nordpool_opslag_leverancier
+                name: Opslag leverancier (zonder btw)
+              - entity: input_number.nordpool_btw_percentage
+                name: Btw %
+              - type: section
+                label: Sensoren
+              - entity: sensor.nordpool_kwh_nl_eur_5_09_0
+                name: All-in prijs (levering)
+              - entity: sensor.nordpool_kwh_nl_eur_5_10_021
+                name: Marktprijs incl. btw (teruglevering)
+            visibility:
+              - condition: state
+                entity: input_number.nordpool_energiebelasting
+                state_not: unavailable
+          - type: heading
+            icon: ''
             heading: Forecasting Configuratie (Besparing)
             heading_style: title
             visibility:
@@ -4656,7 +4700,8 @@ views:
                 ['Besparing', 'sensor.zendure_besparing', 'zendure_besparing.yaml', 'Tab Besparing: wat zon, accu en dynamisch contract opleveren, terugverdientijd.'],
                 ['EV', 'sensor.ev_laadplan', 'zendure_ev.yaml', 'Auto laden zonder dat de accu erin ontlaadt, laadsessie nacht of overdag.'],
                 ['HVAC', 'binary_sensor.hvac_actief', 'zendure_hvac.yaml', 'Airco niet uit de accu, per airco-modus: niet ontladen of het airco-vermogen aftrekken.'],
-                ['Diagnose-export', 'script.zendure_diagnose_export', 'zendure_export.yaml', 'Instellingen, sensoren en logs exporteren voor een vraag of issue.']
+                ['Diagnose-export', 'script.zendure_diagnose_export', 'zendure_export.yaml', 'Instellingen, sensoren en logs exporteren voor een vraag of issue.'],
+                ['Nordpool', 'input_number.nordpool_energiebelasting', 'zendure_nordpool.yaml', 'Nord Pool-sensoren: all-in prijs voor levering en kale marktprijs voor teruglevering.']
               ] -%}
               | | Pakket | Wat het doet |
               |:-:|:--|:--|

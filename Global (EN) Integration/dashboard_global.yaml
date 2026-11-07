@@ -4229,6 +4229,49 @@ views:
                 state: 'on'
           - type: heading
             icon: ''
+            heading: Forecasting Configuration (Nordpool)
+            heading_style: title
+            visibility:
+              - condition: state
+                entity: input_number.nordpool_setting_energy_tax
+                state_not: unavailable
+          - type: markdown
+            content: >-
+              <ha-alert alert-type="info">Help text</ha-alert>Amounts
+              **excluding VAT**; the sensor adds the VAT. All-in price (supply)
+              = (market price + energy tax + markup) × (1 + VAT): enter that
+              sensor in Gielz Configuration (Dynamic) and set Dynamic supply
+              markup to 0. Bare market price incl. VAT (export): enter it at
+              Market price sensor in Forecasting Configuration (Negative
+              Price).
+            text_only: true
+            visibility:
+              - condition: state
+                entity: input_number.nordpool_setting_energy_tax
+                state_not: unavailable
+              - condition: state
+                entity: input_boolean.dashboard_setting_show_help
+                state: 'on'
+          - type: entities
+            entities:
+              - entity: input_number.nordpool_setting_energy_tax
+                name: Energy tax (excl. VAT)
+              - entity: input_number.nordpool_setting_supplier_markup
+                name: Supplier markup (excl. VAT)
+              - entity: input_number.nordpool_setting_vat_percentage
+                name: VAT %
+              - type: section
+                label: Sensors
+              - entity: sensor.nordpool_kwh_nl_eur_5_09_0
+                name: All-in price (supply)
+              - entity: sensor.nordpool_kwh_nl_eur_5_10_021
+                name: Market price incl. VAT (export)
+            visibility:
+              - condition: state
+                entity: input_number.nordpool_setting_energy_tax
+                state_not: unavailable
+          - type: heading
+            icon: ''
             heading: Forecasting Configuration (Savings)
             heading_style: title
             visibility:
@@ -4646,7 +4689,8 @@ views:
                 ['Savings', 'sensor.zendure_savings', 'zendure_savings_global.yaml', 'Savings tab: what solar, the battery and a dynamic contract earn, payback time.'],
                 ['EV', 'sensor.ev_charge_plan', 'zendure_ev_global.yaml', 'Charge the car without the battery discharging into it, night or daytime session.'],
                 ['HVAC', 'binary_sensor.hvac_active', 'zendure_hvac_global.yaml', 'AC not from the battery, per AC mode: no discharging or subtract the AC power.'],
-                ['Diagnostics export', 'script.zendure_diagnostics_export', 'zendure_export_global.yaml', 'Export settings, sensors and logs for a question or issue.']
+                ['Diagnostics export', 'script.zendure_diagnostics_export', 'zendure_export_global.yaml', 'Export settings, sensors and logs for a question or issue.'],
+                ['Nordpool', 'input_number.nordpool_setting_energy_tax', 'zendure_nordpool_global.yaml', 'Nord Pool sensors: all-in price for supply and bare market price for export.']
               ] -%}
               | | Package | What it does |
               |:-:|:--|:--|

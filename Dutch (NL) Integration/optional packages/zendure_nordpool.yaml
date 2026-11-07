@@ -1,0 +1,82 @@
+# Zendure zenSDK (Gielz) + Forecasting 2026.11.3 | gebaseerd op Gielz v20261007
+# Gebaseerd op Gielz1986/Zendure-HA-zenSDK (Michiel Hofker). Zie README.md voor licentie en wijzigingen.
+# OPTIONEEL PAKKET - niet nodig voor Dynamisch NOM + Forecasting. Weglaten = functie uit.
+# Staat in de repo in de map "optional packages". Toevoegen: kopieer het naar je packages-map en herstart
+# Home Assistant. Weghalen en herstarten zet de functie weer uit.
+# Nodig: de Nord Pool-integratie uit HACS (custom-components/nordpool).
+# =====================================================================
+# Nord Pool: twee prijssensoren voor een dynamisch contract
+#
+# 1. All-in prijs voor levering = (marktprijs + energiebelasting + opslag leverancier) x (1 + btw)
+#    -> sensor.nordpool_kwh_nl_eur_5_09_0
+#    Invullen bij Gielz Configuratie (Dynamisch), veld Dynamisch Nordpool Sensor.
+#    Laat dan Dynamisch Opslag Levering (Besparing) op 0 staan.
+# 2. Kale marktprijs inclusief btw, voor teruglevering
+#    -> sensor.nordpool_kwh_nl_eur_5_10_021
+#    Invullen bij Forecasting Configuratie (Negatieve Prijs), veld Marktprijs sensor.
+#    Energiebelasting en opslag betaal je alleen bij levering, niet bij teruglevering.
+#    Vergoedt je leverancier de marktprijs zonder btw, zet dan VAT: False bij sensor 2
+#    (de entiteit heet dan sensor.nordpool_kwh_nl_eur_5_10_0).
+#
+# Controleer de namen na een herstart bij Ontwikkelhulpmiddelen > Statussen.
+# Vul in Forecasting Configuratie (Nordpool) de bedragen in, zonder btw (de btw rekent de sensor erbij):
+#   energiebelasting 2026: € 0,09161 per kWh (€ 0,11085 incl. btw), opslag: zie je contract, btw: 21.
+#
+# Let op: heb je de Nord Pool-integratie al in YAML ingesteld met dezelfde instellingen, haal die
+# dan weg; twee keer dezelfde sensor geeft een foutmelding. Andere regio dan NL: pas region aan
+# (de entiteitnamen veranderen mee).
+# =====================================================================
+
+input_number:
+  nordpool_energiebelasting:
+    name: Nordpool Energiebelasting
+    icon: mdi:bank
+    min: 0
+    max: 1
+    step: 0.00001
+    mode: box
+    unit_of_measurement: "€/kWh"
+
+  nordpool_opslag_leverancier:
+    name: Nordpool Opslag Leverancier
+    icon: mdi:cash-plus
+    min: 0
+    max: 1
+    step: 0.00001
+    mode: box
+    unit_of_measurement: "€/kWh"
+
+  nordpool_btw_percentage:
+    name: Nordpool Btw Percentage
+    icon: mdi:percent
+    min: 0
+    max: 100
+    step: 1
+    mode: box
+    unit_of_measurement: "%"
+
+sensor:
+  # 1. All-in prijs voor levering
+  - platform: nordpool
+    region: "NL"
+    currency: "EUR"
+    VAT: False
+    precision: 5
+    low_price_cutoff: 0.9
+    price_in_cents: false
+    price_type: kWh
+    additional_costs: >
+      {% set vat = states('input_number.nordpool_btw_percentage') | float(0) / 100 %}
+      {% set belasting = states('input_number.nordpool_energiebelasting') | float(0) %}
+      {% set opslag = states('input_number.nordpool_opslag_leverancier') | float(0) %}
+      {{ ((current_price + belasting + opslag) * (1 + vat)) - current_price }}
+
+  # 2. Kale marktprijs inclusief btw, voor teruglevering
+  - platform: nordpool
+    region: "NL"
+    currency: "EUR"
+    VAT: True
+    precision: 5
+    low_price_cutoff: 1.0
+    price_in_cents: false
+    price_type: kWh
