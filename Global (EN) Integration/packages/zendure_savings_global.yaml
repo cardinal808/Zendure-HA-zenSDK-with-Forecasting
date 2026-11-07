@@ -24,12 +24,24 @@
 #
 # Savings (compared to a fixed contract without solar and battery) = none_fixed - now_dyn,
 # split into:
-#   solar                    = none_fixed  - solar_fixed
-#   dynamic tariff           = solar_fixed - solar_dyn
-#   battery / smart charging = solar_dyn   - now_dyn
+#   solar panels                 = (none_fixed - solar_fixed) + solar_batt
+#     direct use and export      = none_fixed - solar_fixed
+#     stored in the battery      = solar_batt
+#   dynamic tariff               = solar_fixed - solar_dyn
+#   battery and smart charging   = solar_dyn - now_dyn - solar_batt
 #
-# Battery payback time: purchase price / (savings by the battery per year). The savings per
-# year are extrapolated from the "total" period; what the battery earned before the measurement
+# Stored solar energy: every quarter hour the package tracks how much of the charging came from
+# solar (solar not used directly that goes into the battery) and which share of the battery
+# content is solar energy. When discharging, that share counts as solar energy, valued at the
+# price it saves at that moment. solar_batt = value of the discharged solar energy - what those
+# kWh would have earned as export. Together with the row direct use and export (where the stored
+# kWh appear as export), stored solar energy therefore counts at its full value when discharged,
+# without costs. Battery and smart charging keeps: charging from the grid, the charge/discharge
+# loss of that part and the difference in battery content.
+#
+# Battery payback time: purchase price / (earnings of the battery per year). The earnings are
+# everything the battery yields: stored solar energy plus smart charging (= solar_dyn - now_dyn).
+# They are extrapolated from the "total" period; what the battery earned before the measurement
 # started can be entered at "Battery Already Earned".
 #
 # Export has its own price (fixed: feed-in price; dynamic: Nordpool price + bonus % on a
@@ -148,7 +160,8 @@ template:
           {%- set dc = t_charge - prev.charge -%}{%- set dd = t_disch - prev.disch -%}
           {%- if [di, de, dp, dc, dd] | select('ge', 0) | select('le', c_max_kwh_interval) | list | length == 5 -%}
             {%- set u = [di - de + dp - dc + dd, 0] | max -%}
-            {{ {'imp': di, 'exp': de, 'solar': dp, 'usage': u, 'imp0': [u - dp, 0] | max, 'exp0': [dp - u, 0] | max} }}
+            {{ {'imp': di, 'exp': de, 'solar': dp, 'usage': u, 'imp0': [u - dp, 0] | max, 'exp0': [dp - u, 0] | max,
+                'charge': dc, 'disch': dd} }}
           {%- else -%}{{ none }}{%- endif -%}
         {%- else -%}{{ none }}{%- endif -%}
       # Price of the past quarter hour = the price that applied at the previous calculation (start
@@ -165,15 +178,42 @@ template:
       # Bonus (%) on the market price for export, only when that price is positive
       bonus_out: "{{ states('input_number.savings_setting_dynamic_feedin_bonus') | float(0) / 100 }}"
 
+      # ---- Solar energy in the battery ----
+      # Battery content now (kWh above the minimum; -1 = unknown) and the solar share of it
+      # (0-1) from the previous measurement. Without an earlier measurement: all from the grid (0).
+      batt_now: >
+        {% set cap = states('sensor.zendure_total_capacity') | float(0) %}
+        {% set soc = states('sensor.zendure_total_state_of_charge') | float(-1) %}
+        {% set mn = states('sensor.zendure_minimum_state_of_charge') | float(0) %}
+        {{ ([soc - mn, 0] | max / 100 * cap) | round(3) if soc >= 0 and cap > 0 else -1 }}
+      solar_share_prev: >
+        {{ ([[prev.f | float(0), 0] | max, 1] | min) if prev is mapping and prev.f is defined else 0 }}
+
       # ---- Increase for this quarter hour (kWh and €) ----
       inc: >
         {%- if delta is mapping and p_dyn is number -%}
           {%- set din = p_dyn + markup_in -%}{%- set dout = p_dyn + bonus_out * ([p_dyn, 0] | max) + markup_out -%}{%- set d = delta -%}
+          {#- Solar into the battery: the surplus (solar minus direct use), at most what was charged -#}
+          {%- set sin = [d.solar - [d.solar, d.usage] | min, d.charge] | min -%}
+          {#- Discharge: first the home's shortfall (saves import), the rest goes to the grid -#}
+          {%- set to_home = [d.disch, [d.usage - d.solar, 0] | max] | min -%}
+          {%- set value_out = to_home * din + (d.disch - to_home) * dout -%}
           {{ {'usage': d.usage, 'solar': d.solar, 'imp': d.imp, 'exp': d.exp, 'imp0': d.imp0, 'exp0': d.exp0,
               'none_fixed': d.usage * fixed_in, 'none_dyn': d.usage * din,
               'solar_fixed': d.imp0 * fixed_in - d.exp0 * fixed_out, 'solar_dyn': d.imp0 * din - d.exp0 * dout,
-              'now_fixed': d.imp * fixed_in - d.exp * fixed_out, 'now_dyn': d.imp * din - d.exp * dout} }}
+              'now_fixed': d.imp * fixed_in - d.exp * fixed_out, 'now_dyn': d.imp * din - d.exp * dout,
+              'solar_batt': solar_share_prev * value_out - sin * dout,
+              'solar_into_batt': sin, 'solar_from_batt': solar_share_prev * d.disch} }}
         {%- else -%}{{ none }}{%- endif -%}
+
+      # New solar share: when charging, mixed with the content at the start of the quarter hour;
+      # an empty battery starts over.
+      solar_share: >
+        {%- if inc is mapping and delta.charge > 0 -%}
+          {%- set e0 = [prev.e | float(0), 0] | max if prev.e is defined else 0 -%}
+          {{ ([[(solar_share_prev * e0 + inc.solar_into_batt) / (e0 + delta.charge), 0] | max, 1] | min) | round(4) }}
+        {%- elif batt_now == 0 -%}0
+        {%- else -%}{{ solar_share_prev }}{%- endif -%}
 
       # ---- Periods: day, month, year, total (+ yesterday) ----
       # The quarter hour counts in the day in which it started (23:45-00:00 belongs to yesterday).
@@ -182,7 +222,8 @@ template:
       m_key: "{{ ref_ts | timestamp_custom('%Y-%m', true) }}"
       y_key: "{{ ref_ts | timestamp_custom('%Y', true) }}"
       buckets: >-
-        {%- set K = ['usage', 'solar', 'imp', 'exp', 'imp0', 'exp0', 'none_fixed', 'none_dyn', 'solar_fixed', 'solar_dyn', 'now_fixed', 'now_dyn'] -%}
+        {%- set K = ['usage', 'solar', 'imp', 'exp', 'imp0', 'exp0', 'none_fixed', 'none_dyn', 'solar_fixed', 'solar_dyn', 'now_fixed', 'now_dyn',
+                     'solar_batt', 'solar_into_batt', 'solar_from_batt'] -%}
         {%- set o = state_attr('sensor.zendure_savings', 'buckets') -%}
         {%- set o = o if o is mapping else {} -%}
         {%- set keys = {'day': d_key, 'month': m_key, 'year': y_key} -%}
@@ -218,6 +259,7 @@ template:
       pb_days: >
         {% set d0 = strptime(buckets.total.start | string, '%Y-%m-%d', none) %}
         {% if d0 is none %}0{% else %}{{ ((now().date() - d0.date()).days + (now().hour * 60 + now().minute) / 1440) | round(3) }}{% endif %}
+      # Everything the battery earned: stored solar energy + smart charging
       pb_measured: "{{ (buckets.total.solar_dyn - buckets.total.now_dyn) | round(2) }}"
       pb_earned: "{{ (pb_before + pb_measured) | round(2) }}"
       # Extrapolated to a year, only from 1 day of measurement
@@ -238,16 +280,19 @@ template:
           # Summed kWh and € per period (see explanation at the top)
           buckets: "{{ buckets }}"
           since: "{{ buckets.total.start }}"
-          solar: "{{ (buckets.total.none_fixed - buckets.total.solar_fixed) | round(2) }}"
+          solar_panels: "{{ (buckets.total.none_fixed - buckets.total.solar_fixed + buckets.total.solar_batt) | round(2) }}"
+          solar_panels_direct_and_export: "{{ (buckets.total.none_fixed - buckets.total.solar_fixed) | round(2) }}"
+          solar_panels_via_battery: "{{ buckets.total.solar_batt | round(2) }}"
           dynamic_tariff: "{{ (buckets.total.solar_fixed - buckets.total.solar_dyn) | round(2) }}"
-          battery: "{{ (buckets.total.solar_dyn - buckets.total.now_dyn) | round(2) }}"
-          paid: "{{ buckets.total.now_dyn | round(2) }}"
+          battery_and_smart_charging: "{{ (buckets.total.solar_dyn - buckets.total.now_dyn - buckets.total.solar_batt) | round(2) }}"
+          actual_costs: "{{ buckets.total.now_dyn | round(2) }}"
           price_last_interval: "{{ p_dyn }}"
           last_interval_settled: "{{ inc is mapping }}"
           # Counter readings and price now, for the calculation in a quarter hour
           measurement: >
             {% if measurement_ok %}{{ {'ts': now_ts | round(0), 'imp': t_imp, 'exp': t_exp, 'prod': prod_now,
-                                       'charge': t_charge, 'disch': t_disch, 'p': slot_now.p} }}
+                                       'charge': t_charge, 'disch': t_disch, 'p': slot_now.p,
+                                       'f': solar_share, 'e': batt_now} }}
             {% else %}{{ none }}{% endif %}
 
       - name: "Zendure Savings Today"
@@ -258,10 +303,12 @@ template:
         state_class: total
         state: "{{ (buckets.day.none_fixed - buckets.day.now_dyn) | round(2) }}"
         attributes:
-          solar: "{{ (buckets.day.none_fixed - buckets.day.solar_fixed) | round(2) }}"
+          solar_panels: "{{ (buckets.day.none_fixed - buckets.day.solar_fixed + buckets.day.solar_batt) | round(2) }}"
+          solar_panels_direct_and_export: "{{ (buckets.day.none_fixed - buckets.day.solar_fixed) | round(2) }}"
+          solar_panels_via_battery: "{{ buckets.day.solar_batt | round(2) }}"
           dynamic_tariff: "{{ (buckets.day.solar_fixed - buckets.day.solar_dyn) | round(2) }}"
-          battery: "{{ (buckets.day.solar_dyn - buckets.day.now_dyn) | round(2) }}"
-          paid: "{{ buckets.day.now_dyn | round(2) }}"
+          battery_and_smart_charging: "{{ (buckets.day.solar_dyn - buckets.day.now_dyn - buckets.day.solar_batt) | round(2) }}"
+          actual_costs: "{{ buckets.day.now_dyn | round(2) }}"
 
       - name: "Zendure Savings This Month"
         unique_id: zendure_savings_this_month
@@ -271,10 +318,12 @@ template:
         state_class: total
         state: "{{ (buckets.month.none_fixed - buckets.month.now_dyn) | round(2) }}"
         attributes:
-          solar: "{{ (buckets.month.none_fixed - buckets.month.solar_fixed) | round(2) }}"
+          solar_panels: "{{ (buckets.month.none_fixed - buckets.month.solar_fixed + buckets.month.solar_batt) | round(2) }}"
+          solar_panels_direct_and_export: "{{ (buckets.month.none_fixed - buckets.month.solar_fixed) | round(2) }}"
+          solar_panels_via_battery: "{{ buckets.month.solar_batt | round(2) }}"
           dynamic_tariff: "{{ (buckets.month.solar_fixed - buckets.month.solar_dyn) | round(2) }}"
-          battery: "{{ (buckets.month.solar_dyn - buckets.month.now_dyn) | round(2) }}"
-          paid: "{{ buckets.month.now_dyn | round(2) }}"
+          battery_and_smart_charging: "{{ (buckets.month.solar_dyn - buckets.month.now_dyn - buckets.month.solar_batt) | round(2) }}"
+          actual_costs: "{{ buckets.month.now_dyn | round(2) }}"
 
       - name: "Zendure Savings This Year"
         unique_id: zendure_savings_this_year
@@ -284,10 +333,12 @@ template:
         state_class: total
         state: "{{ (buckets.year.none_fixed - buckets.year.now_dyn) | round(2) }}"
         attributes:
-          solar: "{{ (buckets.year.none_fixed - buckets.year.solar_fixed) | round(2) }}"
+          solar_panels: "{{ (buckets.year.none_fixed - buckets.year.solar_fixed + buckets.year.solar_batt) | round(2) }}"
+          solar_panels_direct_and_export: "{{ (buckets.year.none_fixed - buckets.year.solar_fixed) | round(2) }}"
+          solar_panels_via_battery: "{{ buckets.year.solar_batt | round(2) }}"
           dynamic_tariff: "{{ (buckets.year.solar_fixed - buckets.year.solar_dyn) | round(2) }}"
-          battery: "{{ (buckets.year.solar_dyn - buckets.year.now_dyn) | round(2) }}"
-          paid: "{{ buckets.year.now_dyn | round(2) }}"
+          battery_and_smart_charging: "{{ (buckets.year.solar_dyn - buckets.year.now_dyn - buckets.year.solar_batt) | round(2) }}"
+          actual_costs: "{{ buckets.year.now_dyn | round(2) }}"
 
       # Battery payback time (savings by battery and smart charging, dynamic contract)
       - name: "Zendure Battery Payback Time"
@@ -309,3 +360,6 @@ template:
             {% elif pb_left_years is number %}{{ (now() + timedelta(days=(pb_left_years * 365) | int)).strftime('%m-%Y') }}
             {% else %}{{ none }}{% endif %}
           measured_days: "{{ pb_days }}"
+          of_which_solar_energy: "{{ buckets.total.solar_batt | round(2) }}"
+          of_which_smart_charging: "{{ (pb_measured - buckets.total.solar_batt) | round(2) }}"
+          battery_solar_share_pct: "{{ (solar_share * 100) | round(0) }}"

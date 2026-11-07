@@ -57,6 +57,13 @@ Versions follow `year.month.sequence`; the sequence restarts at 1 every month. E
 - The energy balance (bridge, scenario A/B) does not change; after midnight and while tomorrow's prices are unknown, the planner calculates exactly as before. The efficiency filter and minimal spread also apply here.
 - New attributes `pathcheck_horizon`, `pathcheck_beyond_night` and `pathcheck_solar_covers_tomorrow_from`; *Plan today* shows *beyond the night*.
 
+**Savings: stored solar energy counts for the solar panels** *(optional package)*
+- The package tracks per quarter hour how much solar energy goes into the battery and which share of the battery content is solar energy. When discharging, that share counts as solar energy, valued at the price it saves at that moment. Stored solar energy therefore counts for the **solar panels** (without costs), no longer for the battery.
+- Overview table: **solar panels** with the sub-rows *direct use and export* and *stored in the battery*; **dynamic tariff**; **battery and smart charging** (what remains: charging from the grid, its charge and discharge loss and energy still in the battery); **Actual costs** (was *Actually paid*). Energy table: row *solar into / out of the battery* (kWh).
+- Payback: *Earned back* with the sub-rows *of which stored solar energy* and *of which smart charging*; the payback time itself is calculated as before from everything the battery yields. With negative earnings after more than a day of measuring the card now says *No payback time yet* instead of *Not enough data yet*, and the progress no longer shows *-0.0%*.
+- Attributes of the savings sensors renamed: `solar` → `solar_panels` (with `solar_panels_direct_and_export` and `solar_panels_via_battery`), `battery` → `battery_and_smart_charging` (now without the solar energy), `paid` → `actual_costs`; `dynamic_tariff` unchanged. Payback time: new `of_which_solar_energy`, `of_which_smart_charging`, `battery_solar_share_pct`. The total and the payback time do not change.
+- Counts from the upgrade; earlier quarter hours have no stored solar energy and stay with battery and smart charging. The battery content at the moment of upgrading counts as grid energy.
+
 **Dashboard**
 - **Optional packages show themselves:** Forecasting Configuration (Savings), (EV), (HVAC) and Diagnostics export are only on the Settings tab when the package is loaded. Without `zendure_savings_global.yaml` the Savings tab only shows a notice instead of empty cards.
 - New **Optional packages** card on the Settings tab: per optional package whether it is loaded (✅/➖), the file and what it does, with a link to the explanation.

@@ -22,12 +22,24 @@
 # overschot is teruglevering.
 #
 # Besparing (t.o.v. vast contract zonder zon en accu) = geen_vast - nu_dyn, opgesplitst in:
-#   zon               = geen_vast - zon_vast
-#   dynamisch tarief  = zon_vast  - zon_dyn
-#   accu / slim laden = zon_dyn   - nu_dyn
+#   zonnepanelen       = (geen_vast - zon_vast) + zon_accu
+#     direct verbruik en teruglevering = geen_vast - zon_vast
+#     opgeslagen in de accu            = zon_accu
+#   dynamische tarief  = zon_vast - zon_dyn
+#   accu en slim laden = zon_dyn  - nu_dyn - zon_accu
 #
-# Terugverdientijd accu: aanschafprijs / (besparing door de accu per jaar). De besparing per
-# jaar wordt doorgetrokken uit de periode "totaal"; wat de accu vóór de start van de meting
+# Opgeslagen zonnestroom: per kwartier wordt bijgehouden hoeveel van het laden uit zon kwam
+# (zon die niet direct verbruikt wordt en de accu in gaat) en welk deel van de accu-inhoud
+# zonnestroom is. Bij ontladen telt dat deel als zonnestroom, gewaardeerd tegen de prijs die
+# het dan uitspaart. zon_accu = waarde van de ontladen zonnestroom - wat die kWh bij
+# terugleveren hadden opgebracht. Samen met de rij direct verbruik en teruglevering (waar de
+# opgeslagen kWh als teruglevering in staan) telt opgeslagen zonnestroom dus voor de volle
+# waarde bij het ontladen, zonder kosten. Accu en slim laden houdt over: laden uit het net,
+# het laad- en ontlaadverlies van dat deel en het verschil in accu-inhoud.
+#
+# Terugverdientijd accu: aanschafprijs / (opbrengst van de accu per jaar). De opbrengst is
+# alles wat de accu oplevert: opgeslagen zonnestroom plus slim laden (= zon_dyn - nu_dyn).
+# Hij wordt doorgetrokken uit de periode "totaal"; wat de accu vóór de start van de meting
 # al opbracht kan bij "Accu Al Terugverdiend" worden ingevuld.
 #
 # Teruglevering heeft een eigen prijs (vast: terugleverprijs; dynamisch: Nordpool-prijs
@@ -146,7 +158,8 @@ template:
           {%- set dl = t_laden - vorig.laden -%}{%- set dn = t_ontl - vorig.ontl -%}
           {%- if [di, de, dp, dl, dn] | select('ge', 0) | select('le', c_max_kwh_interval) | list | length == 5 -%}
             {%- set v = [di - de + dp - dl + dn, 0] | max -%}
-            {{ {'imp': di, 'exp': de, 'zon': dp, 'verbruik': v, 'imp0': [v - dp, 0] | max, 'exp0': [dp - v, 0] | max} }}
+            {{ {'imp': di, 'exp': de, 'zon': dp, 'verbruik': v, 'imp0': [v - dp, 0] | max, 'exp0': [dp - v, 0] | max,
+                'laden': dl, 'ontl': dn} }}
           {%- else -%}{{ none }}{%- endif -%}
         {%- else -%}{{ none }}{%- endif -%}
       # Prijs van het afgelopen kwartier = de prijs die bij de vorige berekening (begin van
@@ -163,15 +176,42 @@ template:
       # Bonus (%) over de marktprijs bij teruglevering, alleen als die prijs positief is
       bonus_uit: "{{ states('input_number.besparing_dyn_bonus_teruglevering') | float(0) / 100 }}"
 
+      # ---- Zonnestroom in de accu ----
+      # Inhoud van de accu nu (kWh boven het minimum; -1 = onbekend) en het aandeel zonnestroom
+      # daarin (0-1) uit de vorige meting. Zonder eerdere meting: alles uit het net (0).
+      accu_nu: >
+        {% set cap = states('sensor.zendure_2400_ac_totale_capaciteit') | float(0) %}
+        {% set soc = states('sensor.zendure_2400_ac_laadpercentage') | float(-1) %}
+        {% set mn = states('sensor.zendure_2400_ac_minimale_laadpercentage') | float(0) %}
+        {{ ([soc - mn, 0] | max / 100 * cap) | round(3) if soc >= 0 and cap > 0 else -1 }}
+      zon_aandeel_vorig: >
+        {{ ([[vorig.f | float(0), 0] | max, 1] | min) if vorig is mapping and vorig.f is defined else 0 }}
+
       # ---- Toename voor dit kwartier (kWh en €) ----
       inc: >
         {%- if delta is mapping and p_dyn is number -%}
           {%- set din = p_dyn + opsl_in -%}{%- set duit = p_dyn + bonus_uit * ([p_dyn, 0] | max) + opsl_uit -%}{%- set d = delta -%}
+          {#- Zonnestroom de accu in: het overschot (zon min direct verbruik), hooguit wat er geladen is -#}
+          {%- set zin = [d.zon - [d.zon, d.verbruik] | min, d.laden] | min -%}
+          {#- Ontladen: eerst het tekort van het huis (spaart inkoop uit), de rest gaat het net op -#}
+          {%- set naar_huis = [d.ontl, [d.verbruik - d.zon, 0] | max] | min -%}
+          {%- set waarde_uit = naar_huis * din + (d.ontl - naar_huis) * duit -%}
           {{ {'verbruik': d.verbruik, 'zon': d.zon, 'imp': d.imp, 'exp': d.exp, 'imp0': d.imp0, 'exp0': d.exp0,
               'geen_vast': d.verbruik * vast_in, 'geen_dyn': d.verbruik * din,
               'zon_vast': d.imp0 * vast_in - d.exp0 * vast_uit, 'zon_dyn': d.imp0 * din - d.exp0 * duit,
-              'nu_vast': d.imp * vast_in - d.exp * vast_uit, 'nu_dyn': d.imp * din - d.exp * duit} }}
+              'nu_vast': d.imp * vast_in - d.exp * vast_uit, 'nu_dyn': d.imp * din - d.exp * duit,
+              'zon_accu': zon_aandeel_vorig * waarde_uit - zin * duit,
+              'zon_in_accu': zin, 'zon_uit_accu': zon_aandeel_vorig * d.ontl} }}
         {%- else -%}{{ none }}{%- endif -%}
+
+      # Nieuw aandeel zonnestroom: bij laden gemengd met de inhoud aan het begin van het kwartier;
+      # een lege accu begint opnieuw.
+      zon_aandeel: >
+        {%- if inc is mapping and delta.laden > 0 -%}
+          {%- set e0 = [vorig.e | float(0), 0] | max if vorig.e is defined else 0 -%}
+          {{ ([[(zon_aandeel_vorig * e0 + inc.zon_in_accu) / (e0 + delta.laden), 0] | max, 1] | min) | round(4) }}
+        {%- elif accu_nu == 0 -%}0
+        {%- else -%}{{ zon_aandeel_vorig }}{%- endif -%}
 
       # ---- Periodes: dag, maand, jaar, totaal (+ gisteren) ----
       # Het kwartier telt mee in de dag waarin het begon (23:45-00:00 hoort bij gisteren).
@@ -180,7 +220,8 @@ template:
       m_key: "{{ ref_ts | timestamp_custom('%Y-%m', true) }}"
       j_key: "{{ ref_ts | timestamp_custom('%Y', true) }}"
       emmers: >-
-        {%- set K = ['verbruik', 'zon', 'imp', 'exp', 'imp0', 'exp0', 'geen_vast', 'geen_dyn', 'zon_vast', 'zon_dyn', 'nu_vast', 'nu_dyn'] -%}
+        {%- set K = ['verbruik', 'zon', 'imp', 'exp', 'imp0', 'exp0', 'geen_vast', 'geen_dyn', 'zon_vast', 'zon_dyn', 'nu_vast', 'nu_dyn',
+                     'zon_accu', 'zon_in_accu', 'zon_uit_accu'] -%}
         {%- set o = state_attr('sensor.zendure_besparing', 'emmers') -%}
         {%- set o = o if o is mapping else {} -%}
         {%- set sleutels = {'dag': d_key, 'maand': m_key, 'jaar': j_key} -%}
@@ -216,6 +257,7 @@ template:
       tv_dagen: >
         {% set d0 = strptime(emmers.totaal.start | string, '%Y-%m-%d', none) %}
         {% if d0 is none %}0{% else %}{{ ((now().date() - d0.date()).days + (now().hour * 60 + now().minute) / 1440) | round(3) }}{% endif %}
+      # Alles wat de accu opleverde: opgeslagen zonnestroom + slim laden
       tv_gemeten: "{{ (emmers.totaal.zon_dyn - emmers.totaal.nu_dyn) | round(2) }}"
       tv_terug: "{{ (tv_vooraf + tv_gemeten) | round(2) }}"
       # Doorgetrokken naar een jaar, pas vanaf 1 dag meting
@@ -236,16 +278,19 @@ template:
           # Opgetelde kWh en € per periode (zie uitleg bovenaan)
           emmers: "{{ emmers }}"
           sinds: "{{ emmers.totaal.start }}"
-          zon: "{{ (emmers.totaal.geen_vast - emmers.totaal.zon_vast) | round(2) }}"
-          dynamisch_tarief: "{{ (emmers.totaal.zon_vast - emmers.totaal.zon_dyn) | round(2) }}"
-          accu: "{{ (emmers.totaal.zon_dyn - emmers.totaal.nu_dyn) | round(2) }}"
-          betaald: "{{ emmers.totaal.nu_dyn | round(2) }}"
+          zonnepanelen: "{{ (emmers.totaal.geen_vast - emmers.totaal.zon_vast + emmers.totaal.zon_accu) | round(2) }}"
+          zonnepanelen_direct_en_teruglevering: "{{ (emmers.totaal.geen_vast - emmers.totaal.zon_vast) | round(2) }}"
+          zonnepanelen_via_accu: "{{ emmers.totaal.zon_accu | round(2) }}"
+          dynamische_tarief: "{{ (emmers.totaal.zon_vast - emmers.totaal.zon_dyn) | round(2) }}"
+          accu_en_slim_laden: "{{ (emmers.totaal.zon_dyn - emmers.totaal.nu_dyn - emmers.totaal.zon_accu) | round(2) }}"
+          werkelijke_kosten: "{{ emmers.totaal.nu_dyn | round(2) }}"
           prijs_laatste_interval: "{{ p_dyn }}"
           laatste_interval_verrekend: "{{ inc is mapping }}"
           # Tellerstanden en prijs van nu, voor de berekening over een kwartier
           meting: >
             {% if meting_ok %}{{ {'ts': nu_ts | round(0), 'imp': t_imp, 'exp': t_exp, 'prod': prod_nu,
-                                  'laden': t_laden, 'ontl': t_ontl, 'p': slot_nu.p} }}
+                                  'laden': t_laden, 'ontl': t_ontl, 'p': slot_nu.p,
+                                  'f': zon_aandeel, 'e': accu_nu} }}
             {% else %}{{ none }}{% endif %}
 
       - name: "Zendure Besparing Vandaag"
@@ -256,10 +301,12 @@ template:
         state_class: total
         state: "{{ (emmers.dag.geen_vast - emmers.dag.nu_dyn) | round(2) }}"
         attributes:
-          zon: "{{ (emmers.dag.geen_vast - emmers.dag.zon_vast) | round(2) }}"
-          dynamisch_tarief: "{{ (emmers.dag.zon_vast - emmers.dag.zon_dyn) | round(2) }}"
-          accu: "{{ (emmers.dag.zon_dyn - emmers.dag.nu_dyn) | round(2) }}"
-          betaald: "{{ emmers.dag.nu_dyn | round(2) }}"
+          zonnepanelen: "{{ (emmers.dag.geen_vast - emmers.dag.zon_vast + emmers.dag.zon_accu) | round(2) }}"
+          zonnepanelen_direct_en_teruglevering: "{{ (emmers.dag.geen_vast - emmers.dag.zon_vast) | round(2) }}"
+          zonnepanelen_via_accu: "{{ emmers.dag.zon_accu | round(2) }}"
+          dynamische_tarief: "{{ (emmers.dag.zon_vast - emmers.dag.zon_dyn) | round(2) }}"
+          accu_en_slim_laden: "{{ (emmers.dag.zon_dyn - emmers.dag.nu_dyn - emmers.dag.zon_accu) | round(2) }}"
+          werkelijke_kosten: "{{ emmers.dag.nu_dyn | round(2) }}"
 
       - name: "Zendure Besparing Deze Maand"
         unique_id: zendure_besparing_deze_maand
@@ -269,10 +316,12 @@ template:
         state_class: total
         state: "{{ (emmers.maand.geen_vast - emmers.maand.nu_dyn) | round(2) }}"
         attributes:
-          zon: "{{ (emmers.maand.geen_vast - emmers.maand.zon_vast) | round(2) }}"
-          dynamisch_tarief: "{{ (emmers.maand.zon_vast - emmers.maand.zon_dyn) | round(2) }}"
-          accu: "{{ (emmers.maand.zon_dyn - emmers.maand.nu_dyn) | round(2) }}"
-          betaald: "{{ emmers.maand.nu_dyn | round(2) }}"
+          zonnepanelen: "{{ (emmers.maand.geen_vast - emmers.maand.zon_vast + emmers.maand.zon_accu) | round(2) }}"
+          zonnepanelen_direct_en_teruglevering: "{{ (emmers.maand.geen_vast - emmers.maand.zon_vast) | round(2) }}"
+          zonnepanelen_via_accu: "{{ emmers.maand.zon_accu | round(2) }}"
+          dynamische_tarief: "{{ (emmers.maand.zon_vast - emmers.maand.zon_dyn) | round(2) }}"
+          accu_en_slim_laden: "{{ (emmers.maand.zon_dyn - emmers.maand.nu_dyn - emmers.maand.zon_accu) | round(2) }}"
+          werkelijke_kosten: "{{ emmers.maand.nu_dyn | round(2) }}"
 
       - name: "Zendure Besparing Dit Jaar"
         unique_id: zendure_besparing_dit_jaar
@@ -282,10 +331,12 @@ template:
         state_class: total
         state: "{{ (emmers.jaar.geen_vast - emmers.jaar.nu_dyn) | round(2) }}"
         attributes:
-          zon: "{{ (emmers.jaar.geen_vast - emmers.jaar.zon_vast) | round(2) }}"
-          dynamisch_tarief: "{{ (emmers.jaar.zon_vast - emmers.jaar.zon_dyn) | round(2) }}"
-          accu: "{{ (emmers.jaar.zon_dyn - emmers.jaar.nu_dyn) | round(2) }}"
-          betaald: "{{ emmers.jaar.nu_dyn | round(2) }}"
+          zonnepanelen: "{{ (emmers.jaar.geen_vast - emmers.jaar.zon_vast + emmers.jaar.zon_accu) | round(2) }}"
+          zonnepanelen_direct_en_teruglevering: "{{ (emmers.jaar.geen_vast - emmers.jaar.zon_vast) | round(2) }}"
+          zonnepanelen_via_accu: "{{ emmers.jaar.zon_accu | round(2) }}"
+          dynamische_tarief: "{{ (emmers.jaar.zon_vast - emmers.jaar.zon_dyn) | round(2) }}"
+          accu_en_slim_laden: "{{ (emmers.jaar.zon_dyn - emmers.jaar.nu_dyn - emmers.jaar.zon_accu) | round(2) }}"
+          werkelijke_kosten: "{{ emmers.jaar.nu_dyn | round(2) }}"
 
       # Terugverdientijd van de accu (besparing door accu en slim laden, dynamisch contract)
       - name: "Zendure Accu Terugverdientijd"
@@ -307,3 +358,6 @@ template:
             {% elif tv_nog_jaar is number %}{{ (now() + timedelta(days=(tv_nog_jaar * 365) | int)).strftime('%m-%Y') }}
             {% else %}{{ none }}{% endif %}
           gemeten_dagen: "{{ tv_dagen }}"
+          waarvan_zonnestroom: "{{ emmers.totaal.zon_accu | round(2) }}"
+          waarvan_slim_laden: "{{ (tv_gemeten - emmers.totaal.zon_accu) | round(2) }}"
+          zon_aandeel_accu_pct: "{{ (zon_aandeel * 100) | round(0) }}"

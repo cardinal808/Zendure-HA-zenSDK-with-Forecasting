@@ -58,6 +58,13 @@ Versies volgen `jaar.maand.volgnummer`; het volgnummer begint elke maand bij 1. 
 - De energiebalans (overbrugging, scenario A/B) verandert niet; na middernacht en zolang de prijzen van morgen onbekend zijn, rekent de planner precies als voorheen. Rendementsfilter en minimale spread gelden ook hier.
 - Nieuwe attributen `padcheck_horizon`, `padcheck_voorbij_nacht` en `padcheck_zon_dekt_morgen_vanaf`; *Plan vandaag* toont *voorbij de nacht*.
 
+**Besparing: opgeslagen zonnestroom bij de zonnepanelen** *(optioneel pakket)*
+- Het pakket houdt per kwartier bij hoeveel zonnestroom de accu in gaat en welk deel van de accu-inhoud zonnestroom is. Bij ontladen telt dat deel als zonnestroom, gewaardeerd tegen de prijs die het dan uitspaart. Opgeslagen zonnestroom telt daardoor bij **zonnepanelen** (zonder kosten), niet meer bij de accu.
+- Tabel Overzicht: **zonnepanelen** met de deelregels *direct verbruik en teruglevering* en *opgeslagen in de accu*; **dynamische tarief**; **accu en slim laden** (wat overblijft: laden uit het net, het laad- en ontlaadverlies daarvan en stroom die nog in de accu zit); **Werkelijke kosten** (was *Werkelijk betaald*). Energietabel: regel *zon de accu in / uit* (kWh).
+- Terugverdienen: *Terugverdiend* met de deelregels *waarvan opgeslagen zonnestroom* en *waarvan slim laden*; de terugverdientijd zelf rekent zoals voorheen met alles wat de accu oplevert. Bij een negatieve opbrengst na meer dan een dag meten staat er nu *Nog geen terugverdientijd* in plaats van *Nog te weinig gegevens*, en de voortgang toont geen *-0,0%* meer.
+- Attributen van de besparingssensoren hernoemd: `zon` → `zonnepanelen` (met `zonnepanelen_direct_en_teruglevering` en `zonnepanelen_via_accu`), `dynamisch_tarief` → `dynamische_tarief`, `accu` → `accu_en_slim_laden` (nu zonder de zonnestroom), `betaald` → `werkelijke_kosten`. Terugverdientijd: nieuw `waarvan_zonnestroom`, `waarvan_slim_laden`, `zon_aandeel_accu_pct`. Het totaal en de terugverdientijd veranderen niet.
+- Telt vanaf de upgrade; eerdere kwartieren hebben geen opgeslagen zonnestroom en blijven bij accu en slim laden. De accu-inhoud op het moment van upgraden telt als stroom uit het net.
+
 **Dashboard**
 - **Optionele pakketten tonen zich vanzelf:** Forecasting Configuratie (Besparing), (EV), (HVAC) en Diagnose-export staan alleen op de tab Configuratie als het pakket geladen is. Ontbreekt `zendure_besparing.yaml`, dan toont de tab Besparing alleen een melding in plaats van lege kaarten.
 - Nieuwe kaart **Optionele pakketten** op de tab Configuratie: per optioneel pakket of het geladen is (✅/➖), het bestand en wat het doet, met een link naar de uitleg.

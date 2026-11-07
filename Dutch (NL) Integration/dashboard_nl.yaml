@@ -2150,6 +2150,15 @@ views:
               en accu en wat je met zon, accu en dynamisch contract betaalt.
               Vaste kosten (vastrecht, netbeheer, heffingskorting) zitten er
               niet in; die zijn in alle situaties gelijk.
+
+
+              **Zonnepanelen** is alles wat de zon oplevert: direct verbruik en
+              teruglevering, plus de zonnestroom die via de accu later in huis
+              wordt gebruikt (tegen de prijs die hij dan uitspaart, zonder
+              kosten). **Accu en slim laden** is wat overblijft: laden uit het
+              net en weer ontladen, inclusief het laad- en ontlaadverlies en
+              stroom die nog in de accu zit. In maanden met weinig zon en
+              kleine prijsverschillen kan dat negatief zijn.
             text_only: true
             visibility:
               - condition: state
@@ -2179,16 +2188,19 @@ views:
               | | {% for k, n in P %}{{ n }} | {% endfor %}
               |:---|{% for k, n in P %}---:|{% endfor %}
               | **Bespaard** | {% for k, n in P %}**{{ kleur(w(k, 'geen_vast') | float - w(k, 'nu_dyn') | float) }}** | {% endfor %}
-              | <ha-icon icon="mdi:solar-power-variant"></ha-icon>door zon | {% for k, n in P %}{{ kleur(w(k, 'geen_vast') | float - w(k, 'zon_vast') | float) }} | {% endfor %}
-              | <ha-icon icon="mdi:chart-bell-curve-cumulative"></ha-icon>door dynamisch tarief | {% for k, n in P %}{{ kleur(w(k, 'zon_vast') | float - w(k, 'zon_dyn') | float) }} | {% endfor %}
-              | <ha-icon icon="mdi:battery-charging"></ha-icon>door accu en slim laden | {% for k, n in P %}{{ kleur(w(k, 'zon_dyn') | float - w(k, 'nu_dyn') | float) }} | {% endfor %}
+              | <ha-icon icon="mdi:solar-power-variant"></ha-icon>zonnepanelen | {% for k, n in P %}{{ kleur(w(k, 'geen_vast') | float - w(k, 'zon_vast') | float + w(k, 'zon_accu') | float) }} | {% endfor %}
+              | &emsp;&emsp;<small>direct verbruik en teruglevering</small> | {% for k, n in P %}<small>{{ kleur(w(k, 'geen_vast') | float - w(k, 'zon_vast') | float) }}</small> | {% endfor %}
+              | &emsp;&emsp;<small>opgeslagen in de accu</small> | {% for k, n in P %}<small>{{ kleur(w(k, 'zon_accu')) }}</small> | {% endfor %}
+              | <ha-icon icon="mdi:chart-bell-curve-cumulative"></ha-icon>dynamische tarief | {% for k, n in P %}{{ kleur(w(k, 'zon_vast') | float - w(k, 'zon_dyn') | float) }} | {% endfor %}
+              | <ha-icon icon="mdi:battery-charging"></ha-icon>accu en slim laden | {% for k, n in P %}{{ kleur(w(k, 'zon_dyn') | float - w(k, 'nu_dyn') | float - w(k, 'zon_accu') | float) }} | {% endfor %}
               | <ha-icon icon="mdi:cash-remove"></ha-icon>Vast contract, zonder zon en accu | {% for k, n in P %}{{ eur(w(k, 'geen_vast')) }} | {% endfor %}
-              | <ha-icon icon="mdi:cash-check"></ha-icon>Werkelijk betaald | {% for k, n in P %}{{ eur(w(k, 'nu_dyn')) }} | {% endfor %}
+              | <ha-icon icon="mdi:cash-check"></ha-icon>Werkelijke kosten | {% for k, n in P %}{{ eur(w(k, 'nu_dyn')) }} | {% endfor %}
 
               | Energie (kWh) | {% for k, n in P %}{{ n }} | {% endfor %}
               |:---|{% for k, n in P %}---:|{% endfor %}
               | <ha-icon icon="mdi:home-lightning-bolt-outline"></ha-icon>Verbruik | {% for k, n in P %}{{ kwh(w(k, 'verbruik')) }} | {% endfor %}
               | <ha-icon icon="mdi:solar-power"></ha-icon>Zon | {% for k, n in P %}{{ kwh(w(k, 'zon')) }} | {% endfor %}
+              | &emsp;&emsp;<small>zon de accu in / uit</small> | {% for k, n in P %}<small>{{ kwh(w(k, 'zon_in_accu')) }} / {{ kwh(w(k, 'zon_uit_accu')) }}</small> | {% endfor %}
               | <ha-icon icon="mdi:transmission-tower-import"></ha-icon>Import | {% for k, n in P %}{{ kwh(w(k, 'imp')) }} | {% endfor %}
               | <ha-icon icon="mdi:transmission-tower-export"></ha-icon>Export | {% for k, n in P %}{{ kwh(w(k, 'exp')) }} | {% endfor %}
 
@@ -2398,16 +2410,18 @@ views:
               {% if prijs <= 0 -%}
               Vul de aanschafprijs van de accu in onder Forecasting Configuratie (Besparing).
               {%- else -%}
-              {% if has_value(s) %}**{{ states(s) | replace('.', ',') }} jaar** in totaal{% if state_attr(s, 'nog_te_gaan') | float(0) > 0 %}, nog **{{ state_attr(s, 'nog_jaren') | string | replace('.', ',') }} jaar** (rond {{ state_attr(s, 'terugverdiend_rond') }}){% else %}, **terugverdiend**{% endif %}{% else %}Nog te weinig gegevens: na een volle dag meten volgt de eerste schatting.{% endif %}
+              {% if has_value(s) %}**{{ states(s) | replace('.', ',') }} jaar** in totaal{% if state_attr(s, 'nog_te_gaan') | float(0) > 0 %}, nog **{{ state_attr(s, 'nog_jaren') | string | replace('.', ',') }} jaar** (rond {{ state_attr(s, 'terugverdiend_rond') }}){% else %}, **terugverdiend**{% endif %}{% elif (state_attr(s, 'gemeten_dagen') | float(0)) >= 1 %}Nog geen terugverdientijd: de accu heeft over deze periode per saldo nog niets opgebracht.{% else %}Nog te weinig gegevens: na een volle dag meten volgt de eerste schatting.{% endif %}
 
-              <font color="#01a180">{{ '█' * n }}</font><font color="#5a5a5c">{{ '█' * (20 - n) }}</font> {{ pct | round(1) | string | replace('.', ',') }}%
+              <font color="#01a180">{{ '█' * n }}</font><font color="#5a5a5c">{{ '█' * (20 - n) }}</font> {{ pct | abs | round(1) | string | replace('.', ',') }}%
 
               | | |
               |:---|---:|
               | <ha-icon icon="mdi:cash"></ha-icon>Aanschafprijs | {{ eur(prijs, 0) }} |
               | <ha-icon icon="mdi:cash-check"></ha-icon>Terugverdiend | {% if terug < 0 %}<font color="#c53b2c">{{ eur(terug) }}</font>{% else %}<font color="#01a180">{{ eur(terug) }}</font>{% endif %} |
-              | <ha-icon icon="mdi:cash-clock"></ha-icon>Nog te gaan | {{ eur(state_attr(s, 'nog_te_gaan') if state_attr(s, 'nog_te_gaan') is not none else prijs - terug) }} |
-              {% if has_value(s) %}| <ha-icon icon="mdi:calendar-sync"></ha-icon>Besparing door de accu per jaar | {{ eur(state_attr(s, 'besparing_per_jaar'), 0) }} |
+              {% if state_attr(s, 'waarvan_zonnestroom') is not none %}| &emsp;&emsp;<small>waarvan opgeslagen zonnestroom</small> | <small>{{ eur(state_attr(s, 'waarvan_zonnestroom')) }}</small> |
+              | &emsp;&emsp;<small>waarvan slim laden</small> | <small>{{ eur(state_attr(s, 'waarvan_slim_laden')) }}</small> |
+              {% endif %}| <ha-icon icon="mdi:cash-clock"></ha-icon>Nog te gaan | {{ eur(state_attr(s, 'nog_te_gaan') if state_attr(s, 'nog_te_gaan') is not none else prijs - terug) }} |
+              {% if has_value(s) %}| <ha-icon icon="mdi:calendar-sync"></ha-icon>Opbrengst van de accu per jaar | {{ eur(state_attr(s, 'besparing_per_jaar'), 0) }} |
               {% endif %}
               {% if (state_attr(s, 'gemeten_dagen') | float(0)) < 365 %}
               <small>Indicatie op basis van {{ state_attr(s, 'gemeten_dagen') | float(0) | round(0) | int }} dag(en) meting. Zomer en winter verschillen sterk (in de winter minder zon, maar vaak meer prijsverschil); na een jaar meten is de schatting het betrouwbaarst. Tarieven en accuprijs: tab Configuratie, blok Forecasting Configuratie (Besparing).</small>
@@ -4251,8 +4265,9 @@ views:
 
               **Accu aanschafprijs**: wat de accu (met omvormer en installatie)
               kostte. **Accu al terugverdiend**: wat de accu opbracht vóórdat
-              deze meting begon (optioneel). De terugverdientijd gebruikt de
-              besparing door accu en slim laden bij een dynamisch contract.
+              deze meting begon (optioneel). De terugverdientijd gebruikt alles
+              wat de accu oplevert bij een dynamisch contract: opgeslagen
+              zonnestroom plus slim laden.
             text_only: true
             visibility:
               - condition: state

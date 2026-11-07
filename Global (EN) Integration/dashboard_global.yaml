@@ -2145,6 +2145,15 @@ views:
               and what you pay with solar, battery and a dynamic contract.
               Fixed costs (standing charges, grid fees, tax credits) are not
               included; they are the same in every situation.
+
+
+              **Solar panels** is everything the sun yields: direct use and
+              export, plus the solar energy used in the home later via the
+              battery (at the price it saves at that moment, without costs).
+              **Battery and smart charging** is what remains: charging from the
+              grid and discharging again, including the charge and discharge
+              loss and energy still in the battery. In months with little sun
+              and small price differences this can be negative.
             text_only: true
             visibility:
               - condition: state
@@ -2174,16 +2183,19 @@ views:
               | | {% for k, n in P %}{{ n }} | {% endfor %}
               |:---|{% for k, n in P %}---:|{% endfor %}
               | **Saved** | {% for k, n in P %}**{{ colour(w(k, 'none_fixed') | float - w(k, 'now_dyn') | float) }}** | {% endfor %}
-              | <ha-icon icon="mdi:solar-power-variant"></ha-icon>by solar | {% for k, n in P %}{{ colour(w(k, 'none_fixed') | float - w(k, 'solar_fixed') | float) }} | {% endfor %}
-              | <ha-icon icon="mdi:chart-bell-curve-cumulative"></ha-icon>by dynamic tariff | {% for k, n in P %}{{ colour(w(k, 'solar_fixed') | float - w(k, 'solar_dyn') | float) }} | {% endfor %}
-              | <ha-icon icon="mdi:battery-charging"></ha-icon>by battery and smart charging | {% for k, n in P %}{{ colour(w(k, 'solar_dyn') | float - w(k, 'now_dyn') | float) }} | {% endfor %}
+              | <ha-icon icon="mdi:solar-power-variant"></ha-icon>solar panels | {% for k, n in P %}{{ colour(w(k, 'none_fixed') | float - w(k, 'solar_fixed') | float + w(k, 'solar_batt') | float) }} | {% endfor %}
+              | &emsp;&emsp;<small>direct use and export</small> | {% for k, n in P %}<small>{{ colour(w(k, 'none_fixed') | float - w(k, 'solar_fixed') | float) }}</small> | {% endfor %}
+              | &emsp;&emsp;<small>stored in the battery</small> | {% for k, n in P %}<small>{{ colour(w(k, 'solar_batt')) }}</small> | {% endfor %}
+              | <ha-icon icon="mdi:chart-bell-curve-cumulative"></ha-icon>dynamic tariff | {% for k, n in P %}{{ colour(w(k, 'solar_fixed') | float - w(k, 'solar_dyn') | float) }} | {% endfor %}
+              | <ha-icon icon="mdi:battery-charging"></ha-icon>battery and smart charging | {% for k, n in P %}{{ colour(w(k, 'solar_dyn') | float - w(k, 'now_dyn') | float - w(k, 'solar_batt') | float) }} | {% endfor %}
               | <ha-icon icon="mdi:cash-remove"></ha-icon>Fixed contract, no solar or battery | {% for k, n in P %}{{ eur(w(k, 'none_fixed')) }} | {% endfor %}
-              | <ha-icon icon="mdi:cash-check"></ha-icon>Actually paid | {% for k, n in P %}{{ eur(w(k, 'now_dyn')) }} | {% endfor %}
+              | <ha-icon icon="mdi:cash-check"></ha-icon>Actual costs | {% for k, n in P %}{{ eur(w(k, 'now_dyn')) }} | {% endfor %}
 
               | Energy (kWh) | {% for k, n in P %}{{ n }} | {% endfor %}
               |:---|{% for k, n in P %}---:|{% endfor %}
               | <ha-icon icon="mdi:home-lightning-bolt-outline"></ha-icon>Usage | {% for k, n in P %}{{ kwh(w(k, 'usage')) }} | {% endfor %}
               | <ha-icon icon="mdi:solar-power"></ha-icon>Solar | {% for k, n in P %}{{ kwh(w(k, 'solar')) }} | {% endfor %}
+              | &emsp;&emsp;<small>solar into / out of the battery</small> | {% for k, n in P %}<small>{{ kwh(w(k, 'solar_into_batt')) }} / {{ kwh(w(k, 'solar_from_batt')) }}</small> | {% endfor %}
               | <ha-icon icon="mdi:transmission-tower-import"></ha-icon>Import | {% for k, n in P %}{{ kwh(w(k, 'imp')) }} | {% endfor %}
               | <ha-icon icon="mdi:transmission-tower-export"></ha-icon>Export | {% for k, n in P %}{{ kwh(w(k, 'exp')) }} | {% endfor %}
 
@@ -2393,16 +2405,18 @@ views:
               {% if price <= 0 -%}
               Enter the purchase price of the battery under Settings, Forecasting Configuration (Savings).
               {%- else -%}
-              {% if has_value(s) %}**{{ states(s) }} years** in total{% if state_attr(s, 'still_to_go') | float(0) > 0 %}, **{{ state_attr(s, 'years_left') }} years** to go (around {{ state_attr(s, 'paid_back_around') }}){% else %}, **paid back**{% endif %}{% else %}Not enough data yet: the first estimate follows after a full day of measuring.{% endif %}
+              {% if has_value(s) %}**{{ states(s) }} years** in total{% if state_attr(s, 'still_to_go') | float(0) > 0 %}, **{{ state_attr(s, 'years_left') }} years** to go (around {{ state_attr(s, 'paid_back_around') }}){% else %}, **paid back**{% endif %}{% elif (state_attr(s, 'measured_days') | float(0)) >= 1 %}No payback time yet: on balance the battery has not earned anything over this period.{% else %}Not enough data yet: the first estimate follows after a full day of measuring.{% endif %}
 
-              <font color="#01a180">{{ '█' * n }}</font><font color="#5a5a5c">{{ '█' * (20 - n) }}</font> {{ pct | round(1) }}%
+              <font color="#01a180">{{ '█' * n }}</font><font color="#5a5a5c">{{ '█' * (20 - n) }}</font> {{ pct | abs | round(1) }}%
 
               | | |
               |:---|---:|
               | <ha-icon icon="mdi:cash"></ha-icon>Purchase price | {{ eur(price, 0) }} |
               | <ha-icon icon="mdi:cash-check"></ha-icon>Earned back | {% if earned < 0 %}<font color="#c53b2c">{{ eur(earned) }}</font>{% else %}<font color="#01a180">{{ eur(earned) }}</font>{% endif %} |
-              | <ha-icon icon="mdi:cash-clock"></ha-icon>Still to go | {{ eur(state_attr(s, 'still_to_go') if state_attr(s, 'still_to_go') is not none else price - earned) }} |
-              {% if has_value(s) %}| <ha-icon icon="mdi:calendar-sync"></ha-icon>Savings by the battery per year | {{ eur(state_attr(s, 'savings_per_year'), 0) }} |
+              {% if state_attr(s, 'of_which_solar_energy') is not none %}| &emsp;&emsp;<small>of which stored solar energy</small> | <small>{{ eur(state_attr(s, 'of_which_solar_energy')) }}</small> |
+              | &emsp;&emsp;<small>of which smart charging</small> | <small>{{ eur(state_attr(s, 'of_which_smart_charging')) }}</small> |
+              {% endif %}| <ha-icon icon="mdi:cash-clock"></ha-icon>Still to go | {{ eur(state_attr(s, 'still_to_go') if state_attr(s, 'still_to_go') is not none else price - earned) }} |
+              {% if has_value(s) %}| <ha-icon icon="mdi:calendar-sync"></ha-icon>Earnings of the battery per year | {{ eur(state_attr(s, 'savings_per_year'), 0) }} |
               {% endif %}
               {% if (state_attr(s, 'measured_days') | float(0)) < 365 %}
               <small>Indication based on {{ state_attr(s, 'measured_days') | float(0) | round(0) | int }} day(s) of measuring. Summer and winter differ a lot (less solar in winter, but often a larger price spread); after a year of measuring the estimate is most reliable. Tariffs and battery price: Settings tab, block Forecasting Configuration (Savings).</small>
@@ -4245,8 +4259,8 @@ views:
               **Battery purchase price**: what the battery (with inverter and
               installation) cost. **Battery already earned back**: what the
               battery earned before this measurement started (optional). The
-              payback time uses the savings by battery and smart charging with
-              a dynamic contract.
+              payback time uses everything the battery yields with a dynamic
+              contract: stored solar energy plus smart charging.
             text_only: true
             visibility:
               - condition: state
