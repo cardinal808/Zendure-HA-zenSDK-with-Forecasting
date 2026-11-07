@@ -4078,9 +4078,10 @@ views:
               <ha-alert alert-type="info">Helptekst</ha-alert>Is de
               terugleverprijs negatief, dan levert de installatie niet terug.
               Terugleverprijs = marktprijs + bonus % (alleen bij een positieve
-              marktprijs) + opslag teruglevering, met de waarden uit
-              **Forecasting Configuratie (Besparing)** (zonder besparingspakket
-              staan die twee velden hieronder).
+              marktprijs) + opslag teruglevering, met de velden onder
+              **Terugleverprijs** hieronder (ook gebruikt door de besparing).
+              Is je Nordpool-sensor all-in, vul dan bij **Marktprijs sensor**
+              een sensor met de kale marktprijs in.
 
 
               **Zendure Pro:** staat **Zendure Pro PV-export uitschakelen** aan,
@@ -4165,20 +4166,10 @@ views:
                 label: Terugleverprijs
               - entity: input_text.dynamisch_marktprijs_sensor
                 name: Marktprijs sensor (leeg = Nordpool-sensor)
-              - type: conditional
-                conditions:
-                  - entity: input_number.besparing_vast_leveringsprijs
-                    state: unavailable
-                row:
-                  entity: input_number.besparing_dyn_opslag_teruglevering
-                  name: Dynamisch opslag teruglevering
-              - type: conditional
-                conditions:
-                  - entity: input_number.besparing_vast_leveringsprijs
-                    state: unavailable
-                row:
-                  entity: input_number.besparing_dyn_bonus_teruglevering
-                  name: Dynamisch bonus teruglevering % (over marktprijs)
+              - entity: input_number.besparing_dyn_opslag_teruglevering
+                name: Opslag teruglevering (incl. btw)
+              - entity: input_number.besparing_dyn_bonus_teruglevering
+                name: Bonus teruglevering % (over marktprijs)
               - type: section
                 label: Externe omvormer (optioneel)
               - entity: input_select.negatieve_prijs_omvormer_aantal
@@ -4298,15 +4289,12 @@ views:
               **Vast tarief levering** en **teruglevering** komen van je
               vaste of variabele contract; bij volledige saldering is
               teruglevering gelijk aan levering. Bij dynamisch wordt de prijs
-              uit de Nordpool-sensor gebruikt plus de **opslag**: is je sensor
-              al all-in, laat de opslag levering op 0 staan en vul bij
-              **Marktprijs sensor teruglevering** een Nordpool-sensor met de
-              kale marktprijs in (energiebelasting en opslag horen niet bij
-              teruglevering). Teruglevering dynamisch = marktprijs + **bonus
-              %** over de marktprijs (alleen als die positief is) + **opslag
-              teruglevering** per kWh. Houdt de
-              leverancier iets in, maak de opslag dan negatief. Met de knop
-              begint alleen het totaal opnieuw.
+              uit de Nordpool-sensor gebruikt plus de **opslag levering**: is je
+              sensor al all-in, laat die op 0 staan (met het Nordpool-pakket is
+              het veld verborgen, want die sensor is al all-in). De
+              terugleverprijs (marktprijs-sensor, opslag en bonus teruglevering)
+              stel je in bij Forecasting Configuratie (Negatieve Prijs). Met de
+              knop begint alleen het totaal opnieuw.
 
 
               **Accu aanschafprijs**: wat de accu (met omvormer en installatie)
@@ -4331,14 +4319,13 @@ views:
                 name: Vast tarief levering
               - entity: input_number.besparing_vast_terugleverprijs
                 name: Vast tarief teruglevering
-              - entity: input_number.besparing_dyn_opslag_levering
-                name: Dynamisch opslag levering
-              - entity: input_text.dynamisch_marktprijs_sensor
-                name: Marktprijs sensor teruglevering (leeg = Nordpool-sensor)
-              - entity: input_number.besparing_dyn_opslag_teruglevering
-                name: Dynamisch opslag teruglevering
-              - entity: input_number.besparing_dyn_bonus_teruglevering
-                name: Dynamisch bonus teruglevering % (over marktprijs)
+              - type: conditional
+                conditions:
+                  - entity: input_number.nordpool_energiebelasting
+                    state: unavailable
+                row:
+                  entity: input_number.besparing_dyn_opslag_levering
+                  name: Dynamisch opslag levering
               - entity: input_number.besparing_accu_aanschafprijs
                 name: Accu aanschafprijs
               - entity: input_number.besparing_accu_al_terugverdiend

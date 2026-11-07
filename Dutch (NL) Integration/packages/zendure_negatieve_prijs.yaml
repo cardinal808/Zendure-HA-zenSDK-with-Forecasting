@@ -11,7 +11,7 @@
 #   Marktprijs uit Dynamisch Marktprijs Sensor (Teruglevering) als die is ingevuld, anders uit de
 #   Nordpool-sensor van Gielz (die kan all-in zijn: energiebelasting en opslag horen niet bij teruglevering). Opslag en bonus teruglevering staan in dit pakket
 #   (zodat ze er ook zonder het besparingspakket zijn); op het dashboard in Forecasting Configuratie
-#   (Besparing), of in (Negatieve Prijs) als het besparingspakket ontbreekt.
+#   (Negatieve Prijs), onder Terugleverprijs.
 # binary_sensor.zendure_export_geblokkeerd_negatieve_prijs staat aan als de functie aanstaat
 # en de terugleverprijs negatief is.
 #

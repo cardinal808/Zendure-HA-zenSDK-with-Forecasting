@@ -10,8 +10,8 @@
 #   market price + bonus % (only when the market price is positive) + feed-in markup
 #   Market price from Dynamic Market Price Sensor (Feed-in) when filled in, otherwise from the
 #   Nordpool sensor of Gielz (which can be all-in: energy tax and markup do not apply to export). Feed-in markup and bonus live in this package (so they
-#   exist without the savings package too); on the dashboard in Forecasting Configuration (Savings),
-#   or in (Negative Price) when the savings package is missing.
+#   exist without the savings package too); on the dashboard in Forecasting Configuration
+#   (Negative Price), under Feed-in price.
 # binary_sensor.zendure_export_blocked_negative_price is on when the feature is enabled
 # and the feed-in price is negative.
 #

@@ -4072,9 +4072,10 @@ views:
               <ha-alert alert-type="info">Help text</ha-alert>When the feed-in
               price is negative, the installation does not export. Feed-in
               price = market price + bonus % (only when the market price is
-              positive) + feed-in markup, using the values from
-              **Forecasting Configuration (Savings)** (without the savings
-              package those two fields are below).
+              positive) + feed-in markup, using the fields under **Feed-in
+              price** below (also used by the savings). If your Nordpool sensor
+              is all-in, enter a sensor with the bare market price at **Market
+              price sensor**.
 
 
               **Zendure Pro:** when **Disable Zendure Pro PV export** is on, PV
@@ -4158,20 +4159,10 @@ views:
                 label: Feed-in price
               - entity: input_text.dynamic_setting_market_price_sensor
                 name: Market price sensor (empty = Nordpool sensor)
-              - type: conditional
-                conditions:
-                  - entity: input_number.savings_setting_fixed_supply_price
-                    state: unavailable
-                row:
-                  entity: input_number.savings_setting_dynamic_feedin_markup
-                  name: Dynamic feed-in markup
-              - type: conditional
-                conditions:
-                  - entity: input_number.savings_setting_fixed_supply_price
-                    state: unavailable
-                row:
-                  entity: input_number.savings_setting_dynamic_feedin_bonus
-                  name: Dynamic feed-in bonus % (of market price)
+              - entity: input_number.savings_setting_dynamic_feedin_markup
+                name: Feed-in markup (incl. VAT)
+              - entity: input_number.savings_setting_dynamic_feedin_bonus
+                name: Feed-in bonus % (of market price)
               - type: section
                 label: External inverter (optional)
               - entity: input_select.negative_price_inverter_count
@@ -4290,12 +4281,12 @@ views:
               **Fixed supply tariff** and **feed-in** come from your fixed or
               variable contract; with full net metering the feed-in price
               equals the supply price. For dynamic, the price from the Nordpool
-              sensor is used plus the **markup**: if your sensor is already
-              all-in, leave the supply markup at 0. Dynamic feed-in = market
-              price + **bonus %** of the market price (only when it is
-              positive) + **feed-in markup** per kWh. If the supplier deducts
-              something, make the markup negative. The button only restarts
-              the total.
+              sensor is used plus the **supply markup**: if your sensor is
+              already all-in, leave it at 0 (with the Nordpool package the field
+              is hidden, because that sensor is all-in). The feed-in price
+              (market price sensor, feed-in markup and bonus) is set in
+              Forecasting Configuration (Negative Price). The button only
+              restarts the total.
 
 
               **Battery purchase price**: what the battery (with inverter and
@@ -4320,14 +4311,13 @@ views:
                 name: Fixed supply tariff
               - entity: input_number.savings_setting_fixed_feedin_price
                 name: Fixed feed-in tariff
-              - entity: input_number.savings_setting_dynamic_supply_markup
-                name: Dynamic supply markup
-              - entity: input_text.dynamic_setting_market_price_sensor
-                name: Market price sensor for export (empty = Nordpool sensor)
-              - entity: input_number.savings_setting_dynamic_feedin_markup
-                name: Dynamic feed-in markup
-              - entity: input_number.savings_setting_dynamic_feedin_bonus
-                name: Dynamic feed-in bonus % (of market price)
+              - type: conditional
+                conditions:
+                  - entity: input_number.nordpool_setting_energy_tax
+                    state: unavailable
+                row:
+                  entity: input_number.savings_setting_dynamic_supply_markup
+                  name: Dynamic supply markup
               - entity: input_number.savings_setting_battery_purchase_price
                 name: Battery purchase price
               - entity: input_number.savings_setting_battery_already_earned
