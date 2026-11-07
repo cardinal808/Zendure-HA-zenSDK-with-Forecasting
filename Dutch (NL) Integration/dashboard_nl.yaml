@@ -2398,7 +2398,7 @@ views:
             grid_options:
               columns: full
           - type: markdown
-            title: Terugverdienen
+            title: Terugverdientijd
             text_only: false
             content: |
               {%- set s = 'sensor.zendure_accu_terugverdientijd' -%}

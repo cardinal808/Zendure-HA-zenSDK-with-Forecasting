@@ -2393,7 +2393,7 @@ views:
             grid_options:
               columns: full
           - type: markdown
-            title: Payback
+            title: Payback time
             text_only: false
             content: |
               {%- set s = 'sensor.zendure_battery_payback_time' -%}
