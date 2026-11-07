@@ -2090,7 +2090,7 @@ views:
           - type: markdown
             text_only: true
             content: >-
-              <ha-alert alert-type="info">Het pakket <b>zendure_besparing.yaml</b> is niet geladen.</ha-alert>Zet het bestand in je map <code>packages</code> en herstart Home Assistant om de besparing en de terugverdientijd van de accu te zien.
+              <ha-alert alert-type="info">Het pakket <b>zendure_besparing.yaml</b> is niet geladen.</ha-alert>Kopieer het bestand uit de map <code>optional packages</code> op GitHub naar je map <code>packages</code> en herstart Home Assistant om de besparing en de terugverdientijd van de accu te zien.
             grid_options:
               columns: full
       - type: grid
@@ -4662,7 +4662,7 @@ views:
               | {{ '✅' if expand(x[1]) | count > 0 else '➖' }} | **{{ x[0] }}**<br>`{{ x[2] }}` | {{ x[3] }} |
               {%- endfor %}
 
-              ✅ geladen · ➖ niet geïnstalleerd. Toevoegen: zet het bestand in de map packages en herstart Home Assistant. [Uitleg per pakket](https://github.com/cardinal808/Zendure-HA-zenSDK-with-Forecasting/blob/main/README.nl.md#pakketten)
+              ✅ geladen · ➖ niet geïnstalleerd. Toevoegen: kopieer het bestand uit de map optional packages op GitHub naar je map packages en herstart Home Assistant. [Uitleg per pakket](https://github.com/cardinal808/Zendure-HA-zenSDK-with-Forecasting/blob/main/README.nl.md#pakketten)
           - type: heading
             icon: ''
             heading: Versiebeheer

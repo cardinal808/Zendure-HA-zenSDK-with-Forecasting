@@ -5,13 +5,13 @@ Versies volgen `jaar.maand.volgnummer`; het volgnummer begint elke maand bij 1. 
 ## 2026.11.3 — gebaseerd op Gielz v20261007
 
 **Nieuw: elektrische auto** *(optioneel pakket)*
-- Nieuw pakket `packages/zendure_ev.yaml` en een blok **Configuratie (EV)** op de tab Configuratie. Voor een lader zonder eigen aansturing (grannylader, of een wallbox achter een slimme schakelaar) met een vermogensmeting, bv. een Shelly 1PM of Pro 1PM in de groep van de lader.
+- Nieuw pakket `optional packages/zendure_ev.yaml` en een blok **Configuratie (EV)** op de tab Configuratie. Voor een lader zonder eigen aansturing (grannylader, of een wallbox achter een slimme schakelaar) met een vermogensmeting, bv. een Shelly 1PM of Pro 1PM in de groep van de lader.
 - **Accu niet in de auto ontladen:** de NOM-ontlaadblokken trekken het laadvermogen van de auto (`sensor.ev_ontlaad_correctie`, boven een drempel van standaard 300 W) af van de P1-meter. De accu voedt dan alleen het huis; de auto laadt uit het net of de zon. Geldt altijd, ook zonder laadsessie.
 - **Planner:** het laden van de auto telt niet meer mee in het verbruiksprofiel (per uur en per kwartier), het gemiddelde dagverbruik en het zelfverbruik van de zon. Een laaddag trekt de verwachting voor de accu dus niet scheef.
 - **Laadsessie** (met een ingevulde schakelaar): kies het laadmoment en de benodigde kWh. *Nacht (goedkoopste uren)* zet de lader alleen aan in de goedkoopste prijsslots tot *Klaar om* (prijzen van morgen nog onbekend: patroon van vandaag, rond 14:00 opnieuw gepland). *Overdag (zon)* laadt zolang de zon op is; de planner haalt die kWh van het zon-overschot voor de accu af en laadt het tekort op het goedkoopste moment uit het net. Klaar of tijd voorbij: laadmoment terug naar Uit en de lader weer aan.
 
 **HVAC nu in de publieke set** *(optioneel pakket)*
-- `packages/zendure_hvac.yaml` (en `zendure_hvac_global.yaml`) staat nu ook in de publieke set: niet ontladen terwijl de airco draait. Er is geen aparte complete set meer.
+- `optional packages/zendure_hvac.yaml` (en `zendure_hvac_global.yaml`) staat nu ook in de publieke set: niet ontladen terwijl de airco draait. Er is geen aparte complete set meer.
 - De automation controleert de airco met een template, zodat alles ook zonder het HVAC-pakket blijft werken.
 - De schakelaar *HVAC Instellingen Tonen* is vervallen (zie hieronder).
 - **Instellen per modus in plaats van per uur:** de tijden *Alleen laden vanaf/tot* zijn vervallen. Nieuw `sensor.hvac_modus` (Uit, Stand-by, Verwarmen, Koelen, Drogen, Ventileren, Auto) uit de modus en `hvac_action` van de climate-entiteit. Per modus zet je aan of ontladen toch mag, bv. Koelen aan (zomer, zon genoeg) en Verwarmen uit (winter, geen zon). Standaard is elke modus geblokkeerd.
@@ -33,7 +33,7 @@ Versies volgen `jaar.maand.volgnummer`; het volgnummer begint elke maand bij 1. 
   - *Plan vandaag* legt uit wat hij doet; nieuwe attributen `vooraf_ontladen`, `vooraf_ontladen_nu`, `vooraf_venster_start`/`_eind`, `vooraf_zon_overschot_kwh`, `vooraf_doel_kwh`, `vooraf_verwacht_kwh`, `vooraf_grensprijs`, `vooraf_zonkrediet_pct` en `vooraf_netladen_vervallen`.
 
 **Nieuw: diagnose-export** *(optioneel pakket)*
-- Nieuw pakket `packages/zendure_export.yaml` en een blok **Diagnose-export** op de tab Configuratie. Met *Export downloaden* sla je één JSON-bestand rechtstreeks op je eigen apparaat op, met versies, actieve pakketten, alle instellingen, de stand van alle sensoren, de details van de planner, de verzamelde gegevens (alle tellers en 7-dagen-statistieken met hun attributen), de ingevulde externe sensoren en de status van de Zendure-automatiseringen. In Home Assistant wordt niets opgeslagen: `script.zendure_diagnose_export` geeft de export als antwoord terug en de browser maakt er een bestand van.
+- Nieuw pakket `optional packages/zendure_export.yaml` en een blok **Diagnose-export** op de tab Configuratie. Met *Export downloaden* sla je één JSON-bestand rechtstreeks op je eigen apparaat op, met versies, actieve pakketten, alle instellingen, de stand van alle sensoren, de details van de planner, de verzamelde gegevens (alle tellers en 7-dagen-statistieken met hun attributen), de ingevulde externe sensoren en de status van de Zendure-automatiseringen. In Home Assistant wordt niets opgeslagen: `script.zendure_diagnose_export` geeft de export als antwoord terug en de browser maakt er een bestand van.
 - Voor de knop is [button-card](https://github.com/custom-cards/button-card) (HACS) nodig; alleen dit blok gebruikt hem. Zonder button-card, of als downloaden in de app niet lukt: Ontwikkelhulpmiddelen → Acties → *Zendure Diagnose Exporteren* → Actie uitvoeren, en kopieer het antwoord.
 - Het pakket verzamelt ook drie logs: elke regel die de automation in het logboek zet (laatste 50), elk kwartier een momentopname van modus, SOC, P1, vermogen, prijs en plan (laatste 24 uur) en waarschuwingen en fouten uit het HA-log die over deze set gaan (laatste 20). Daarvoor zet het pakket `system_log: fire_event: true` aan.
 - IP-adressen en serienummers worden weggelaten. De automation hoeft niet aangepast te worden.
@@ -75,6 +75,7 @@ Versies volgen `jaar.maand.volgnummer`; het volgnummer begint elke maand bij 1. 
 **Duidelijker wat optioneel is**
 - Vereist zijn `zendure_gielz1986_nl.yaml`, `zendure_forecasting.yaml` en `zendure_negatieve_prijs.yaml`. Optioneel zijn `zendure_besparing.yaml`, `zendure_ev.yaml`, `zendure_hvac.yaml` en `zendure_export.yaml`.
 - De README heeft een tabel **Pakketten**: per bestand vereist of optioneel, wat het doet, wat het nodig heeft en wat je mist zonder.
+- **Optionele pakketten in een eigen map:** `zendure_besparing.yaml`, `zendure_ev.yaml`, `zendure_hvac.yaml` en `zendure_export.yaml` staan nu in `Dutch (NL) Integration/optional packages` (Global: `Global (EN) Integration/optional packages`), niet meer in `packages`. Wie de map `packages` kopieert, krijgt alleen de basis; optionele pakketten zet je er bewust bij.
 - Elk pakket heeft bovenaan, onder de versiekop, de regel `# OPTIONEEL PAKKET` (met wat het nodig heeft) of `# VEREIST PAKKET`.
 
 **Opgelost**
@@ -90,10 +91,11 @@ Versies volgen `jaar.maand.volgnummer`; het volgnummer begint elke maand bij 1. 
 
 **Upgraden**
 - Vervang alle bestanden en **herstart** Home Assistant.
+- **Let op, optionele pakketten verhuisd:** ze staan nu in de map `optional packages`. Kopieer je alleen de nieuwe map `packages`, dan blijven je oude `zendure_besparing.yaml`, `zendure_ev.yaml`, `zendure_hvac.yaml` en `zendure_export.yaml` in je eigen packages-map staan. Vervang die door de versies uit `optional packages`, of haal ze weg als je ze niet gebruikt. Een oude `zendure_besparing.yaml` naast de nieuwe `zendure_negatieve_prijs.yaml` geeft een configuratiefout (zie hieronder).
 - Vervang `zendure_besparing.yaml` en `zendure_negatieve_prijs.yaml` altijd samen: staan beide versies door elkaar, dan zijn opslag en bonus teruglevering dubbel gedefinieerd en start Home Assistant de configuratie niet.
 - Staat `zendure_negatieve_prijs.yaml` nog niet in je map `packages`, zet hem er dan bij: hij hoort nu bij de basis. De functie staat pas aan als je *Niet terugleveren bij negatieve prijs* aanzet.
 - `zendure_besparing.yaml` is optioneel: wil je de tab Besparing niet, dan mag je hem weghalen. Opslag en bonus teruglevering staan sinds deze versie in `zendure_negatieve_prijs.yaml` en blijven dus gewoon werken; zonder besparingspakket vul je ze in bij Forecasting Configuratie (Negatieve Prijs).
-- Optioneel: zet `zendure_ev.yaml`, `zendure_hvac.yaml` en/of `zendure_export.yaml` (NL) of `zendure_ev_global.yaml`, `zendure_hvac_global.yaml` en/of `zendure_export_global.yaml` (Global) in de map `packages`. Heb je zelf al `system_log:` in `configuration.yaml`, haal dan het blok `system_log` uit het exportpakket en zet daar `fire_event: true`. Gebruikte je de complete set: `input_boolean.hvac_tonen_op_dashboard` bestaat niet meer en kan weg.
+- Optioneel: kopieer `zendure_ev.yaml`, `zendure_hvac.yaml` en/of `zendure_export.yaml` (NL) of `zendure_ev_global.yaml`, `zendure_hvac_global.yaml` en/of `zendure_export_global.yaml` (Global) uit de map `optional packages` naar je map `packages`. Heb je zelf al `system_log:` in `configuration.yaml`, haal dan het blok `system_log` uit het exportpakket en zet daar `fire_event: true`. Gebruikte je de complete set: `input_boolean.hvac_tonen_op_dashboard` bestaat niet meer en kan weg.
 - Gebruik je *Niet terugleveren bij negatieve prijs*: **Zendure Pro PV-export uitschakelen** gaat na de herstart vanzelf één keer aan. Zet hem uit als je Zendure geen zonnepanelen heeft.
 - Optioneel: zet in Forecasting Configuratie (Negatieve Prijs) **Vooraf ontladen** aan (staat standaard uit).
 - HVAC: na de update geldt de aanpak *Niet ontladen* (zoals voorheen). Wil je dat de accu het huis blijft voeden terwijl de airco draait, vul dan een **Vermogen sensor** in en kies *Airco niet uit accu*.

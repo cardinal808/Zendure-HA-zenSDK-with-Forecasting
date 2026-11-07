@@ -39,7 +39,7 @@ The battery charges at the cheapest moments, but **only as much as is actually n
 
 ### Packages
 
-The set consists of a base you always need and four optional packages. You add an optional package by putting its file in your `packages` folder and restarting Home Assistant; removing it and restarting turns the feature off again. The automation and the dashboard work with and without the optional packages.
+The set consists of a base you always need and four optional packages. The base is in the `packages` folder, the optional packages are in the `optional packages` folder. If you only copy the `packages` folder, you get exactly the base. You add an optional package by putting its file from `optional packages` in your own `packages` folder and restarting Home Assistant; removing it and restarting turns the feature off again. The automation and the dashboard work with and without the optional packages.
 
 | Package | File (Global / NL) | | What it does | Needs | Without this package |
 |---|---|---|---|---|---|
@@ -58,11 +58,11 @@ Every optional file has the line `# OPTIONAL PACKAGE` right below the version he
 | File (NL / Global) | Change |
 |---|---|
 | `packages/zendure_forecasting.yaml` / `packages/zendure_forecasting_global.yaml` | **New.** Helpers, counters, 7-day statistics, the planner and derived sensors. |
-| `packages/zendure_besparing.yaml` / `packages/zendure_savings_global.yaml` | **New, optional.** Input fields for tariffs and battery price, and the savings and payback sensors. |
+| `optional packages/zendure_besparing.yaml` / `optional packages/zendure_savings_global.yaml` | **New, optional.** Input fields for tariffs and battery price, and the savings and payback sensors. |
 | `packages/zendure_negatieve_prijs.yaml` / `packages/zendure_negative_price_global.yaml` | **New.** Feed-in price, no export at a negative price, limiting external inverters. Uses the feed-in markup and bonus from the savings package when that is loaded. |
-| `packages/zendure_ev.yaml` / `packages/zendure_ev_global.yaml` | **New, optional.** The car's charging power and discharge correction, kWh counters, charge plan (night/daytime) and charger control. |
-| `packages/zendure_hvac.yaml` / `packages/zendure_hvac_global.yaml` | **New, optional.** AC helpers, `binary_sensor.hvac_ontladen_geblokkeerd` / `binary_sensor.hvac_discharge_blocked`, `sensor.hvac_ontlaad_correctie` / `sensor.hvac_discharge_correction` and the separate AC counters. |
-| `packages/zendure_export.yaml` / `packages/zendure_export_global.yaml` | **New, optional.** Decision log, snapshots, error log and the export script. Turns on `system_log: fire_event: true`. |
+| `optional packages/zendure_ev.yaml` / `optional packages/zendure_ev_global.yaml` | **New, optional.** The car's charging power and discharge correction, kWh counters, charge plan (night/daytime) and charger control. |
+| `optional packages/zendure_hvac.yaml` / `optional packages/zendure_hvac_global.yaml` | **New, optional.** AC helpers, `binary_sensor.hvac_ontladen_geblokkeerd` / `binary_sensor.hvac_discharge_blocked`, `sensor.hvac_ontlaad_correctie` / `sensor.hvac_discharge_correction` and the separate AC counters. |
+| `optional packages/zendure_export.yaml` / `optional packages/zendure_export_global.yaml` | **New, optional.** Decision log, snapshots, error log and the export script. Turns on `system_log: fire_event: true`. |
 | `packages/zendure_gielz1986_nl.yaml` / `packages/zendure_gielz1986_global.yaml` | Only one extra option in the mode selector. |
 | `automation_nl.yaml` / `automation_global.yaml` | The new mode in the mode selection and in the 6 existing Smart Matching lists (zero-on-the-meter, SOC protection, emergency stop), its own charging block that only charges when the plan says *Charge*, a discharge hold for the cheap dip and for the AC, and in the Smart Matching discharge blocks the car's charging power and (optionally) the AC power subtracted from the grid meter. Without the optional packages everything works as before. Existing modes are otherwise unchanged. |
 | `dashboard_nl.yaml` / `dashboard_global.yaml` | New Forecasting section, new Savings tab, new Forecasting Configuration (Basic) and (Negative Price) blocks, the optional Forecasting Configuration (Savings), (EV), (HVAC) and Diagnostics export blocks (only visible when the package is loaded), the Optional packages card and a switch in Configuration (Dashboard). |
@@ -74,7 +74,7 @@ Each changed file starts with a two-line header with the version, the Gielz vers
 First install the original integration as described below (packages file, automation, dashboard). Then:
 
 1. Put the **required** files `zendure_forecasting_global.yaml` and `zendure_negative_price_global.yaml` (Global) or `zendure_forecasting.yaml` and `zendure_negatieve_prijs.yaml` (NL) in the same `packages` folder as the Gielz package, and replace the Gielz package with the version from this fork.
-   Then choose which **optional** packages you want (see [Packages](#packages)): `zendure_savings_global.yaml`, `zendure_ev_global.yaml`, `zendure_hvac_global.yaml`, `zendure_export_global.yaml` (Global) or `zendure_besparing.yaml`, `zendure_ev.yaml`, `zendure_hvac.yaml`, `zendure_export.yaml` (NL). Only copy the files you want; whatever is in `packages` gets loaded.
+   Then choose which **optional** packages you want (see [Packages](#packages)) and copy them from the `optional packages` folder into the same `packages` folder: `zendure_savings_global.yaml`, `zendure_ev_global.yaml`, `zendure_hvac_global.yaml`, `zendure_export_global.yaml` (Global) or `zendure_besparing.yaml`, `zendure_ev.yaml`, `zendure_hvac.yaml`, `zendure_export.yaml` (NL). Only copy the files you want; whatever is in `packages` gets loaded.
 2. Replace the automation and the dashboard with the versions from this fork (or merge the changes into your own version).
 3. Restart Home Assistant.
 4. On the Configuration tab, under **Forecasting Configuration (Basic)**, enter: the sensor for solar remaining today, solar tomorrow (kWh, e.g. Forecast.Solar or Solcast) and a total counter of your solar panels (kWh). Optionally set the charge margin. With the savings package, enter your tariffs and the purchase price of the battery under **Forecasting Configuration (Savings)**.

@@ -38,7 +38,7 @@ De accu laadt op de goedkoopste momenten, maar **alleen zoveel als nodig is**, r
 
 ### Pakketten
 
-De set bestaat uit een basis die je altijd nodig hebt en vier optionele pakketten. Een optioneel pakket zet je erbij door het bestand in je map `packages` te zetten en Home Assistant te herstarten; weghalen en herstarten zet de functie weer uit. De automation en het dashboard werken met en zonder de optionele pakketten.
+De set bestaat uit een basis die je altijd nodig hebt en vier optionele pakketten. De basis staat in de map `packages`, de optionele pakketten in de map `optional packages`. Kopieer je alleen de map `packages`, dan heb je dus precies de basis. Een optioneel pakket zet je erbij door het bestand uit `optional packages` in je eigen map `packages` te zetten en Home Assistant te herstarten; weghalen en herstarten zet de functie weer uit. De automation en het dashboard werken met en zonder de optionele pakketten.
 
 | Pakket | Bestand (NL / Global) | | Wat het doet | Nodig | Zonder dit pakket |
 |---|---|---|---|---|---|
@@ -57,11 +57,11 @@ Elk optioneel bestand heeft direct onder de versiekop de regel `# OPTIONEEL PAKK
 | Bestand (NL / Global) | Wijziging |
 |---|---|
 | `packages/zendure_forecasting.yaml` / `packages/zendure_forecasting_global.yaml` | **Nieuw.** Helpers, tellers, 7-daagse statistieken, de planner en afgeleide sensoren. |
-| `packages/zendure_besparing.yaml` / `packages/zendure_savings_global.yaml` | **Nieuw, optioneel.** Invoervelden voor tarieven en accuprijs, en de besparings- en terugverdientijdsensoren. |
+| `optional packages/zendure_besparing.yaml` / `optional packages/zendure_savings_global.yaml` | **Nieuw, optioneel.** Invoervelden voor tarieven en accuprijs, en de besparings- en terugverdientijdsensoren. |
 | `packages/zendure_negatieve_prijs.yaml` / `packages/zendure_negative_price_global.yaml` | **Nieuw.** Terugleverprijs, niet terugleveren bij een negatieve prijs, begrenzing van externe omvormers. Gebruikt de opslag en bonus teruglevering uit het besparingspakket als dat geladen is. |
-| `packages/zendure_ev.yaml` / `packages/zendure_ev_global.yaml` | **Nieuw, optioneel.** Laadvermogen en ontlaadcorrectie van de auto, kWh-tellers, laadplan (nacht/overdag) en de aansturing van de lader. |
-| `packages/zendure_hvac.yaml` / `packages/zendure_hvac_global.yaml` | **Nieuw, optioneel.** Airco-helpers, `binary_sensor.hvac_ontladen_geblokkeerd` / `binary_sensor.hvac_discharge_blocked`, `sensor.hvac_ontlaad_correctie` / `sensor.hvac_discharge_correction` en de aparte airco-tellers. |
-| `packages/zendure_export.yaml` / `packages/zendure_export_global.yaml` | **Nieuw, optioneel.** Beslissingslog, momentopnames, foutlog en het exportscript. Zet `system_log: fire_event: true` aan. |
+| `optional packages/zendure_ev.yaml` / `optional packages/zendure_ev_global.yaml` | **Nieuw, optioneel.** Laadvermogen en ontlaadcorrectie van de auto, kWh-tellers, laadplan (nacht/overdag) en de aansturing van de lader. |
+| `optional packages/zendure_hvac.yaml` / `optional packages/zendure_hvac_global.yaml` | **Nieuw, optioneel.** Airco-helpers, `binary_sensor.hvac_ontladen_geblokkeerd` / `binary_sensor.hvac_discharge_blocked`, `sensor.hvac_ontlaad_correctie` / `sensor.hvac_discharge_correction` en de aparte airco-tellers. |
+| `optional packages/zendure_export.yaml` / `optional packages/zendure_export_global.yaml` | **Nieuw, optioneel.** Beslissingslog, momentopnames, foutlog en het exportscript. Zet `system_log: fire_event: true` aan. |
 | `packages/zendure_gielz1986_nl.yaml` / `packages/zendure_gielz1986_global.yaml` | Alleen één extra optie in de modus-keuzelijst. |
 | `automation_nl.yaml` / `automation_global.yaml` | De nieuwe modus in de modus-keuze en in de 6 bestaande NOM-lijsten (nul-op-de-meter, SOC-bescherming, noodstop), een eigen laadblok dat alleen laadt als het plan *Laden* zegt, een ontlaad-blokkade voor het goedkope dal en voor de airco, en in de NOM-ontlaadblokken het laadvermogen van de auto en (optioneel) de airco van de P1-meter af. Zonder de optionele pakketten werkt alles zoals voorheen. Bestaande modi zijn verder niet gewijzigd. |
 | `dashboard_nl.yaml` / `dashboard_global.yaml` | Nieuwe sectie Forecasting, nieuwe tab Besparing, nieuwe blokken Forecasting Configuratie (Basis) en (Negatieve Prijs), de optionele blokken Forecasting Configuratie (Besparing), (EV), (HVAC) en Diagnose-export (alleen zichtbaar als het pakket geladen is), de kaart Optionele pakketten en een schakelaar in Configuratie (Dashboard). |
@@ -73,7 +73,7 @@ Elk gewijzigd bestand begint met een kop van twee regels met de versie, de Gielz
 Installeer eerst de oorspronkelijke integratie zoals hieronder beschreven (packages-bestand, automation, dashboard). Daarna:
 
 1. Zet de **vereiste** bestanden `zendure_forecasting.yaml` en `zendure_negatieve_prijs.yaml` (NL) of `zendure_forecasting_global.yaml` en `zendure_negative_price_global.yaml` (Global) in dezelfde `packages`-map als het Gielz-pakket, en vervang het Gielz-pakket door de versie uit deze fork.
-   Kies daarna welke **optionele** pakketten je wilt (zie [Pakketten](#pakketten)): `zendure_besparing.yaml`, `zendure_ev.yaml`, `zendure_hvac.yaml`, `zendure_export.yaml` (NL) of `zendure_savings_global.yaml`, `zendure_ev_global.yaml`, `zendure_hvac_global.yaml`, `zendure_export_global.yaml` (Global). Kopieer alleen de bestanden die je wilt; wat in `packages` staat, wordt geladen.
+   Kies daarna welke **optionele** pakketten je wilt (zie [Pakketten](#pakketten)) en kopieer die uit de map `optional packages` naar dezelfde `packages`-map: `zendure_besparing.yaml`, `zendure_ev.yaml`, `zendure_hvac.yaml`, `zendure_export.yaml` (NL) of `zendure_savings_global.yaml`, `zendure_ev_global.yaml`, `zendure_hvac_global.yaml`, `zendure_export_global.yaml` (Global). Kopieer alleen de bestanden die je wilt; wat in `packages` staat, wordt geladen.
 2. Vervang de automation en het dashboard door de versies uit deze fork (of voeg de wijzigingen samen met je eigen versie).
 3. Herstart Home Assistant.
 4. Vul in tab Configuratie bij **Forecasting Configuratie (Basis)** in: de sensor voor zon resterend vandaag, zon morgen (kWh, bijv. Forecast.Solar of Solcast) en een totaalteller van je zonnepanelen (kWh). Zet eventueel de laadmarge. Met het besparingspakket vul je bij **Forecasting Configuratie (Besparing)** je tarieven en de aanschafprijs van de accu in.

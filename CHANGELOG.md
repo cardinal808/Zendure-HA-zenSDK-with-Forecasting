@@ -5,13 +5,13 @@ Versions follow `year.month.sequence`; the sequence restarts at 1 every month. E
 ## 2026.11.3 — based on Gielz v20261007
 
 **New: electric car** *(optional package)*
-- New package `packages/zendure_ev_global.yaml` and a **Configuration (EV)** block on the Settings tab. For a charger without its own control (granny charger, or a wallbox behind a smart switch) with a power measurement, e.g. a Shelly 1PM or Pro 1PM in the charger's circuit.
+- New package `optional packages/zendure_ev_global.yaml` and a **Configuration (EV)** block on the Settings tab. For a charger without its own control (granny charger, or a wallbox behind a smart switch) with a power measurement, e.g. a Shelly 1PM or Pro 1PM in the charger's circuit.
 - **No battery discharge into the car:** the Smart Matching discharge blocks subtract the car's charging power (`sensor.ev_discharge_correction`, above a threshold of 300 W by default) from the grid meter. The battery then only supplies the house; the car charges from the grid or the sun. Always applies, also without a charging session.
 - **Planner:** the car's charging no longer counts in the usage profile (per hour and per quarter), the average daily usage and the solar self-consumption. A charging day does not skew the battery forecast.
 - **Charging session** (with a configured switch): choose the charge moment and the required kWh. *Night (cheapest hours)* only turns the charger on in the cheapest price slots until *Ready by* (tomorrow's prices unknown: today's pattern, replanned around 14:00). *Daytime (solar)* charges while the sun is up; the planner subtracts those kWh from the solar surplus for the battery and charges the shortfall from the grid at the cheapest moment. Done or time passed: charge moment back to Off and the charger on again.
 
 **HVAC now in the public set** *(optional package)*
-- `packages/zendure_hvac_global.yaml` (and `zendure_hvac.yaml`) is now part of the public set: no discharging while the AC runs. There is no separate complete set any more.
+- `optional packages/zendure_hvac_global.yaml` (and `zendure_hvac.yaml`) is now part of the public set: no discharging while the AC runs. There is no separate complete set any more.
 - The automation checks the AC with a template, so everything keeps working without the HVAC package.
 - **Settings per mode instead of per hour:** the *Charge only from/until* times are gone. New `sensor.hvac_mode` (Off, Standby, Heating, Cooling, Drying, Fan, Auto) from the climate entity's mode and `hvac_action`. Per mode you choose whether discharging is still allowed, e.g. Cooling on (summer, plenty of sun) and Heating off (winter, no sun). By default every mode is blocked.
 - **Standby does not count:** when the AC has reached its temperature (`hvac_action` idle), the battery discharges as usual.
@@ -32,7 +32,7 @@ Versions follow `year.month.sequence`; the sequence restarts at 1 every month. E
   - *Plan for today* explains what it does; new attributes `pre_discharge`, `pre_discharge_now`, `pre_discharge_window_start`/`_end`, `pre_discharge_solar_surplus_kwh`, `pre_discharge_target_kwh`, `pre_discharge_expected_kwh`, `pre_discharge_price_limit`, `pre_discharge_solar_credit_pct` and `pre_discharge_grid_dropped`.
 
 **New: diagnostics export** *(optional package)*
-- New package `packages/zendure_export_global.yaml` and a **Diagnostics export** block on the Settings tab. *Download export* saves one JSON file directly on your own device, with versions, active packages, all settings, the state of all sensors, the planner details, the collected data (all counters and 7-day statistics with their attributes), the external sensors you entered and the state of the Zendure automations. Nothing is stored in Home Assistant: `script.zendure_diagnostics_export` returns the export as its response and the browser turns it into a file.
+- New package `optional packages/zendure_export_global.yaml` and a **Diagnostics export** block on the Settings tab. *Download export* saves one JSON file directly on your own device, with versions, active packages, all settings, the state of all sensors, the planner details, the collected data (all counters and 7-day statistics with their attributes), the external sensors you entered and the state of the Zendure automations. Nothing is stored in Home Assistant: `script.zendure_diagnostics_export` returns the export as its response and the browser turns it into a file.
 - The button needs [button-card](https://github.com/custom-cards/button-card) (HACS); only this block uses it. Without button-card, or if downloading does not work in the app: Developer tools → Actions → *Zendure Diagnostics Export* → Perform action, and copy the response.
 - The package also collects three logs: every line the automation writes to the logbook (last 50), a snapshot of mode, SOC, grid meter, power, price and plan every quarter hour (last 24 hours) and warnings and errors from the HA log that concern this set (last 20). For this the package turns on `system_log: fire_event: true`.
 - IP addresses and serial numbers are left out. The automation does not need any changes.
@@ -74,6 +74,7 @@ Versions follow `year.month.sequence`; the sequence restarts at 1 every month. E
 **Clearer what is optional**
 - Required are `zendure_gielz1986_global.yaml`, `zendure_forecasting_global.yaml` and `zendure_negative_price_global.yaml`. Optional are `zendure_savings_global.yaml`, `zendure_ev_global.yaml`, `zendure_hvac_global.yaml` and `zendure_export_global.yaml`.
 - The README has a **Packages** table: per file required or optional, what it does, what it needs and what you miss without it.
+- **Optional packages in their own folder:** `zendure_savings_global.yaml`, `zendure_ev_global.yaml`, `zendure_hvac_global.yaml` and `zendure_export_global.yaml` are now in `Global (EN) Integration/optional packages` (NL: `Dutch (NL) Integration/optional packages`), no longer in `packages`. Copying the `packages` folder gives you only the base; you add optional packages deliberately.
 - Every package has, right below the version header, the line `# OPTIONAL PACKAGE` (with what it needs) or `# REQUIRED PACKAGE`.
 
 **Fixed**
@@ -89,10 +90,11 @@ Versions follow `year.month.sequence`; the sequence restarts at 1 every month. E
 
 **Upgrading**
 - Replace all files and **restart** Home Assistant.
+- **Note, optional packages moved:** they are now in the `optional packages` folder. If you only copy the new `packages` folder, your old `zendure_savings_global.yaml`, `zendure_ev_global.yaml`, `zendure_hvac_global.yaml` and `zendure_export_global.yaml` stay in your own packages folder. Replace them with the versions from `optional packages`, or remove the ones you do not use. An old `zendure_savings_global.yaml` next to the new `zendure_negative_price_global.yaml` causes a configuration error (see below).
 - Always replace `zendure_savings_global.yaml` and `zendure_negative_price_global.yaml` together: if old and new versions are mixed, feed-in markup and bonus are defined twice and Home Assistant rejects the configuration.
 - If `zendure_negative_price_global.yaml` is not yet in your `packages` folder, add it: it is now part of the base. The feature only acts once you turn on *No export at negative price*.
 - `zendure_savings_global.yaml` is optional: if you do not want the Savings tab you can remove it. Feed-in markup and bonus are now in `zendure_negative_price_global.yaml` and keep working; without the savings package you enter them in Forecasting Configuration (Negative Price).
-- Optional: put `zendure_ev_global.yaml`, `zendure_hvac_global.yaml` and/or `zendure_export_global.yaml` (Global) or `zendure_ev.yaml`, `zendure_hvac.yaml` and/or `zendure_export.yaml` (NL) in the `packages` folder. If you already have `system_log:` in `configuration.yaml`, remove the `system_log` block from the export package and set `fire_event: true` there.
+- Optional: copy `zendure_ev_global.yaml`, `zendure_hvac_global.yaml` and/or `zendure_export_global.yaml` (Global) or `zendure_ev.yaml`, `zendure_hvac.yaml` and/or `zendure_export.yaml` (NL) from the `optional packages` folder to your `packages` folder. If you already have `system_log:` in `configuration.yaml`, remove the `system_log` block from the export package and set `fire_event: true` there.
 - If you use *No export at negative price*: **Disable Zendure Pro PV export** turns on by itself once after the restart. Turn it off if your Zendure has no solar panels.
 - Optional: turn on **Pre-discharge** in Forecasting Configuration (Negative Price) (off by default).
 - HVAC: after the update the approach *No discharging* applies (as before). If you want the battery to keep supplying the house while the AC runs, enter a **Power sensor** and choose *AC not from battery*.
