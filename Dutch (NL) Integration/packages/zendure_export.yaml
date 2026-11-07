@@ -173,6 +173,10 @@ script:
                  'sensor.zendure_2400_ac_indicatie_beschikbare_energie', 'sensor.zendure_terugleverprijs_nu',
                  'sensor.zendure_besparing', 'sensor.ev_laadplan', 'sensor.hvac_modus',
                  'binary_sensor.hvac_ontladen_geblokkeerd', 'binary_sensor.zendure_export_geblokkeerd_negatieve_prijs'] -%}
+            {#- Verzamelde gegevens: alle tellers en 7-dagen-statistieken met hun attributen
+                (age_coverage_ratio, bron, laatste_sprong, ...) -#}
+            {%- set detail = detail + (states.sensor | selectattr('object_id', 'match', '^(forecast_teller_|forecast_gemeten_|forecast_.*_7_dagen$|hvac_teller_|hvac_.*_7_dagen$|ev_teller_|ev_.*_7_dagen$)')
+                 | map(attribute='entity_id') | sort | list) -%}
             {#- (een attribuut van meer dan 20.000 tekens wordt vervangen door alleen de grootte) -#}
             {%- for s in expand(detail) -%}
               {%- set na = namespace(a=[]) -%}

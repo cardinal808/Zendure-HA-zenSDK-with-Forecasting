@@ -174,6 +174,10 @@ script:
                  'sensor.zendure_indication_available_energy', 'sensor.zendure_feedin_price_now',
                  'sensor.zendure_savings', 'sensor.ev_charge_plan', 'sensor.hvac_mode',
                  'binary_sensor.hvac_discharge_blocked', 'binary_sensor.zendure_export_blocked_negative_price'] -%}
+            {#- Collected data: all counters and 7-day statistics with their attributes
+                (age_coverage_ratio, source, last_jump, ...) -#}
+            {%- set detail = detail + (states.sensor | selectattr('object_id', 'match', '^(forecast_counter_|forecast_measured_|forecast_.*_7_days$|hvac_counter_|hvac_.*_7_days$|ev_counter_|ev_.*_7_days$)')
+                 | map(attribute='entity_id') | sort | list) -%}
             {#- (an attribute of more than 20,000 characters is replaced by its size only) -#}
             {%- for s in expand(detail) -%}
               {%- set na = namespace(a=[]) -%}
