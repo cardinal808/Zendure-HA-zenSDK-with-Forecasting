@@ -84,6 +84,34 @@ template:
         {%- else -%}
           {{ oud }}
         {%- endif -%}
+      # Foutlog: dezelfde melding (zelfde logger, alleen de getallen anders) wordt samengevoegd tot
+      # één regel met van, tot en aantal, en schuift naar onderen. Zo verdringt een melding die
+      # steeds terugkomt (bv. de recorder-waarschuwing over grote attributen) de rest niet.
+      f_regels: >-
+        {%- set oud = state_attr('sensor.zendure_diagnose_fouten', 'regels') or [] -%}
+        {%- set oud = oud if (state_attr('sensor.zendure_diagnose_fouten', 'kolommen') or []) | length == 7 else [] -%}
+        {%- if trigger.id == 'fout' -%}
+          {%- set d = trigger.event.data -%}
+          {%- set nu = now().strftime('%Y-%m-%d %H:%M:%S') -%}
+          {%- set tekst = ((d.message if d.message is list else [d.message | default('')]) | join(' | ')
+               | regex_replace('\\s+', ' '))[:400] -%}
+          {%- set bron = ((d.source | default([]) | join(':')) if d.source is defined and d.source is not string
+               else (d.source | default('') | string))[:150] -%}
+          {%- set logger = d.name | default('') -%}
+          {%- set sleutel = logger ~ '|' ~ (tekst | regex_replace('[-+]?[0-9]+([.,][0-9]+)?', '#')) -%}
+          {%- set ns = namespace(rest=[], gevonden=none) -%}
+          {%- for r in oud -%}
+            {%- if (r[4] ~ '|' ~ (r[5] | regex_replace('[-+]?[0-9]+([.,][0-9]+)?', '#'))) == sleutel -%}
+              {%- set ns.gevonden = r -%}
+            {%- else -%}
+              {%- set ns.rest = ns.rest + [r] -%}
+            {%- endif -%}
+          {%- endfor -%}
+          {%- set g = ns.gevonden -%}
+          {{ (ns.rest + [[g[0] if g else nu, nu, (g[2] + 1) if g else 1, d.level | default(''), logger, tekst, bron]])[-20:] }}
+        {%- else -%}
+          {{ oud }}
+        {%- endif -%}
     sensor:
       - name: "Zendure Diagnose Beslissingen"
         unique_id: zendure_diagnose_beslissingen
@@ -125,20 +153,10 @@ template:
         unique_id: zendure_diagnose_fouten
         icon: mdi:alert-circle-outline
         state: >-
-          {{ [((this.attributes.get('regels') or []) | length) + (1 if trigger.id == 'fout' else 0), 20] | min }}
+          {{ f_regels | length }}
         attributes:
-          kolommen: "{{ ['tijd', 'niveau', 'logger', 'melding', 'bron'] }}"
-          regels: >-
-            {%- set oud = this.attributes.get('regels') or [] -%}
-            {%- if trigger.id == 'fout' -%}
-              {%- set d = trigger.event.data -%}
-              {%- set tekst = (d.message if d.message is list else [d.message | default('')]) | join(' | ') -%}
-              {%- set bron = (d.source | default([]) | join(':')) if d.source is defined and d.source is not string else (d.source | default('') | string) -%}
-              {{ (oud + [[now().strftime('%Y-%m-%d %H:%M:%S'), d.level | default(''), d.name | default(''),
-                         (tekst | regex_replace('\\s+', ' '))[:400], bron[:150]]])[-20:] }}
-            {%- else -%}
-              {{ oud }}
-            {%- endif -%}
+          kolommen: "{{ ['van', 'tot', 'aantal', 'niveau', 'logger', 'melding', 'bron'] }}"
+          regels: "{{ f_regels }}"
 
 script:
   zendure_diagnose_export:

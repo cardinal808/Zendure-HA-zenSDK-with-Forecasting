@@ -247,6 +247,35 @@ sensor:
     precision: 2
 
 template:
+  # Grid charging power as the battery really achieves it (> 300 W). Outside grid charging the
+  # sensor keeps its last measurement (also after a restart), so the statistic Measured Charge
+  # Power stays available and only counts real charging sessions. Was: unavailable outside grid
+  # charging, so the planner almost always used the configured power.
+  - trigger:
+      - trigger: state
+        entity_id:
+          - sensor.zendure_power
+          - sensor.home_energy_meter_power
+    sensor:
+      - name: "Forecast Grid Charge Power"
+        unique_id: forecast_grid_charge_power
+        unit_of_measurement: "W"
+        device_class: power
+        state_class: measurement
+        availability: >
+          {% set laden = [states('sensor.zendure_power') | float(0), 0] | max %}
+          {% set import_w = [states('sensor.home_energy_meter_power') | float(0), 0] | max %}
+          {{ (has_value('sensor.home_energy_meter_power') and has_value('sensor.zendure_power') and ([import_w, laden] | min) > 300)
+             or this.state | is_number }}
+        state: >
+          {% set laden = [states('sensor.zendure_power') | float(0), 0] | max %}
+          {% set import_w = [states('sensor.home_energy_meter_power') | float(0), 0] | max %}
+          {% if has_value('sensor.home_energy_meter_power') and has_value('sensor.zendure_power') and ([import_w, laden] | min) > 300 %}
+            {{ [import_w, laden] | min | round(0) }}
+          {% else %}
+            {{ this.state }}
+          {% endif %}
+
   # Version of this extension: year.month.sequence (sequence restarts at 1 every month)
   - sensor:
       - name: "Forecasting Version"
@@ -346,24 +375,6 @@ template:
 
       # The part of the charge power that does NOT come from the grid (i.e. from solar surplus).
       # The grid part is the grid import, capped at the charge power.
-      # Charge power from the grid as the battery actually achieves it. Only available while
-      # charging from the grid (> 300 W), so the statistic only counts real charging sessions.
-      - name: "Forecast Grid Charge Power"
-        unique_id: forecast_grid_charge_power
-        unit_of_measurement: "W"
-        device_class: power
-        state_class: measurement
-        availability: >
-          {% set charging = [states('sensor.zendure_power') | float(0), 0] | max %}
-          {% set import_w = [states('sensor.home_energy_meter_power') | float(0), 0] | max %}
-          {{ has_value('sensor.home_energy_meter_power')
-             and has_value('sensor.zendure_power')
-             and ([import_w, charging] | min) > 300 }}
-        state: >
-          {% set charging = [states('sensor.zendure_power') | float(0), 0] | max %}
-          {% set import_w = [states('sensor.home_energy_meter_power') | float(0), 0] | max %}
-          {{ [import_w, charging] | min | round(0) }}
-
       - name: "Forecast Zendure Charge From Solar Power"
         unique_id: forecast_zendure_charge_from_solar_power
         unit_of_measurement: "W"

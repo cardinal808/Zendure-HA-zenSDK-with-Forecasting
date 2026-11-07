@@ -247,6 +247,35 @@ sensor:
     precision: 2
 
 template:
+  # Laadvermogen uit het net zoals de accu het echt haalt (> 300 W). Buiten het netladen houdt de
+  # sensor zijn laatste meting (ook na een herstart), zodat de statistiek Gemeten Laadvermogen
+  # beschikbaar blijft en alleen echte laadsessies meetelt. Was: niet beschikbaar buiten het
+  # netladen, waardoor de planner bijna altijd met het ingestelde vermogen rekende.
+  - trigger:
+      - trigger: state
+        entity_id:
+          - sensor.zendure_2400_ac_vermogen_aansturing
+          - sensor.p1_aansturing_vermogen
+    sensor:
+      - name: "Forecast Netladen Vermogen"
+        unique_id: forecast_netladen_vermogen
+        unit_of_measurement: "W"
+        device_class: power
+        state_class: measurement
+        availability: >
+          {% set laden = [states('sensor.zendure_2400_ac_vermogen_aansturing') | float(0), 0] | max %}
+          {% set import_w = [states('sensor.p1_aansturing_vermogen') | float(0), 0] | max %}
+          {{ (has_value('sensor.p1_aansturing_vermogen') and has_value('sensor.zendure_2400_ac_vermogen_aansturing') and ([import_w, laden] | min) > 300)
+             or this.state | is_number }}
+        state: >
+          {% set laden = [states('sensor.zendure_2400_ac_vermogen_aansturing') | float(0), 0] | max %}
+          {% set import_w = [states('sensor.p1_aansturing_vermogen') | float(0), 0] | max %}
+          {% if has_value('sensor.p1_aansturing_vermogen') and has_value('sensor.zendure_2400_ac_vermogen_aansturing') and ([import_w, laden] | min) > 300 %}
+            {{ [import_w, laden] | min | round(0) }}
+          {% else %}
+            {{ this.state }}
+          {% endif %}
+
   # Versie van deze uitbreiding: jaar.maand.volgnummer (volgnummer begint elke maand bij 1)
   - sensor:
       - name: "Forecasting Versie"
@@ -346,24 +375,6 @@ template:
 
       # Het deel van het laadvermogen dat NIET uit het net komt (dus uit zon-overschot).
       # Het netdeel is de P1-import, begrensd op het laadvermogen.
-      # Laadvermogen uit het net zoals de accu het echt haalt. Alleen beschikbaar tijdens
-      # netladen (> 300 W), zodat de statistiek hieronder alleen echte laadsessies meetelt.
-      - name: "Forecast Netladen Vermogen"
-        unique_id: forecast_netladen_vermogen
-        unit_of_measurement: "W"
-        device_class: power
-        state_class: measurement
-        availability: >
-          {% set laden = [states('sensor.zendure_2400_ac_vermogen_aansturing') | float(0), 0] | max %}
-          {% set import_w = [states('sensor.p1_aansturing_vermogen') | float(0), 0] | max %}
-          {{ has_value('sensor.p1_aansturing_vermogen')
-             and has_value('sensor.zendure_2400_ac_vermogen_aansturing')
-             and ([import_w, laden] | min) > 300 }}
-        state: >
-          {% set laden = [states('sensor.zendure_2400_ac_vermogen_aansturing') | float(0), 0] | max %}
-          {% set import_w = [states('sensor.p1_aansturing_vermogen') | float(0), 0] | max %}
-          {{ [import_w, laden] | min | round(0) }}
-
       - name: "Forecast Zendure Laden Uit Zon Vermogen"
         unique_id: forecast_zendure_laden_uit_zon_vermogen
         unit_of_measurement: "W"
