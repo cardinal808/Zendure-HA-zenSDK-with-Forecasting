@@ -4274,6 +4274,8 @@ views:
                 name: All-in prijs (levering)
               - entity: sensor.nordpool_kwh_nl_eur_5_10_021
                 name: Marktprijs incl. btw (teruglevering)
+              - entity: sensor.zendure_terugleverprijs_nu
+                name: Terugleverprijs nu (met opslag en bonus)
             visibility:
               - condition: state
                 entity: input_number.nordpool_energiebelasting

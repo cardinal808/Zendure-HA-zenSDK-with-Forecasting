@@ -4266,6 +4266,8 @@ views:
                 name: All-in price (supply)
               - entity: sensor.nordpool_kwh_nl_eur_5_10_021
                 name: Market price incl. VAT (export)
+              - entity: sensor.zendure_feedin_price_now
+                name: Feed-in price now (with markup and bonus)
             visibility:
               - condition: state
                 entity: input_number.nordpool_setting_energy_tax
