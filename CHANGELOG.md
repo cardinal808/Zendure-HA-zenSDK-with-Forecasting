@@ -72,6 +72,7 @@ Versions follow `year.month.sequence`; the sequence restarts at 1 every month. E
 - **Solar production always *unavailable*:** the new solar counter missed two variables, so `sensor.forecast_counter_solar_production` was unavailable, the 7-day solar production stayed empty and the planner used start values (*History available: 0 of 7 days*). Fixed. After a restart at night without a reading, the counter waits until the inverter reports a value, and the first time it starts at the inverter reading (matching the old data points).
 - **History:** the planner now takes the largest coverage of solar production, grid import and battery charging. Without solar panels, or when the solar counter is briefly missing, the history of the other counters counts.
 - **Battery empty on the dashboard** (Plan for today and the path-check line) now takes solar, smart hold and pre-discharge into account, like the plan itself. Before it could say "empty at 21:20" while the battery was being saved for the morning peak. The plan itself does not change.
+- **Diagnostics export:** the export failed on dates in attributes (`TypeError: Type is not JSON serializable: datetime.datetime`, e.g. with Nord Pool or `last_triggered`); dates and other objects are now included as text.
 - **Diagnostics export:** configured fields with several sensors (comma list, e.g. own grid counters) are now listed with the external sensors too.
 
 **Upgrading**

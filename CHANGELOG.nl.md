@@ -73,6 +73,7 @@ Versies volgen `jaar.maand.volgnummer`; het volgnummer begint elke maand bij 1. 
 - **Zonproductie altijd *niet beschikbaar*:** de nieuwe zon-teller miste twee variabelen, waardoor `sensor.forecast_teller_zon_productie` niet beschikbaar was, de 7-daagse zonproductie leeg bleef en de planner op startwaarden rekende (*Historie beschikbaar: 0 van 7 dagen*). Hersteld. Na een herstart 's nachts zonder stand wacht de teller tot de omvormer een waarde geeft, en de eerste keer begint hij bij de stand van de omvormer (sluit aan op de oude meetpunten).
 - **Historie:** de planner neemt nu de grootste dekking van zonproductie, net-import en accu laden. Zonder zonnepanelen, of als de zon-teller even ontbreekt, telt de historie van de andere tellers.
 - **Accu leeg op het dashboard** (Plan vandaag en de pad-check-regel) houdt nu rekening met de zon, slim vasthouden en vooraf ontladen, zoals het plan zelf. Eerder kon er "leeg om 21:20" staan terwijl de accu juist voor de ochtendpiek werd bewaard. Het plan zelf verandert niet.
+- **Diagnose-export:** de export liep vast op datums in attributen (`TypeError: Type is not JSON serializable: datetime.datetime`, bv. bij Nord Pool of `last_triggered`); datums en andere objecten worden nu als tekst meegenomen.
 - **Diagnose-export:** ingevulde velden met meerdere sensoren (komma-lijst, bv. eigen net-tellers) staan nu ook bij de externe sensoren.
 
 **Upgraden**

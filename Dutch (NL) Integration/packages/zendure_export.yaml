@@ -142,6 +142,16 @@ script:
           bestand: "zendure_export_{{ now().strftime('%Y%m%d_%H%M') }}.json"
           # De export zelf: IP-adressen gemaskeerd
           export: >-
+            {#- JSON-tekst die ook datums en andere objecten aankan (to_json kan dat niet) -#}
+            {%- macro j(v) -%}
+              {%- if v is mapping -%}{
+                {%- for k, w in v.items() -%}{{ (k | string) | to_json }}:{{ j(w) }}{{ ',' if not loop.last }}{%- endfor -%}
+              }{%- elif v is string or v is none or v is boolean or v is number -%}{{ v | to_json }}
+              {%- elif v is iterable -%}[
+                {%- for w in v -%}{{ j(w) }}{{ ',' if not loop.last }}{%- endfor -%}
+              ]{%- else -%}{{ (v | string) | to_json }}
+              {%- endif -%}
+            {%- endmacro -%}
             {%- set masker = '(?i)ip_adres|ip_address|serienummer|serial' -%}
             {%- set re_helper = '^(zendure_|dynamisch_|forecast_|besparing_|ev_|hvac_|negatieve_prijs_|help_tonen|pv_tonen|afwijkende_p1|homewizard_p1)' -%}
             {%- set re_sensor = '^(zendure_|forecast|dynamisch_|p1_|homewizard_|hvac_|ev_|github_zendure)' -%}
@@ -181,7 +191,7 @@ script:
             {%- for s in expand(detail) -%}
               {%- set na = namespace(a=[]) -%}
               {%- for k, v in s.attributes.items() -%}
-                {%- set n = v | to_json | length -%}
+                {%- set n = j(v) | length -%}
                 {%- set na.a = na.a + [[k, v if n <= 20000 else '(te groot: ' ~ n ~ ' tekens)']] -%}
               {%- endfor -%}
               {%- set ns.det = ns.det + [[s.entity_id, {'state': s.state, 'last_changed': s.last_changed.isoformat(),
@@ -191,7 +201,7 @@ script:
             {%- for s in expand(ns.ent_ext | unique | list) -%}
               {%- set a = dict(s.attributes) -%}
               {%- set ns.ext = ns.ext + [[s.entity_id, {'state': s.state, 'last_changed': s.last_changed.isoformat(),
-                   'attributes': a if (a | to_json | length) < 1500 else {'(te groot, alleen namen)': a.keys() | list}}]] -%}
+                   'attributes': a if (j(a) | length) < 1500 else {'(te groot, alleen namen)': a.keys() | list}}]] -%}
             {%- endfor -%}
             {#- Zendure-automatiseringen -#}
             {%- for s in states.automation if (s.object_id ~ ' ' ~ s.name) is search('(?i)zendure|gielz|forecast') -%}
@@ -229,7 +239,7 @@ script:
                } -%}
             {#- Home Assistant laat een template maximaal 256 kB opleveren. Te groot: details alleen
                 met de namen van de attributen. -#}
-            {%- if (export | to_json | length) > 230000 -%}
+            {%- if (j(export) | length) > 230000 -%}
               {%- set nk = namespace(d=[]) -%}
               {%- for e, v in ns.det -%}
                 {%- set nk.d = nk.d + [[e, {'state': v.state, 'attributes': v.attributes.keys() | list}]] -%}
@@ -237,7 +247,7 @@ script:
               {%- set export = dict(export, details=dict(nk.d),
                    meta=dict(export.meta, ingekort='details zonder waarden: export te groot')) -%}
             {%- endif -%}
-            {%- set tekst = export | to_json
+            {%- set tekst = j(export)
                  | regex_replace('\\b(?:[0-9]{1,3}[.]){3}[0-9]{1,3}\\b', 'x.x.x.x') -%}
             {{ tekst | from_json }}
       - variables:
