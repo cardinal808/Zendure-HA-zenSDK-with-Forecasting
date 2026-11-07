@@ -4154,13 +4154,10 @@ views:
                 name: Pre-discharge
               - entity: input_number.negative_price_pre_discharge_solar_credit
                 name: Solar credit (%, 0 = 75%)
-              - type: conditional
-                conditions:
-                  - entity: input_number.savings_setting_fixed_supply_price
-                    state: unavailable
-                row:
-                  type: section
-                  label: Feed-in price (without savings package)
+              - type: section
+                label: Feed-in price
+              - entity: input_text.dynamic_setting_market_price_sensor
+                name: Market price sensor (empty = Nordpool sensor)
               - type: conditional
                 conditions:
                   - entity: input_number.savings_setting_fixed_supply_price
@@ -4280,6 +4277,8 @@ views:
                 name: Fixed feed-in tariff
               - entity: input_number.savings_setting_dynamic_supply_markup
                 name: Dynamic supply markup
+              - entity: input_text.dynamic_setting_market_price_sensor
+                name: Market price sensor for export (empty = Nordpool sensor)
               - entity: input_number.savings_setting_dynamic_feedin_markup
                 name: Dynamic feed-in markup
               - entity: input_number.savings_setting_dynamic_feedin_bonus

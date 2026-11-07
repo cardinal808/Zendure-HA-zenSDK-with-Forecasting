@@ -152,6 +152,16 @@ template:
           {%- if s <= now_ts < e -%}{%- set ns.p = x.value | float(0) -%}{%- set ns.e = e -%}{%- endif -%}
         {%- endfor -%}
         {{ {'p': ns.p, 'e': ns.e} }}
+      # Bare market price now for export (none = not filled in, then the Nordpool price applies)
+      market_now: >
+        {%- set m = states('input_text.dynamic_setting_market_price_sensor') | trim | lower -%}
+        {%- set ns = namespace(p=none) -%}
+        {%- if m.startswith('sensor.') -%}
+          {%- for x in (state_attr(m, 'raw_today') or []) -%}
+            {%- if x.value is number and as_timestamp(x.start, 0) <= now_ts < as_timestamp(x.end, 0) -%}{%- set ns.p = x.value | float(0) -%}{%- endif -%}
+          {%- endfor -%}
+        {%- endif -%}
+        {{ ns.p }}
 
       # ---- Energy of the past quarter hour ----
       dt: "{{ (now_ts - (prev.ts | float(0))) if prev is mapping else 0 }}"
@@ -170,6 +180,10 @@ template:
       p_dyn: >
         {%- set po = prev.p if prev is mapping else none -%}
         {%- if po is number -%}{{ po }}{%- elif slot_now.p is number -%}{{ slot_now.p }}{%- else -%}{{ none }}{%- endif -%}
+      # Market price of the past quarter hour for export (without a market price sensor: p_dyn)
+      p_market: >
+        {%- set pm = prev.pm if prev is mapping and prev.pm is defined else none -%}
+        {%- if pm is number -%}{{ pm }}{%- elif prev is mapping and prev.p is number -%}{{ p_dyn }}{%- elif market_now is number -%}{{ market_now }}{%- else -%}{{ p_dyn }}{%- endif -%}
 
       # ---- Tariffs ----
       fixed_in: "{{ states('input_number.savings_setting_fixed_supply_price') | float(0) }}"
@@ -193,7 +207,7 @@ template:
       # ---- Increase for this quarter hour (kWh and €) ----
       inc: >
         {%- if delta is mapping and p_dyn is number -%}
-          {%- set din = p_dyn + markup_in -%}{%- set dout = p_dyn + bonus_out * ([p_dyn, 0] | max) + markup_out -%}{%- set d = delta -%}
+          {%- set din = p_dyn + markup_in -%}{%- set dout = p_market + bonus_out * ([p_market, 0] | max) + markup_out -%}{%- set d = delta -%}
           {#- Solar into the battery: the surplus (solar minus direct use), at most what was charged -#}
           {%- set sin = [d.solar - [d.solar, d.usage] | min, d.charge] | min -%}
           {#- Discharge: first the home's shortfall (saves import), the rest goes to the grid -#}
@@ -288,11 +302,12 @@ template:
           battery_and_smart_charging: "{{ (buckets.total.solar_dyn - buckets.total.now_dyn - buckets.total.solar_batt) | round(2) }}"
           actual_costs: "{{ buckets.total.now_dyn | round(2) }}"
           price_last_interval: "{{ p_dyn }}"
+          market_price_last_interval: "{{ p_market }}"
           last_interval_settled: "{{ inc is mapping }}"
           # Counter readings and price now, for the calculation in a quarter hour
           measurement: >
             {% if measurement_ok %}{{ {'ts': now_ts | round(0), 'imp': t_imp, 'exp': t_exp, 'prod': prod_now,
-                                       'charge': t_charge, 'disch': t_disch, 'p': slot_now.p,
+                                       'charge': t_charge, 'disch': t_disch, 'p': slot_now.p, 'pm': market_now,
                                        'f': solar_share, 'e': batt_now} }}
             {% else %}{{ none }}{% endif %}
 

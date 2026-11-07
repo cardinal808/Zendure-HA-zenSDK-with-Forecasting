@@ -4161,13 +4161,10 @@ views:
                 name: Vooraf ontladen
               - entity: input_number.negatieve_prijs_vooraf_zonkrediet
                 name: Zonkrediet (%, 0 = 75%)
-              - type: conditional
-                conditions:
-                  - entity: input_number.besparing_vast_leveringsprijs
-                    state: unavailable
-                row:
-                  type: section
-                  label: Terugleverprijs (zonder besparingspakket)
+              - type: section
+                label: Terugleverprijs
+              - entity: input_text.dynamisch_marktprijs_sensor
+                name: Marktprijs sensor (leeg = Nordpool-sensor)
               - type: conditional
                 conditions:
                   - entity: input_number.besparing_vast_leveringsprijs
@@ -4256,9 +4253,12 @@ views:
               vaste of variabele contract; bij volledige saldering is
               teruglevering gelijk aan levering. Bij dynamisch wordt de prijs
               uit de Nordpool-sensor gebruikt plus de **opslag**: is je sensor
-              al all-in, laat de opslag levering op 0 staan. Teruglevering
-              dynamisch = marktprijs + **bonus %** over de marktprijs (alleen
-              als die positief is) + **opslag teruglevering** per kWh. Houdt de
+              al all-in, laat de opslag levering op 0 staan en vul bij
+              **Marktprijs sensor teruglevering** een Nordpool-sensor met de
+              kale marktprijs in (energiebelasting en opslag horen niet bij
+              teruglevering). Teruglevering dynamisch = marktprijs + **bonus
+              %** over de marktprijs (alleen als die positief is) + **opslag
+              teruglevering** per kWh. Houdt de
               leverancier iets in, maak de opslag dan negatief. Met de knop
               begint alleen het totaal opnieuw.
 
@@ -4287,6 +4287,8 @@ views:
                 name: Vast tarief teruglevering
               - entity: input_number.besparing_dyn_opslag_levering
                 name: Dynamisch opslag levering
+              - entity: input_text.dynamisch_marktprijs_sensor
+                name: Marktprijs sensor teruglevering (leeg = Nordpool-sensor)
               - entity: input_number.besparing_dyn_opslag_teruglevering
                 name: Dynamisch opslag teruglevering
               - entity: input_number.besparing_dyn_bonus_teruglevering

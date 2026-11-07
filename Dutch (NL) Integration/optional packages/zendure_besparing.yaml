@@ -43,9 +43,12 @@
 # Hij wordt doorgetrokken uit de periode "totaal"; wat de accu vóór de start van de meting
 # al opbracht kan bij "Accu Al Terugverdiend" worden ingevuld.
 #
-# Teruglevering heeft een eigen prijs (vast: terugleverprijs; dynamisch: Nordpool-prijs
+# Teruglevering heeft een eigen prijs (vast: terugleverprijs; dynamisch: marktprijs
 # + bonus-% over een positieve marktprijs + opslag teruglevering; de opslag kan negatief zijn
 # als de leverancier iets inhoudt). Bij saldering: terugleverprijs = leveringsprijs.
+# Marktprijs = Dynamisch Marktprijs Sensor (Teruglevering) als die is ingevuld, anders de
+# Nordpool-prijs (levering = Nordpool-prijs + opslag levering; is de Nordpool-sensor all-in,
+# dan opslag levering 0 en de kale marktprijs-sensor invullen).
 # =====================================================================
 
 input_number:
@@ -150,6 +153,16 @@ template:
           {%- if s <= nu_ts < e -%}{%- set ns.p = x.value | float(0) -%}{%- set ns.e = e -%}{%- endif -%}
         {%- endfor -%}
         {{ {'p': ns.p, 'e': ns.e} }}
+      # Kale marktprijs van nu voor teruglevering (none = niet ingevuld, dan geldt de Nordpool-prijs)
+      markt_nu: >
+        {%- set m = states('input_text.dynamisch_marktprijs_sensor') | trim | lower -%}
+        {%- set ns = namespace(p=none) -%}
+        {%- if m.startswith('sensor.') -%}
+          {%- for x in (state_attr(m, 'raw_today') or []) -%}
+            {%- if x.value is number and as_timestamp(x.start, 0) <= nu_ts < as_timestamp(x.end, 0) -%}{%- set ns.p = x.value | float(0) -%}{%- endif -%}
+          {%- endfor -%}
+        {%- endif -%}
+        {{ ns.p }}
 
       # ---- Energie van het afgelopen kwartier ----
       dt: "{{ (nu_ts - (vorig.ts | float(0))) if vorig is mapping else 0 }}"
@@ -168,6 +181,10 @@ template:
       p_dyn: >
         {%- set po = vorig.p if vorig is mapping else none -%}
         {%- if po is number -%}{{ po }}{%- elif slot_nu.p is number -%}{{ slot_nu.p }}{%- else -%}{{ none }}{%- endif -%}
+      # Marktprijs van het afgelopen kwartier voor teruglevering (zonder marktprijs-sensor: p_dyn)
+      p_markt: >
+        {%- set pm = vorig.pm if vorig is mapping and vorig.pm is defined else none -%}
+        {%- if pm is number -%}{{ pm }}{%- elif vorig is mapping and vorig.p is number -%}{{ p_dyn }}{%- elif markt_nu is number -%}{{ markt_nu }}{%- else -%}{{ p_dyn }}{%- endif -%}
 
       # ---- Tarieven ----
       vast_in: "{{ states('input_number.besparing_vast_leveringsprijs') | float(0) }}"
@@ -191,7 +208,7 @@ template:
       # ---- Toename voor dit kwartier (kWh en €) ----
       inc: >
         {%- if delta is mapping and p_dyn is number -%}
-          {%- set din = p_dyn + opsl_in -%}{%- set duit = p_dyn + bonus_uit * ([p_dyn, 0] | max) + opsl_uit -%}{%- set d = delta -%}
+          {%- set din = p_dyn + opsl_in -%}{%- set duit = p_markt + bonus_uit * ([p_markt, 0] | max) + opsl_uit -%}{%- set d = delta -%}
           {#- Zonnestroom de accu in: het overschot (zon min direct verbruik), hooguit wat er geladen is -#}
           {%- set zin = [d.zon - [d.zon, d.verbruik] | min, d.laden] | min -%}
           {#- Ontladen: eerst het tekort van het huis (spaart inkoop uit), de rest gaat het net op -#}
@@ -286,11 +303,12 @@ template:
           accu_en_slim_laden: "{{ (emmers.totaal.zon_dyn - emmers.totaal.nu_dyn - emmers.totaal.zon_accu) | round(2) }}"
           werkelijke_kosten: "{{ emmers.totaal.nu_dyn | round(2) }}"
           prijs_laatste_interval: "{{ p_dyn }}"
+          marktprijs_laatste_interval: "{{ p_markt }}"
           laatste_interval_verrekend: "{{ inc is mapping }}"
           # Tellerstanden en prijs van nu, voor de berekening over een kwartier
           meting: >
             {% if meting_ok %}{{ {'ts': nu_ts | round(0), 'imp': t_imp, 'exp': t_exp, 'prod': prod_nu,
-                                  'laden': t_laden, 'ontl': t_ontl, 'p': slot_nu.p,
+                                  'laden': t_laden, 'ontl': t_ontl, 'p': slot_nu.p, 'pm': markt_nu,
                                   'f': zon_aandeel, 'e': accu_nu} }}
             {% else %}{{ none }}{% endif %}
 

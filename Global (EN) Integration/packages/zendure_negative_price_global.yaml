@@ -8,7 +8,8 @@
 #
 # Feed-in price (sensor.zendure_feedin_price_now), per quarter hour:
 #   market price + bonus % (only when the market price is positive) + feed-in markup
-#   Market price from Gielz' Nordpool sensor. Feed-in markup and bonus live in this package (so they
+#   Market price from Dynamic Market Price Sensor (Feed-in) when filled in, otherwise from the
+#   Nordpool sensor of Gielz (which can be all-in: energy tax and markup do not apply to export). Feed-in markup and bonus live in this package (so they
 #   exist without the savings package too); on the dashboard in Forecasting Configuration (Savings),
 #   or in (Negative Price) when the savings package is missing.
 # binary_sensor.zendure_export_blocked_negative_price is on when the feature is enabled
@@ -170,6 +171,15 @@ input_number:
     mode: box
 
 input_text:
+  # Optional: sensor with the bare market price (as your supplier pays it for export).
+  # Empty = the Nordpool sensor of Gielz. Fill it in when that sensor is all-in (with energy tax,
+  # markup and VAT): you only pay those costs for supply, not for export.
+  dynamic_setting_market_price_sensor:
+    name: Dynamic Market Price Sensor (Feed-in)
+    icon: mdi:chart-line
+    max: 250
+    mode: text
+
   negative_price_inverter_limiter:
     name: Negative Price Inverter Limiter
     icon: mdi:tune-vertical
@@ -195,7 +205,8 @@ template:
         icon: mdi:transmission-tower-export
         unit_of_measurement: "€/kWh"
         state: >
-          {%- set src = states('input_text.dynamic_setting_nordpool_sensor') | trim -%}
+          {%- set m = states('input_text.dynamic_setting_market_price_sensor') | trim | lower -%}
+          {%- set src = m if m.startswith('sensor.') and has_value(m) else (states('input_text.dynamic_setting_nordpool_sensor') | trim) -%}
           {%- set ns = namespace(p=none) -%}
           {%- if src.startswith('sensor.') -%}
             {%- set now_ts = as_timestamp(now()) -%}
@@ -217,7 +228,8 @@ template:
           {%- endif -%}
         attributes:
           market_price: >
-            {%- set src = states('input_text.dynamic_setting_nordpool_sensor') | trim -%}
+            {%- set m = states('input_text.dynamic_setting_market_price_sensor') | trim | lower -%}
+            {%- set src = m if m.startswith('sensor.') and has_value(m) else (states('input_text.dynamic_setting_nordpool_sensor') | trim) -%}
             {%- set ns = namespace(p=none) -%}
             {%- if src.startswith('sensor.') -%}
               {%- set now_ts = as_timestamp(now()) -%}
@@ -228,6 +240,7 @@ template:
               {%- endfor -%}
             {%- endif -%}
             {{ ns.p if ns.p is not none else states('sensor.dynamic_nordpool') | float(none) }}
+          market_price_source: "{{ states('input_text.dynamic_setting_market_price_sensor') | trim if (states('input_text.dynamic_setting_market_price_sensor') | trim | lower).startswith('sensor.') else states('input_text.dynamic_setting_nordpool_sensor') | trim }}"
           feedin_markup: "{{ states('input_number.savings_setting_dynamic_feedin_markup') | float(0) }}"
           feedin_bonus_pct: "{{ states('input_number.savings_setting_dynamic_feedin_bonus') | float(0) }}"
 

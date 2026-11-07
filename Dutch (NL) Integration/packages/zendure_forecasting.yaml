@@ -1675,10 +1675,24 @@ template:
       vo_venster: >
         {%- set opslag = states('input_number.besparing_dyn_opslag_teruglevering') | float(0) -%}
         {%- set bonus = states('input_number.besparing_dyn_bonus_teruglevering') | float(0) / 100 -%}
+        {#- Marktprijs per kwartier (teruglevering): uit de marktprijs-sensor als die is ingevuld, anders de prijs van het slot -#}
+        {%- set msens = states('input_text.dynamisch_marktprijs_sensor') | trim | lower -%}
+        {%- set mk = namespace(d={}) -%}
+        {%- if msens.startswith('sensor.') -%}
+          {%- for y in (state_attr(msens, 'raw_today') or []) + (state_attr(msens, 'raw_tomorrow') or []) -%}
+            {%- if y.value is number -%}{%- set mk.d = dict(mk.d, **{((as_timestamp(y.start, 0) | int) | string): y.value}) -%}{%- endif -%}
+          {%- endfor -%}
+        {%- endif -%}
         {%- set ns = namespace(r=[], cur=none, w=none) -%}
         {%- if vo_aan -%}
           {%- for x in pad_kand | sort(attribute='s') -%}
-            {%- set neg = (x.v + bonus * ([x.v, 0] | max) + opslag) < 0 -%}
+            {%- set mq = namespace(s=0, n=0) -%}
+            {%- for k in range([((x.e - x.s) / 900) | round(0) | int, 1] | max) -%}
+              {%- set key = ((x.s | int) + k * 900) | string -%}
+              {%- if key in mk.d -%}{%- set mq.s = mq.s + mk.d[key] -%}{%- set mq.n = mq.n + 1 -%}{%- endif -%}
+            {%- endfor -%}
+            {%- set mp = (mq.s / mq.n) if mq.n > 0 else x.v -%}
+            {%- set neg = (mp + bonus * ([mp, 0] | max) + opslag) < 0 -%}
             {%- if neg and ns.cur is not none and ns.cur.e == x.s -%}
               {%- set ns.cur = {'s': ns.cur.s, 'e': x.e} -%}
             {%- elif neg -%}

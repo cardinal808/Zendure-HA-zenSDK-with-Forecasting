@@ -8,7 +8,8 @@
 #
 # Terugleverprijs (sensor.zendure_terugleverprijs_nu), per kwartier:
 #   marktprijs + bonus % (alleen bij positieve marktprijs) + opslag teruglevering
-#   Marktprijs uit de Nordpool-sensor van Gielz. Opslag en bonus teruglevering staan in dit pakket
+#   Marktprijs uit Dynamisch Marktprijs Sensor (Teruglevering) als die is ingevuld, anders uit de
+#   Nordpool-sensor van Gielz (die kan all-in zijn: energiebelasting en opslag horen niet bij teruglevering). Opslag en bonus teruglevering staan in dit pakket
 #   (zodat ze er ook zonder het besparingspakket zijn); op het dashboard in Forecasting Configuratie
 #   (Besparing), of in (Negatieve Prijs) als het besparingspakket ontbreekt.
 # binary_sensor.zendure_export_geblokkeerd_negatieve_prijs staat aan als de functie aanstaat
@@ -170,6 +171,15 @@ input_number:
     mode: box
 
 input_text:
+  # Optioneel: sensor met de kale marktprijs (zoals je leverancier die bij teruglevering betaalt).
+  # Leeg = de Nordpool-sensor van Gielz. Vul hem in als die sensor all-in is (met energiebelasting,
+  # opslag en btw): die kosten betaal je alleen bij levering, niet bij teruglevering.
+  dynamisch_marktprijs_sensor:
+    name: Dynamisch Marktprijs Sensor (Teruglevering)
+    icon: mdi:chart-line
+    max: 250
+    mode: text
+
   negatieve_prijs_omvormer_limiet:
     name: Negatieve Prijs Omvormer Limiet
     icon: mdi:tune-vertical
@@ -195,7 +205,8 @@ template:
         icon: mdi:transmission-tower-export
         unit_of_measurement: "€/kWh"
         state: >
-          {%- set bron = states('input_text.dynamisch_nordpool_sensor') | trim -%}
+          {%- set m = states('input_text.dynamisch_marktprijs_sensor') | trim | lower -%}
+          {%- set bron = m if m.startswith('sensor.') and has_value(m) else (states('input_text.dynamisch_nordpool_sensor') | trim) -%}
           {%- set ns = namespace(p=none) -%}
           {%- if bron.startswith('sensor.') -%}
             {%- set nu = as_timestamp(now()) -%}
@@ -217,7 +228,8 @@ template:
           {%- endif -%}
         attributes:
           marktprijs: >
-            {%- set bron = states('input_text.dynamisch_nordpool_sensor') | trim -%}
+            {%- set m = states('input_text.dynamisch_marktprijs_sensor') | trim | lower -%}
+            {%- set bron = m if m.startswith('sensor.') and has_value(m) else (states('input_text.dynamisch_nordpool_sensor') | trim) -%}
             {%- set ns = namespace(p=none) -%}
             {%- if bron.startswith('sensor.') -%}
               {%- set nu = as_timestamp(now()) -%}
@@ -228,6 +240,7 @@ template:
               {%- endfor -%}
             {%- endif -%}
             {{ ns.p if ns.p is not none else states('sensor.dynamisch_nordpool') | float(none) }}
+          marktprijs_bron: "{{ states('input_text.dynamisch_marktprijs_sensor') | trim if (states('input_text.dynamisch_marktprijs_sensor') | trim | lower).startswith('sensor.') else states('input_text.dynamisch_nordpool_sensor') | trim }}"
           opslag_teruglevering: "{{ states('input_number.besparing_dyn_opslag_teruglevering') | float(0) }}"
           bonus_teruglevering_pct: "{{ states('input_number.besparing_dyn_bonus_teruglevering') | float(0) }}"
 
