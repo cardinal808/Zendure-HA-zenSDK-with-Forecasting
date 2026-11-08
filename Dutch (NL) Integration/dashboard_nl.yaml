@@ -4043,15 +4043,24 @@ views:
             icon: ''
             heading: Forecasting Configuratie (Negatieve Prijs)
             heading_style: title
+            visibility:
+              - condition: state
+                entity: input_boolean.negatieve_prijs_export_blokkeren
+                state_not: unavailable
+              - condition: state
+                entity: input_boolean.pv_tonen_op_dashboard
+                state: 'on'
+          - type: heading
+            icon: ''
+            heading: Terugleverprijs nu
+            heading_style: subtitle
             badges:
               - type: entity
                 show_state: true
                 show_icon: true
                 entity: sensor.zendure_terugleverprijs_nu
                 name: Teruglevering
-                state_content:
-                  - name
-                  - state
+                state_content: state
                 color: '#01a180'
                 tap_action:
                   action: more-info
@@ -4084,7 +4093,7 @@ views:
               een sensor met de kale marktprijs in.
 
 
-              **Zendure Pro:** staat **Zendure Pro PV-export uitschakelen** aan,
+              **Zendure Pro** (alleen zichtbaar bij een Zendure met zon-ingangen, Pro of Plus): staat **PV-export uitschakelen bij negatieve prijzen** aan,
               dan gaat PV Export Uitgeschakeld automatisch aan en daarna weer uit.
               Hij gaat vanzelf aan als je Niet terugleveren aanzet. Zet hem uit als je
               Zendure geen zonnepanelen heeft of als je alleen externe omvormers
@@ -4152,12 +4161,22 @@ views:
             entities:
               - entity: input_boolean.negatieve_prijs_export_blokkeren
                 name: Niet terugleveren bij negatieve prijs
+              - type: conditional
+                conditions:
+                  - entity: binary_sensor.zendure_heeft_pv_ingangen
+                    state: 'on'
+                row:
+                  type: section
+                  label: Zendure Pro (PV-ingangen)
+              - type: conditional
+                conditions:
+                  - entity: binary_sensor.zendure_heeft_pv_ingangen
+                    state: 'on'
+                row:
+                  entity: input_boolean.negatieve_prijs_zendure_pv_export
+                  name: PV-export uitschakelen bij negatieve prijzen
               - type: section
-                label: Zendure Pro (PV-ingangen)
-              - entity: input_boolean.negatieve_prijs_zendure_pv_export
-                name: Zendure Pro PV-export uitschakelen
-              - type: section
-                label: Accu (Dynamisch NOM + Forecasting)
+                label: Accu ontladen voor negatieve prijzen
               - entity: input_boolean.negatieve_prijs_vooraf_ontladen
                 name: Vooraf ontladen
               - entity: input_number.negatieve_prijs_vooraf_zonkrediet
@@ -4171,7 +4190,7 @@ views:
               - entity: input_number.besparing_dyn_bonus_teruglevering
                 name: Bonus teruglevering % (over marktprijs)
               - type: section
-                label: Externe omvormer (optioneel)
+                label: Externe omvormer (optioneel) managen bij negatieve prijzen
               - entity: input_select.negatieve_prijs_omvormer_aantal
                 name: Aantal externe omvormers
               - type: conditional

@@ -245,6 +245,17 @@ template:
           bonus_teruglevering_pct: "{{ states('input_number.besparing_dyn_bonus_teruglevering') | float(0) }}"
 
   - binary_sensor:
+      # Heeft de Zendure eigen zon-ingangen (Pro / Plus)? Uit Gielz' Productserie. Onbekend = aan,
+      # zodat de instelling niet verdwijnt als de productnaam (nog) niet bekend is.
+      - name: "Zendure Heeft PV-ingangen"
+        unique_id: zendure_heeft_pv_ingangen
+        icon: mdi:solar-panel
+        state: >
+          {%- set p = states('sensor.zendure_2400_ac_productserie') | lower -%}
+          {{ p in ['', 'unknown', 'unavailable', 'none'] or 'pro' in p or 'plus' in p }}
+        attributes:
+          productserie: "{{ states('sensor.zendure_2400_ac_productserie') }}"
+
       - name: "Zendure Export Geblokkeerd (Negatieve Prijs)"
         unique_id: zendure_export_geblokkeerd_negatieve_prijs
         icon: mdi:transmission-tower-off

@@ -4037,15 +4037,24 @@ views:
             icon: ''
             heading: Forecasting Configuration (Negative Price)
             heading_style: title
+            visibility:
+              - condition: state
+                entity: input_boolean.negative_price_block_export
+                state_not: unavailable
+              - condition: state
+                entity: input_boolean.dashboard_setting_show_pv
+                state: 'on'
+          - type: heading
+            icon: ''
+            heading: Feed-in price now
+            heading_style: subtitle
             badges:
               - type: entity
                 show_state: true
                 show_icon: true
                 entity: sensor.zendure_feedin_price_now
                 name: Feed-in
-                state_content:
-                  - name
-                  - state
+                state_content: state
                 color: '#01a180'
                 tap_action:
                   action: more-info
@@ -4078,7 +4087,7 @@ views:
               price sensor**.
 
 
-              **Zendure Pro:** when **Disable Zendure Pro PV export** is on, PV
+              **Zendure Pro** (only shown for a Zendure with solar inputs, Pro or Plus): when **Disable PV export at negative prices** is on, PV
               Export Disabled is turned on automatically and back off
               afterwards. It turns on by itself when you switch on No export.
               Turn it off if your Zendure has no solar panels or if you only
@@ -4145,12 +4154,22 @@ views:
             entities:
               - entity: input_boolean.negative_price_block_export
                 name: No export at negative price
+              - type: conditional
+                conditions:
+                  - entity: binary_sensor.zendure_has_pv_inputs
+                    state: 'on'
+                row:
+                  type: section
+                  label: Zendure Pro (PV inputs)
+              - type: conditional
+                conditions:
+                  - entity: binary_sensor.zendure_has_pv_inputs
+                    state: 'on'
+                row:
+                  entity: input_boolean.negative_price_zendure_pv_export
+                  name: Disable PV export at negative prices
               - type: section
-                label: Zendure Pro (PV inputs)
-              - entity: input_boolean.negative_price_zendure_pv_export
-                name: Disable Zendure Pro PV export
-              - type: section
-                label: Battery (Dynamic Smart Matching + Forecasting)
+                label: Discharge battery ahead of negative prices
               - entity: input_boolean.negative_price_pre_discharge
                 name: Pre-discharge
               - entity: input_number.negative_price_pre_discharge_solar_credit
@@ -4164,7 +4183,7 @@ views:
               - entity: input_number.savings_setting_dynamic_feedin_bonus
                 name: Feed-in bonus % (of market price)
               - type: section
-                label: External inverter (optional)
+                label: External inverter (optional) managed at negative prices
               - entity: input_select.negative_price_inverter_count
                 name: Number of external inverters
               - type: conditional
