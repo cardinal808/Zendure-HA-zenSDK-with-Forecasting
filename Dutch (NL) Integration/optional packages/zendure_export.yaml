@@ -224,7 +224,8 @@ script:
             {#- (een attribuut van meer dan 20.000 tekens wordt vervangen door alleen de grootte) -#}
             {%- for s in expand(detail) -%}
               {%- set na = namespace(a=[]) -%}
-              {%- for k, v in s.attributes.items() -%}
+              {#- Van de grafiek alleen de tijdlijn: raw_today/raw_tomorrow staan al bij Nord Pool en de goedkoopste periode -#}
+              {%- for k, v in s.attributes.items() if not (s.entity_id == 'sensor.zendure_forecast_grafiek' and k in ['raw_today', 'raw_tomorrow']) -%}
                 {%- set n = j(v) | length -%}
                 {%- set na.a = na.a + [[k, v if n <= 20000 else '(te groot: ' ~ n ~ ' tekens)']] -%}
               {%- endfor -%}

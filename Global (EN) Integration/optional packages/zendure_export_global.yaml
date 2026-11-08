@@ -225,7 +225,8 @@ script:
             {#- (an attribute of more than 20,000 characters is replaced by its size only) -#}
             {%- for s in expand(detail) -%}
               {%- set na = namespace(a=[]) -%}
-              {%- for k, v in s.attributes.items() -%}
+              {#- Of the chart only the timeline: raw_today/raw_tomorrow are already in Nord Pool and the lowest price period -#}
+              {%- for k, v in s.attributes.items() if not (s.entity_id == 'sensor.zendure_forecast_chart' and k in ['raw_today', 'raw_tomorrow']) -%}
                 {%- set n = j(v) | length -%}
                 {%- set na.a = na.a + [[k, v if n <= 20000 else '(too large: ' ~ n ~ ' characters)']] -%}
               {%- endfor -%}
