@@ -1278,6 +1278,9 @@ template:
         {% set s = morg | sort(attribute='v') %}
         {% set n = [n_ref, s | length] | min %}
         {% if n > 0 %}{{ s[:n] | map(attribute='s') | min }}{% else %}{{ eind_vandaag_ts }}{% endif %}
+      # Minimale spread van Gielz, net als bij Gielz op het bruto prijsverschil (duur - goedkoop) / goedkoop.
+      # Het laad- en ontlaadverlies wordt daarnaast apart getoetst (na verlies moet laden goedkoper blijven),
+      # dus het verlies telt niet dubbel.
       spread_min: "{{ states('input_number.dynamisch_minimale_spread') | float(0) }}"
       spread_morgen: >
         {{ ((p_morgen_ref - p_vandaag_ref) / ([p_vandaag_ref | abs, c_prijs_noemer] | max) * 100) | round(1) }}
@@ -1350,9 +1353,10 @@ template:
         {%- set ns = namespace(l=[]) -%}
         {%- for x in kand | sort(attribute='v') -%}
           {%- set sp = (p_vergelijk_eff - x.v) / ([x.v | abs, c_prijs_noemer] | max) * 100 -%}
+          {%- set sp_bruto = (p_vergelijk - x.v) / ([x.v | abs, c_prijs_noemer] | max) * 100 -%}
           {#- Scenario A: ook onder het daggemiddelde (op een vlakke dag is er geen dal) -#}
           {%- set dal_ok = scenario == 'B' or x.v <= p_dag_gem -%}
-          {%- if ns.l | length < n_slots and sp >= spread_min and sp > 0 and dal_ok -%}
+          {%- if ns.l | length < n_slots and sp_bruto >= spread_min and sp > 0 and dal_ok -%}
             {%- set ns.l = ns.l + [x] -%}
           {%- endif -%}
         {%- endfor -%}
@@ -1615,7 +1619,8 @@ template:
         {%- set ns = namespace(l=[]) -%}
         {%- for q in gap_kwartieren -%}
           {%- set sp = (q.v * eff_rt - p_laad_min) / ([p_laad_min | abs, c_prijs_noemer] | max) * 100 -%}
-          {%- if q.kwh > 0 and sp > 0 and sp >= spread_min -%}{%- set ns.l = ns.l + [q] -%}{%- endif -%}
+          {%- set sp_bruto = (q.v - p_laad_min) / ([p_laad_min | abs, c_prijs_noemer] | max) * 100 -%}
+          {%- if q.kwh > 0 and sp > 0 and sp_bruto >= spread_min -%}{%- set ns.l = ns.l + [q] -%}{%- endif -%}
         {%- endfor -%}
         {{ ns.l }}
       gap_waardevol_ac: "{{ (gap_waardevol | map(attribute='kwh') | sum) | round(3) }}"
@@ -1675,7 +1680,8 @@ template:
             {%- for x in laad_kand -%}
               {%- if nq.nodig > 0.001 and ns.totaal < max_ac and x.e <= q.s and x.e > nu_ts -%}
                 {%- set sp = (q.v * eff_rt - x.v) / ([x.v | abs, c_prijs_noemer] | max) * 100 -%}
-                {%- if sp > 0 and sp >= spread_min -%}
+                {%- set sp_bruto = (q.v - x.v) / ([x.v | abs, c_prijs_noemer] | max) * 100 -%}
+                {%- if sp > 0 and sp_bruto >= spread_min -%}
                   {%- set gebruikt = ns.l | selectattr('s', 'eq', x.s) | map(attribute='k') | sum -%}
                   {%- set neem = [e_slot - gebruikt, nq.nodig, max_ac - ns.totaal] | min -%}
                   {%- if neem > 0.001 -%}
@@ -1980,7 +1986,8 @@ template:
             {%- for x in laad_kand -%}
               {%- if nq.nodig > 0.001 and ns.totaal < max_ac and x.e <= q.s -%}
                 {%- set sp = (q.v * eff_rt - x.v) / ([x.v | abs, c_prijs_noemer] | max) * 100 -%}
-                {%- if sp > 0 and sp >= spread_min -%}
+                {%- set sp_bruto = (q.v - x.v) / ([x.v | abs, c_prijs_noemer] | max) * 100 -%}
+                {%- if sp > 0 and sp_bruto >= spread_min -%}
                   {%- set gebruikt = ns.l | selectattr('s', 'eq', x.s) | map(attribute='k') | sum -%}
                   {%- set neem = [e_slot - gebruikt, nq.nodig, max_ac - ns.totaal] | min -%}
                   {%- if neem > 0.001 -%}

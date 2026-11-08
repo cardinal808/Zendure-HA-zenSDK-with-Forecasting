@@ -1278,6 +1278,9 @@ template:
         {% set s = tmrw | sort(attribute='v') %}
         {% set n = [n_ref, s | length] | min %}
         {% if n > 0 %}{{ s[:n] | map(attribute='s') | min }}{% else %}{{ end_today_ts }}{% endif %}
+      # Gielz' minimal spread, like in Gielz on the gross price difference (expensive - cheap) / cheap.
+      # The charge and discharge loss is checked separately (after loss, charging must stay cheaper),
+      # so the loss is not counted twice.
       spread_min: "{{ states('input_number.dynamic_setting_minimal_spread') | float(0) }}"
       spread_tomorrow: >
         {{ ((p_tomorrow_ref - p_today_ref) / ([p_today_ref | abs, c_price_floor] | max) * 100) | round(1) }}
@@ -1351,9 +1354,10 @@ template:
         {%- set ns = namespace(l=[]) -%}
         {%- for x in cand | sort(attribute='v') -%}
           {%- set sp = (p_compare_eff - x.v) / ([x.v | abs, c_price_floor] | max) * 100 -%}
+          {%- set sp_gross = (p_compare - x.v) / ([x.v | abs, c_price_floor] | max) * 100 -%}
           {#- Scenario A: also below the day average (on a flat day there is no dip) -#}
           {%- set dip_ok = scenario == 'B' or x.v <= p_day_avg -%}
-          {%- if ns.l | length < n_slots and sp >= spread_min and sp > 0 and dip_ok -%}
+          {%- if ns.l | length < n_slots and sp_gross >= spread_min and sp > 0 and dip_ok -%}
             {%- set ns.l = ns.l + [x] -%}
           {%- endif -%}
         {%- endfor -%}
@@ -1617,7 +1621,8 @@ template:
         {%- set ns = namespace(l=[]) -%}
         {%- for q in gap_slots -%}
           {%- set sp = (q.v * eff_rt - p_charge_min) / ([p_charge_min | abs, c_price_floor] | max) * 100 -%}
-          {%- if q.kwh > 0 and sp > 0 and sp >= spread_min -%}{%- set ns.l = ns.l + [q] -%}{%- endif -%}
+          {%- set sp_gross = (q.v - p_charge_min) / ([p_charge_min | abs, c_price_floor] | max) * 100 -%}
+          {%- if q.kwh > 0 and sp > 0 and sp_gross >= spread_min -%}{%- set ns.l = ns.l + [q] -%}{%- endif -%}
         {%- endfor -%}
         {{ ns.l }}
       gap_valuable_ac: "{{ (gap_valuable | map(attribute='kwh') | sum) | round(3) }}"
@@ -1676,7 +1681,8 @@ template:
             {%- for x in charge_cand -%}
               {%- if nq.need > 0.001 and ns.total < max_ac and x.e <= q.s and x.e > now_ts -%}
                 {%- set sp = (q.v * eff_rt - x.v) / ([x.v | abs, c_price_floor] | max) * 100 -%}
-                {%- if sp > 0 and sp >= spread_min -%}
+                {%- set sp_gross = (q.v - x.v) / ([x.v | abs, c_price_floor] | max) * 100 -%}
+                {%- if sp > 0 and sp_gross >= spread_min -%}
                   {%- set used = ns.l | selectattr('s', 'eq', x.s) | map(attribute='k') | sum -%}
                   {%- set take = [e_slot - used, nq.need, max_ac - ns.total] | min -%}
                   {%- if take > 0.001 -%}
@@ -1981,7 +1987,8 @@ template:
             {%- for x in charge_cand -%}
               {%- if nq.need > 0.001 and ns.total < max_ac and x.e <= q.s -%}
                 {%- set sp = (q.v * eff_rt - x.v) / ([x.v | abs, c_price_floor] | max) * 100 -%}
-                {%- if sp > 0 and sp >= spread_min -%}
+                {%- set sp_gross = (q.v - x.v) / ([x.v | abs, c_price_floor] | max) * 100 -%}
+                {%- if sp > 0 and sp_gross >= spread_min -%}
                   {%- set used = ns.l | selectattr('s', 'eq', x.s) | map(attribute='k') | sum -%}
                   {%- set take = [e_slot - used, nq.need, max_ac - ns.total] | min -%}
                   {%- if take > 0.001 -%}
