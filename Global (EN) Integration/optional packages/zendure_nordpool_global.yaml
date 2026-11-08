@@ -13,7 +13,8 @@
 #    Then leave Dynamic Supply Markup (Savings) at 0.
 # 2. Bare market price including VAT, for export
 #    -> sensor.nordpool_kwh_nl_eur_5_10_021
-#    Enter it in Forecasting Configuration (Negative Price), field Market price sensor.
+#    Filled in automatically in Forecasting Configuration (Negative Price), field Market price sensor
+#    (when that is empty; see the automation at the bottom).
 #    You only pay energy tax and markup for supply, not for export.
 #    If your supplier pays the market price without VAT, set VAT: False on sensor 2
 #    (the entity is then sensor.nordpool_kwh_nl_eur_5_10_0).
@@ -79,3 +80,46 @@ sensor:
     low_price_cutoff: 1.0
     price_in_cents: false
     price_type: kWh
+
+# ---------------------------------------------------------------------
+# Fill in the market price sensor (feed-in) automatically
+# If the Market price sensor field in Forecasting Configuration (Negative Price) is empty, this
+# package fills in the bare Nord Pool sensor (sensor.nordpool_kwh_nl_eur_5_10_021, or
+# sensor.nordpool_kwh_nl_eur_5_10_0 with VAT: False). The field then shows which sensor is used.
+# Entering another sensor is fine; it stays.
+# ---------------------------------------------------------------------
+automation:
+  - id: zendure_nordpool_fill_market_price_sensor
+    alias: Zendure Nordpool Fill Market Price Sensor
+    description: Fills in the bare Nord Pool sensor as Market price sensor when that field is empty.
+    mode: single
+    triggers:
+      - trigger: homeassistant
+        event: start
+      - trigger: state
+        entity_id: input_text.dynamic_setting_market_price_sensor
+      - trigger: state
+        entity_id:
+          - sensor.nordpool_kwh_nl_eur_5_10_021
+          - sensor.nordpool_kwh_nl_eur_5_10_0
+        from: unavailable
+    conditions:
+      - condition: template
+        value_template: "{{ states('input_text.dynamic_setting_market_price_sensor') | trim in ['', 'unknown'] }}"
+    actions:
+      - delay: "00:00:30"
+      - variables:
+          bare_sensor: >
+            {{ ['sensor.nordpool_kwh_nl_eur_5_10_021', 'sensor.nordpool_kwh_nl_eur_5_10_0']
+               | select('has_value') | first | default('') }}
+      - condition: template
+        value_template: "{{ bare_sensor != '' and states('input_text.dynamic_setting_market_price_sensor') | trim in ['', 'unknown'] }}"
+      - action: input_text.set_value
+        target:
+          entity_id: input_text.dynamic_setting_market_price_sensor
+        data:
+          value: "{{ bare_sensor }}"
+      - action: logbook.log
+        data:
+          name: Nordpool
+          message: "Market price sensor set to {{ bare_sensor }}"

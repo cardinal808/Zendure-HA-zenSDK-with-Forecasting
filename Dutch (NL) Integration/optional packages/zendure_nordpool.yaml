@@ -13,7 +13,8 @@
 #    Laat dan Dynamisch Opslag Levering (Besparing) op 0 staan.
 # 2. Kale marktprijs inclusief btw, voor teruglevering
 #    -> sensor.nordpool_kwh_nl_eur_5_10_021
-#    Invullen bij Forecasting Configuratie (Negatieve Prijs), veld Marktprijs sensor.
+#    Wordt automatisch ingevuld bij Forecasting Configuratie (Negatieve Prijs), veld Marktprijs sensor
+#    (als dat leeg is; zie de automatisering onderaan).
 #    Energiebelasting en opslag betaal je alleen bij levering, niet bij teruglevering.
 #    Vergoedt je leverancier de marktprijs zonder btw, zet dan VAT: False bij sensor 2
 #    (de entiteit heet dan sensor.nordpool_kwh_nl_eur_5_10_0).
@@ -80,3 +81,46 @@ sensor:
     low_price_cutoff: 1.0
     price_in_cents: false
     price_type: kWh
+
+# ---------------------------------------------------------------------
+# Marktprijs sensor (teruglevering) automatisch invullen
+# Is het veld Marktprijs sensor in Forecasting Configuratie (Negatieve Prijs) leeg, dan vult dit
+# pakket de kale Nord Pool-sensor in (sensor.nordpool_kwh_nl_eur_5_10_021, of
+# sensor.nordpool_kwh_nl_eur_5_10_0 met VAT: False). Zo staat in het veld welke sensor gebruikt wordt.
+# Een andere sensor invullen kan gewoon; die blijft staan.
+# ---------------------------------------------------------------------
+automation:
+  - id: zendure_nordpool_marktprijs_sensor_invullen
+    alias: Zendure Nordpool Marktprijs Sensor Invullen
+    description: Vult de kale Nord Pool-sensor in bij Marktprijs sensor als dat veld leeg is.
+    mode: single
+    triggers:
+      - trigger: homeassistant
+        event: start
+      - trigger: state
+        entity_id: input_text.dynamisch_marktprijs_sensor
+      - trigger: state
+        entity_id:
+          - sensor.nordpool_kwh_nl_eur_5_10_021
+          - sensor.nordpool_kwh_nl_eur_5_10_0
+        from: unavailable
+    conditions:
+      - condition: template
+        value_template: "{{ states('input_text.dynamisch_marktprijs_sensor') | trim in ['', 'unknown'] }}"
+    actions:
+      - delay: "00:00:30"
+      - variables:
+          sensor_kaal: >
+            {{ ['sensor.nordpool_kwh_nl_eur_5_10_021', 'sensor.nordpool_kwh_nl_eur_5_10_0']
+               | select('has_value') | first | default('') }}
+      - condition: template
+        value_template: "{{ sensor_kaal != '' and states('input_text.dynamisch_marktprijs_sensor') | trim in ['', 'unknown'] }}"
+      - action: input_text.set_value
+        target:
+          entity_id: input_text.dynamisch_marktprijs_sensor
+        data:
+          value: "{{ sensor_kaal }}"
+      - action: logbook.log
+        data:
+          name: Nordpool
+          message: "Marktprijs sensor ingevuld met {{ sensor_kaal }}"

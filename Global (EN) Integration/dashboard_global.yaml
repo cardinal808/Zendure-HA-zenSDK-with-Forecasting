@@ -4082,9 +4082,11 @@ views:
               price is negative, the installation does not export. Feed-in
               price = market price + bonus % (only when the market price is
               positive) + feed-in markup, using the fields under **Feed-in
-              price** below (also used by the savings). If your Nordpool sensor
-              is all-in, enter a sensor with the bare market price at **Market
-              price sensor**.
+              price** below (also used by the savings). Enter a sensor with the
+              bare market price at **Market price sensor** (with the Nordpool
+              package that happens automatically:
+              sensor.nordpool_kwh_nl_eur_5_10_021). Empty = Gielz' Nordpool
+              sensor, which is wrong if it is all-in.
 
 
               **Zendure Pro** (only shown for a Zendure with solar inputs, Pro or Plus): when **Disable PV export at negative prices** is on, PV
@@ -4177,7 +4179,7 @@ views:
               - type: section
                 label: Feed-in price
               - entity: input_text.dynamic_setting_market_price_sensor
-                name: Market price sensor (empty = Nordpool sensor)
+                name: Market price sensor (bare market price incl. VAT)
               - entity: input_number.savings_setting_dynamic_feedin_markup
                 name: Feed-in markup (incl. VAT)
               - entity: input_number.savings_setting_dynamic_feedin_bonus
@@ -4251,9 +4253,10 @@ views:
               **excluding VAT**; the sensor adds the VAT. All-in price (supply)
               = (market price + energy tax + markup) × (1 + VAT): enter that
               sensor in Gielz Configuration (Dynamic) and set Dynamic supply
-              markup to 0. Bare market price incl. VAT (export): enter it at
-              Market price sensor in Forecasting Configuration (Negative
-              Price).
+              markup to 0. Bare market price incl. VAT (export):
+              sensor.nordpool_kwh_nl_eur_5_10_021, filled in automatically at
+              Market price sensor in Forecasting Configuration (Negative Price)
+              when that field is empty.
             text_only: true
             visibility:
               - condition: state

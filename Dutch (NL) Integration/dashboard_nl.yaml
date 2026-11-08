@@ -4089,8 +4089,10 @@ views:
               Terugleverprijs = marktprijs + bonus % (alleen bij een positieve
               marktprijs) + opslag teruglevering, met de velden onder
               **Terugleverprijs** hieronder (ook gebruikt door de besparing).
-              Is je Nordpool-sensor all-in, vul dan bij **Marktprijs sensor**
-              een sensor met de kale marktprijs in.
+              Vul bij **Marktprijs sensor** een sensor met de kale marktprijs
+              in (met het Nordpool-pakket gebeurt dat vanzelf:
+              sensor.nordpool_kwh_nl_eur_5_10_021). Leeg = de Nordpool-sensor
+              van Gielz; die klopt niet als hij all-in is.
 
 
               **Zendure Pro** (alleen zichtbaar bij een Zendure met zon-ingangen, Pro of Plus): staat **PV-export uitschakelen bij negatieve prijzen** aan,
@@ -4184,7 +4186,7 @@ views:
               - type: section
                 label: Terugleverprijs
               - entity: input_text.dynamisch_marktprijs_sensor
-                name: Marktprijs sensor (leeg = Nordpool-sensor)
+                name: Marktprijs sensor (kale marktprijs incl. btw)
               - entity: input_number.besparing_dyn_opslag_teruglevering
                 name: Opslag teruglevering (incl. btw)
               - entity: input_number.besparing_dyn_bonus_teruglevering
@@ -4259,8 +4261,9 @@ views:
               (levering) = (marktprijs + energiebelasting + opslag) × (1 +
               btw): vul die sensor in bij Gielz Configuratie (Dynamisch) en zet
               Dynamisch opslag levering op 0. Kale marktprijs incl. btw
-              (teruglevering): vul die in bij Marktprijs sensor in Forecasting
-              Configuratie (Negatieve Prijs). Energiebelasting 2026: € 0,09161
+              (teruglevering): sensor.nordpool_kwh_nl_eur_5_10_021, wordt
+              automatisch ingevuld bij Marktprijs sensor in Forecasting
+              Configuratie (Negatieve Prijs) als dat veld leeg is. Energiebelasting 2026: € 0,09161
               per kWh zonder btw.
             text_only: true
             visibility:
