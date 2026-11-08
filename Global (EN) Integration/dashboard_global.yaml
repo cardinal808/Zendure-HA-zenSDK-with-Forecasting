@@ -4089,7 +4089,7 @@ views:
               sensor, which is wrong if it is all-in.
 
 
-              **Zendure Pro** (only shown for a Zendure with solar inputs, Pro or Plus): when **Disable PV export at negative prices** is on, PV
+              **Zendure Pro** (only shown for a Zendure with solar inputs: Pro, Plus or Hyper): when **Disable PV export at negative prices** is on, PV
               Export Disabled is turned on automatically and back off
               afterwards. It turns on by itself when you switch on No export.
               Turn it off if your Zendure has no solar panels or if you only
@@ -4159,14 +4159,14 @@ views:
               - type: conditional
                 conditions:
                   - entity: binary_sensor.zendure_has_pv_inputs
-                    state: 'on'
+                    state_not: 'off'
                 row:
                   type: section
                   label: Zendure Pro (PV inputs)
               - type: conditional
                 conditions:
                   - entity: binary_sensor.zendure_has_pv_inputs
-                    state: 'on'
+                    state_not: 'off'
                 row:
                   entity: input_boolean.negative_price_zendure_pv_export
                   name: Disable PV export at negative prices

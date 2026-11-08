@@ -4095,7 +4095,7 @@ views:
               van Gielz; die klopt niet als hij all-in is.
 
 
-              **Zendure Pro** (alleen zichtbaar bij een Zendure met zon-ingangen, Pro of Plus): staat **PV-export uitschakelen bij negatieve prijzen** aan,
+              **Zendure Pro** (alleen zichtbaar bij een Zendure met zon-ingangen: Pro, Plus of Hyper): staat **PV-export uitschakelen bij negatieve prijzen** aan,
               dan gaat PV Export Uitgeschakeld automatisch aan en daarna weer uit.
               Hij gaat vanzelf aan als je Niet terugleveren aanzet. Zet hem uit als je
               Zendure geen zonnepanelen heeft of als je alleen externe omvormers
@@ -4166,14 +4166,14 @@ views:
               - type: conditional
                 conditions:
                   - entity: binary_sensor.zendure_heeft_pv_ingangen
-                    state: 'on'
+                    state_not: 'off'
                 row:
                   type: section
                   label: Zendure Pro (PV-ingangen)
               - type: conditional
                 conditions:
                   - entity: binary_sensor.zendure_heeft_pv_ingangen
-                    state: 'on'
+                    state_not: 'off'
                 row:
                   entity: input_boolean.negatieve_prijs_zendure_pv_export
                   name: PV-export uitschakelen bij negatieve prijzen

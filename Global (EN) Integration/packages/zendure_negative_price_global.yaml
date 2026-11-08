@@ -245,14 +245,15 @@ template:
           feedin_bonus_pct: "{{ states('input_number.savings_setting_dynamic_feedin_bonus') | float(0) }}"
 
   - binary_sensor:
-      # Does the Zendure have its own solar inputs (Pro / Plus)? From Gielz' Product Model. Unknown = on,
-      # so the setting does not disappear when the product name is not known (yet).
+      # Does the Zendure have its own solar inputs (Pro, Plus, Hyper)? From Gielz' Product Model. Unknown = on,
+      # so the setting does not disappear when the product name is not known (yet). The dashboard only
+      # hides the setting when this sensor is off (sensor missing: shown).
       - name: "Zendure Has PV Inputs"
         unique_id: zendure_has_pv_inputs
         icon: mdi:solar-panel
         state: >
           {%- set p = states('sensor.zendure_product_model') | lower -%}
-          {{ p in ['', 'unknown', 'unavailable', 'none'] or 'pro' in p or 'plus' in p }}
+          {{ p in ['', 'unknown', 'unavailable', 'none'] or 'pro' in p or 'plus' in p or 'hyper' in p }}
         attributes:
           product_model: "{{ states('sensor.zendure_product_model') }}"
 
