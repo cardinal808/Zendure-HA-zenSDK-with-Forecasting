@@ -4286,9 +4286,10 @@ views:
             content: >-
               <ha-alert alert-type="info">Helptekst</ha-alert>Vul de
               all-in prijzen per kWh in (inclusief energiebelasting en btw).
-              **Vast tarief levering** en **teruglevering** komen van je
-              vaste of variabele contract; bij volledige saldering is
-              teruglevering gelijk aan levering. Bij dynamisch wordt de prijs
+              **Vast contract tarief levering** en **teruglevering**: wat je
+              met een vast of variabel contract zou betalen en krijgen, alleen
+              voor de vergelijking; bij volledige saldering is teruglevering
+              gelijk aan levering. Bij dynamisch wordt de prijs
               uit de Nordpool-sensor gebruikt plus de **opslag levering**: is je
               sensor al all-in, laat die op 0 staan (met het Nordpool-pakket is
               het veld verborgen, want die sensor is al all-in). De
@@ -4316,9 +4317,9 @@ views:
           - type: entities
             entities:
               - entity: input_number.besparing_vast_leveringsprijs
-                name: Vast tarief levering
+                name: Vast contract tarief levering
               - entity: input_number.besparing_vast_terugleverprijs
-                name: Vast tarief teruglevering
+                name: Vast contract tarief teruglevering
               - type: conditional
                 conditions:
                   - entity: input_number.nordpool_energiebelasting

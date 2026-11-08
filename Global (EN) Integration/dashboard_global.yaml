@@ -4278,9 +4278,10 @@ views:
             content: >-
               <ha-alert alert-type="info">Help text</ha-alert>Enter the
               all-in prices per kWh (including energy tax and VAT).
-              **Fixed supply tariff** and **feed-in** come from your fixed or
-              variable contract; with full net metering the feed-in price
-              equals the supply price. For dynamic, the price from the Nordpool
+              **Fixed contract supply tariff** and **feed-in tariff**: what you
+              would pay and receive with a fixed or variable contract, only for
+              the comparison; with full net metering the feed-in price equals
+              the supply price. For dynamic, the price from the Nordpool
               sensor is used plus the **supply markup**: if your sensor is
               already all-in, leave it at 0 (with the Nordpool package the field
               is hidden, because that sensor is all-in). The feed-in price
@@ -4308,9 +4309,9 @@ views:
           - type: entities
             entities:
               - entity: input_number.savings_setting_fixed_supply_price
-                name: Fixed supply tariff
+                name: Fixed contract supply tariff
               - entity: input_number.savings_setting_fixed_feedin_price
-                name: Fixed feed-in tariff
+                name: Fixed contract feed-in tariff
               - type: conditional
                 conditions:
                   - entity: input_number.nordpool_setting_energy_tax
