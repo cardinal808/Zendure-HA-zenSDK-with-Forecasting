@@ -1519,9 +1519,16 @@ template:
         {%- set t = t_cover_tomorrow_ts if t_cover_tomorrow_ts > 0 else next_sun_ts + c_cover_offset_s -%}
         {{ [t, prices_end_ts] | min }}
       path_ahead: "{{ tomorrow_known and not sun_day_is_today and t_path_tomorrow_ts > t_end_ts }}"
-      t_path_horizon_ts: "{{ t_path_tomorrow_ts if path_ahead else [t_cover_ts, t_end_ts] | min }}"
+      # Over the day: if solar covers usage before the end of the bridge, the path check still looks
+      # ahead to the end of the bridge. That way it also sees the evening peak after the solar: on a
+      # dull day solar does not fill the battery and charging in the cheap night pays off for the
+      # evening. Solar counts per detail period (direct use and surplus to the battery).
+      # Only with "Hold discharge in cheap dip": otherwise the night charge is used up in the morning.
+      path_day: "{{ not path_ahead and t_cover_ts < t_end_ts and is_state('input_boolean.forecast_setting_hold_discharge_in_dip', 'on') }}"
+      t_path_horizon_ts: "{{ t_path_tomorrow_ts if path_ahead else (t_end_ts if path_day else [t_cover_ts, t_end_ts] | min) }}"
       path_horizon_source: >
-        {%- if not path_ahead -%}Until {{ 'solar coverage' if t_cover_ts < t_end_ts else 'end of bridge' }}
+        {%- if path_day -%}Over the day until end of bridge (solar counts)
+        {%- elif not path_ahead -%}Until {{ 'solar coverage' if t_cover_ts < t_end_ts else 'end of bridge' }}
         {%- elif solar_detail_tomorrow | length > 0 and t_cover_tomorrow_ts > 0 -%}Until solar coverage tomorrow (detailed forecast)
         {%- elif t_cover_tomorrow_ts > 0 -%}Until solar coverage tomorrow (sunrise + {{ (c_cover_offset_s / 3600) | round(1) }} hours)
         {%- else -%}Until sunrise tomorrow + {{ (c_cover_offset_s / 3600) | round(1) }} hours (solar does not cover usage tomorrow){%- endif -%}
@@ -1540,7 +1547,7 @@ template:
         {%- set ns = namespace(e=([s_now - margin_dc, 0] | max) * eff_out, t=0, ev=ev_solar_today_kwh) -%}
         {%- set solar_no_detail = solar_detail | length == 0 and is_state('sun.sun', 'above_horizon') -%}
         {%- if solar_no_detail -%}{%- set ns.e = [ns.e + solar_dc * eff_out, emax] | min -%}{%- endif -%}
-        {%- if path_ahead -%}
+        {%- if path_ahead or path_day -%}
           {%- for x in path_cand | sort(attribute='s') -%}
             {%- if ns.t == 0 and x.e > now_ts and x.s < t_path_horizon_ts -%}
               {%- set a = [x.s, now_ts] | max -%}{%- set b = [x.e, t_path_horizon_ts] | min -%}
@@ -1569,7 +1576,7 @@ template:
         {{ ns.t if ns.t > 0 else t_path_horizon_ts }}
 
       t_gap_end_ts: "{{ t_path_horizon_ts }}"
-      t_gap_start_ts: "{{ [t_empty_ahead_ts if path_ahead else t_empty_plan_ts, now_ts] | max }}"
+      t_gap_start_ts: "{{ [t_empty_ahead_ts if (path_ahead or path_day) else t_empty_plan_ts, now_ts] | max }}"
       gap_hours: "{{ ([t_gap_end_ts - t_gap_start_ts, 0] | max / 3600) | round(2) }}"
       gap_load: >
         {%- set ns = namespace(k=0) -%}
@@ -1629,14 +1636,39 @@ template:
       # usage in the first expensive quarter, so the buffer is charged before the expensive
       # quarters (when that pays off).
       margin_shortfall_ac: "{{ (([margin_dc - s_now, 0] | max) * eff_out) | round(3) }}"
+      # Over the day: solar surplus after "battery empty" charges the battery again. It covers the
+      # cheapest expensive quarters after it, so nothing is charged from the grid that solar delivers.
+      gap_solar_surplus: >
+        {%- set ns = namespace(l=[]) -%}
+        {%- if path_day -%}
+          {%- for p in path_solar -%}
+            {%- set pa = [p.s, t_gap_start_ts] | max -%}{%- set pb = [p.s + c_detail_period_s, t_gap_end_ts] | min -%}
+            {%- if pb > pa and p.pv > p.kw -%}{%- set ns.l = ns.l + [{'s': pa, 'k': ((p.pv - p.kw) * (pb - pa) / 3600 * eff_in * eff_out) | round(4)}] -%}{%- endif -%}
+          {%- endfor -%}
+        {%- endif -%}
+        {{ ns.l }}
+      gap_after_solar: >
+        {%- set ns = namespace(l=gap_valuable) -%}
+        {%- for z in gap_solar_surplus -%}
+          {%- set nz = namespace(k=z.k, out=[]) -%}
+          {%- for q in ns.l | sort(attribute='v') -%}
+            {%- if q.s >= z.s and nz.k > 0 -%}
+              {%- set off = [q.kwh, nz.k] | min -%}{%- set nz.k = nz.k - off -%}
+              {%- if q.kwh - off > 0.0001 -%}{%- set nz.out = nz.out + [{'s': q.s, 'v': q.v, 'kwh': (q.kwh - off) | round(4)}] -%}{%- endif -%}
+            {%- else -%}{%- set nz.out = nz.out + [q] -%}{%- endif -%}
+          {%- endfor -%}
+          {%- set ns.l = nz.out -%}
+        {%- endfor -%}
+        {{ ns.l }}
       gap_with_margin: >
-        {%- set first = gap_valuable | sort(attribute='s') | first if gap_valuable | length > 0 else none -%}
+        {%- set first = gap_after_solar | sort(attribute='s') | first if gap_after_solar | length > 0 else none -%}
         {%- if first is not none and margin_shortfall_ac > 0 -%}
-          {{ gap_valuable + [{'s': first.s, 'v': first.v, 'kwh': margin_shortfall_ac}] }}
-        {%- else -%}{{ gap_valuable }}{%- endif -%}
+          {{ gap_after_solar + [{'s': first.s, 'v': first.v, 'kwh': margin_shortfall_ac}] }}
+        {%- else -%}{{ gap_after_solar }}{%- endif -%}
       path_allocation: >
         {%- set ns = namespace(l=[], total=0) -%}
-        {%- set max_ac = (room / eff_in) if eff_in > 0 else 0 -%}
+        {%- set space = ([room - solar_dc, 0] | max) if path_day else room -%}
+        {%- set max_ac = (space / eff_in) if eff_in > 0 else 0 -%}
         {%- if path_active and e_slot > 0 and eff_rt > 0 -%}
           {%- set charge_cand = path_cand | sort(attribute='v') -%}
           {%- for q in gap_with_margin | sort(attribute='v', reverse=true) -%}
@@ -2151,6 +2183,7 @@ template:
           pathcheck_gap_end: "{{ t_gap_end_ts | timestamp_custom('%Y-%m-%d %H:%M', true) }}"
           pathcheck_horizon: "{{ path_horizon_source }}"
           pathcheck_beyond_night: "{{ path_ahead }}"
+          pathcheck_over_day: "{{ path_day }}"
           pathcheck_solar_covers_tomorrow_from: "{{ (t_cover_tomorrow_ts | timestamp_custom('%Y-%m-%d %H:%M', true)) if t_cover_tomorrow_ts > 0 else none }}"
           pathcheck_gap_hours: "{{ gap_hours }}"
           pathcheck_solar_in_gap_kwh: "{{ gap_solar_direct }}"
