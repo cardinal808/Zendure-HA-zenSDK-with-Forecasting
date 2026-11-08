@@ -42,6 +42,7 @@ Versions follow `year.month.sequence`; the sequence restarts at 1 every month. E
 - IP addresses and serial numbers are left out. The automation does not need any changes.
 - Also in the export: the plan timeline (`sensor.zendure_forecast_chart`: charging, battery, usage, solar and SOC per quarter hour) and Gielz' spread sensors with their attributes (difference value, average cheap and expensive price), so you see what the user sees on the dashboard.
 - If the export gets too large for Home Assistant (256 kB), the largest single attributes are left out first; the planner attributes and Nord Pool's `raw_today`/`raw_tomorrow` go last. `meta.shortened` lists what was left out. Only if that is not enough, just the attribute names remain.
+- The detailed solar forecast (Solcast `detailedForecast`, compact: start and estimate per period) is always included, even when the sensor is otherwise too large, as is the `_today` sensor the planner also reads that forecast from.
 
 **New: reset usage data**
 - Button **Reset usage data** in Forecasting Configuration (Basic), with a confirmation dialog. Clears the learned usage profile (per hour and per quarter) and the 7-day history (solar production, grid, battery, average usage, self-consumption; also the car if the EV package is loaded). The planner then first uses start values and learns everything again. The savings and the measured charge power are kept.
@@ -75,6 +76,7 @@ Versions follow `year.month.sequence`; the sequence restarts at 1 every month. E
 - New **Optional packages** card on the Settings tab: per optional package whether it is loaded (✅/➖), the file and what it does, with a link to the explanation.
 - **Plan Timeline** back in the first column below PV, as one card (`custom:mod-card`, needs card-mod), without the separate colour line below it.
 - Plan for today: a line about the kWh the car still asks from the sun during the day.
+- Charge block already running: *Plan for today* now shows the time left (*4 minutes left*) next to the kWh still to come, instead of the full 15 minutes. Attribute `charge_blocks`: `minutes` is the time left for a running block, new field `running`.
 - `sensor.forecasting_version`: attribute `packages` (which optional packages are active) replaces `set`.
 
 **Clearer what is optional**
@@ -82,6 +84,9 @@ Versions follow `year.month.sequence`; the sequence restarts at 1 every month. E
 - The README has a **Packages** table: per file required or optional, what it does, what it needs and what you miss without it.
 - **Optional packages in their own folder:** `zendure_savings_global.yaml`, `zendure_ev_global.yaml`, `zendure_hvac_global.yaml` and `zendure_export_global.yaml` are now in `Global (EN) Integration/optional packages` (NL: `Dutch (NL) Integration/optional packages`), no longer in `packages`. Copying the `packages` folder gives you only the base; you add optional packages deliberately.
 - Every package has, right below the version header, the line `# OPTIONAL PACKAGE` (with what it needs) or `# REQUIRED PACKAGE`.
+
+**For developers**
+- New `tools` folder with a planner simulation: `planner_sim.py` calculates the plan outside Home Assistant with the states from a diagnostics export, `vergelijk.py` compares two planner versions on the same export. See `tools/README.md`.
 
 **Fixed**
 - **Minimal spread counted the loss twice:** the planner first subtracted the charge and discharge loss from the expensive price and then also required the minimal spread. With 25% and an 85% round trip the expensive quarter had to be about 47% more expensive than the charge quarter, and on flat days nothing was planned while Gielz showed a 35% spread. The planner now checks the minimal spread like Gielz on the gross price difference (expensive − cheap) / cheap, and separately that charging stays cheaper than buying later after the loss. Applies to today's charge slots, the path check and tomorrow's estimate.

@@ -43,6 +43,7 @@ Versies volgen `jaar.maand.volgnummer`; het volgnummer begint elke maand bij 1. 
 - IP-adressen en serienummers worden weggelaten. De automation hoeft niet aangepast te worden.
 - Ook in de export: de tijdlijn van het plan (`sensor.zendure_forecast_grafiek`: per kwartier laden, accu, verbruik, zon en SOC) en de spread-sensoren van Gielz met hun attributen (`verschil_waarde`, gemiddelde goedkope en dure prijs), zodat je ziet wat de gebruiker op het dashboard ziet.
 - Wordt de export te groot voor Home Assistant (256 kB), dan vallen eerst de grootste losse attributen weg; de attributen van de planner en `raw_today`/`raw_tomorrow` van Nord Pool als laatste. `meta.ingekort` noemt wat is weggelaten. Pas als dat niet genoeg is, blijven alleen de namen van de attributen over.
+- De zon-detailvoorspelling (Solcast `detailedForecast`, compact: begin en verwachting per periode) gaat altijd mee, ook als de sensor verder te groot is, net als de `_today`-sensor waar de planner die voorspelling ook leest.
 
 **Nieuw: verbruiksgegevens resetten**
 - Knop **Verbruiksgegevens resetten** in Forecasting Configuratie (Basis), met een bevestigingsvenster. Wist het geleerde verbruiksprofiel (per uur en per kwartier) en de historie van 7 dagen (zonproductie, net, accu, gemiddeld gebruik, zelfverbruik; ook de auto als het EV-pakket geladen is). De planner rekent daarna eerst met startwaarden en leert alles opnieuw. De besparing en het gemeten laadvermogen blijven bewaard.
@@ -76,6 +77,7 @@ Versies volgen `jaar.maand.volgnummer`; het volgnummer begint elke maand bij 1. 
 - Nieuwe kaart **Optionele pakketten** op de tab Configuratie: per optioneel pakket of het geladen is (✅/➖), het bestand en wat het doet, met een link naar de uitleg.
 - **Plan Tijdlijn** weer in de eerste kolom onder PV, als één kaart (`custom:mod-card`, card-mod nodig), zonder de losse kleurenregel eronder.
 - Plan vandaag: regel over de kWh die de auto overdag nog van de zon vraagt.
+- Laadblok dat al bezig is: *Plan vandaag* toont nu de resterende tijd (*nog 4 minuten*) bij de kWh die nog komen, in plaats van de hele 15 minuten. Attribuut `laadblokken`: `minuten` is bij een lopend blok de resterende tijd, nieuw veld `bezig`.
 - `sensor.forecasting_versie`: attribuut `pakketten` (welke optionele pakketten actief zijn) vervangt `set`.
 
 **Duidelijker wat optioneel is**
@@ -83,6 +85,9 @@ Versies volgen `jaar.maand.volgnummer`; het volgnummer begint elke maand bij 1. 
 - De README heeft een tabel **Pakketten**: per bestand vereist of optioneel, wat het doet, wat het nodig heeft en wat je mist zonder.
 - **Optionele pakketten in een eigen map:** `zendure_besparing.yaml`, `zendure_ev.yaml`, `zendure_hvac.yaml` en `zendure_export.yaml` staan nu in `Dutch (NL) Integration/optional packages` (Global: `Global (EN) Integration/optional packages`), niet meer in `packages`. Wie de map `packages` kopieert, krijgt alleen de basis; optionele pakketten zet je er bewust bij.
 - Elk pakket heeft bovenaan, onder de versiekop, de regel `# OPTIONEEL PAKKET` (met wat het nodig heeft) of `# VEREIST PAKKET`.
+
+**Voor ontwikkelaars**
+- Nieuwe map `tools` met een planner-simulatie: `planner_sim.py` rekent het plan buiten Home Assistant uit met de standen uit een diagnose-export, `vergelijk.py` zet twee versies van de planner naast elkaar op dezelfde export. Zie `tools/README.md`.
 
 **Opgelost**
 - **Minimale spread telde het verlies dubbel:** de planner trok eerst het laad- en ontlaadverlies van de dure prijs af en eiste daarna nóg de minimale spread. Bij 25% en een round-trip van 85% moest het dure kwartier zo'n 47% duurder zijn dan het laadkwartier, en op vlakke dagen werd niets gepland terwijl Gielz 35% spread toonde. Nu toetst de planner de minimale spread net als Gielz op het bruto prijsverschil (duur − goedkoop) / goedkoop, en daarnaast apart dat laden na verlies goedkoper blijft dan later inkopen. Geldt voor de laadslots van vandaag, de pad-check en de indicatie voor morgen.

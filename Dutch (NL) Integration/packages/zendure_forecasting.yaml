@@ -2143,10 +2143,11 @@ template:
             {%- endfor -%}
             {{ ns.l }}
           # Laadblokken vandaag: aaneengesloten slots met duur, kWh en gemiddelde prijs
+          # (een lopend blok: bezig = true, minuten en kWh alleen wat nog komt)
           laadblokken: >
             {%- set ns = namespace(l=[]) -%}
             {%- for b in blokken_vandaag -%}
-              {%- set ns.l = ns.l + [{'dag': 'morgen' if (b.s | timestamp_custom('%Y-%m-%d', true)) != (nu_ts | timestamp_custom('%Y-%m-%d', true)) else 'vandaag', 'start': b.s | timestamp_custom('%H:%M', true), 'eind': b.e | timestamp_custom('%H:%M', true), 'minuten': ((b.e - b.s) / 60) | round(0) | int, 'kwh': b.kwh | round(2), 'prijs': (b.som / b.n) | round(3)}] -%}
+              {%- set ns.l = ns.l + [{'dag': 'morgen' if (b.s | timestamp_custom('%Y-%m-%d', true)) != (nu_ts | timestamp_custom('%Y-%m-%d', true)) else 'vandaag', 'start': b.s | timestamp_custom('%H:%M', true), 'eind': b.e | timestamp_custom('%H:%M', true), 'minuten': ((b.e - [b.s, nu_ts] | max) / 60) | round(0) | int, 'bezig': b.s <= nu_ts, 'kwh': b.kwh | round(2), 'prijs': (b.som / b.n) | round(3)}] -%}
             {%- endfor -%}
             {{ ns.l }}
           # --- Uitleg van het plan in gewone taal (voor het dashboard) ---

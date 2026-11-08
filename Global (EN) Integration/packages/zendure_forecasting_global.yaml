@@ -2143,10 +2143,11 @@ template:
             {%- endfor -%}
             {{ ns.l }}
           # Charge blocks today: adjacent slots with duration, kWh and average price
+          # (a running block: running = true, minutes and kWh only what is still to come)
           charge_blocks: >
             {%- set ns = namespace(l=[]) -%}
             {%- for b in blocks_today -%}
-              {%- set ns.l = ns.l + [{'day': 'tomorrow' if (b.s | timestamp_custom('%Y-%m-%d', true)) != (now_ts | timestamp_custom('%Y-%m-%d', true)) else 'today', 'start': b.s | timestamp_custom('%H:%M', true), 'end': b.e | timestamp_custom('%H:%M', true), 'minutes': ((b.e - b.s) / 60) | round(0) | int, 'kwh': b.kwh | round(2), 'price': (b.sum / b.n) | round(3)}] -%}
+              {%- set ns.l = ns.l + [{'day': 'tomorrow' if (b.s | timestamp_custom('%Y-%m-%d', true)) != (now_ts | timestamp_custom('%Y-%m-%d', true)) else 'today', 'start': b.s | timestamp_custom('%H:%M', true), 'end': b.e | timestamp_custom('%H:%M', true), 'minutes': ((b.e - [b.s, now_ts] | max) / 60) | round(0) | int, 'running': b.s <= now_ts, 'kwh': b.kwh | round(2), 'price': (b.sum / b.n) | round(3)}] -%}
             {%- endfor -%}
             {{ ns.l }}
           # --- Plain-language explanation of the plan (for the dashboard) ---

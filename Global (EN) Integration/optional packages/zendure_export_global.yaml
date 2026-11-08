@@ -234,10 +234,22 @@ script:
                    'attributes': dict(na.a)}]] -%}
             {%- endfor -%}
             {#- External entities entered in the input fields (solar forecast, Nordpool, AC, ...) -#}
-            {%- for s in expand(ns.ent_ext | unique | list) -%}
+            {#- Also the _today variant of the remaining-today sensor (the planner reads the detailed forecast there) -#}
+            {%- set ext_ids = ns.ent_ext + (ns.ent_ext | select('search', '_remaining_today') | map('replace', '_remaining_today', '_today') | list) -%}
+            {%- for s in expand(ext_ids | unique | list) -%}
               {%- set a = dict(s.attributes) -%}
+              {%- set at = a if (j(a) | length) < 1500 else {'(too large, names only)': a.keys() | list} -%}
+              {#- Detailed solar forecast (Solcast) always included, compact: only start and estimate per period -#}
+              {%- set det = a.get('detailedForecast') or a.get('detailed_forecast') or [] -%}
+              {%- if det | length > 0 -%}
+                {%- set nd = namespace(l=[]) -%}
+                {%- for p in det if p is mapping and p.period_start is defined -%}
+                  {%- set nd.l = nd.l + [{'period_start': p.period_start | string, 'pv_estimate': p.pv_estimate | default(0)}] -%}
+                {%- endfor -%}
+                {%- set at = dict(at, detailedForecast=nd.l) -%}
+              {%- endif -%}
               {%- set ns.ext = ns.ext + [[s.entity_id, {'state': s.state, 'last_changed': s.last_changed.isoformat(),
-                   'attributes': a if (j(a) | length) < 1500 else {'(too large, names only)': a.keys() | list}}]] -%}
+                   'attributes': at}]] -%}
             {%- endfor -%}
             {#- Zendure automations -#}
             {%- for s in states.automation if (s.object_id ~ ' ' ~ s.name) is search('(?i)zendure|gielz|forecast') -%}
