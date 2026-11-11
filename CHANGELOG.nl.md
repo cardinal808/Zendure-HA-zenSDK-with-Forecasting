@@ -2,6 +2,13 @@
 
 Versies volgen `jaar.maand.volgnummer`; het volgnummer begint elke maand bij 1. Elke versie vermeldt op welke Gielz-versie hij is gebaseerd. [English](CHANGELOG.md)
 
+## 2026.11.4 — gebaseerd op Gielz v20261007
+
+**Fix voor nieuwe Zendure-firmware** *(vooruitlopend op Gielz)*
+- Met de nieuwe Zendure-firmware klopt het veld `pvStatus` niet meer. Daardoor rekende *Zendure 2400 AC Vermogen Aansturing* ook zonder zon met de PV-velden en gaf een verkeerd accuvermogen door aan de planner, NOM en negatieve prijs.
+- *Vermogen Aansturing* en de PV-sensoren (*PV Naar Huis*, *PV Totaal*, *PV Naar Batterij*) bepalen nu alleen uit `solarInputPower > 0` of `gridOffPower < 0` of er zon binnenkomt. De oude regels staan als Jinja-commentaar in `zendure_gielz1986_nl.yaml`.
+- Werkt ook op de oude firmware. Na het bijwerken Home Assistant herstarten (REST-sensoren).
+
 ## 2026.11.3 — gebaseerd op Gielz v20261007
 
 **Nieuw: elektrische auto** *(optioneel pakket)*

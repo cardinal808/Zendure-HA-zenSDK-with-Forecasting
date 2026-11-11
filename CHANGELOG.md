@@ -2,6 +2,13 @@
 
 Versions follow `year.month.sequence`; the sequence restarts at 1 every month. Each version states which Gielz version it is based on. [Nederlands](CHANGELOG.nl.md)
 
+## 2026.11.4 — based on Gielz v20261007
+
+**Fix for new Zendure firmware** *(ahead of Gielz)*
+- With the new Zendure firmware the `pvStatus` field is no longer reliable. *Zendure Power* then used the PV fields even without sun and passed a wrong battery power to the planner, Smart Matching and negative price.
+- *Zendure Power* and the PV sensors (*Power PV To Home*, *Power PV Total*, *Power PV To Battery*) now only use `solarInputPower > 0` or `gridOffPower < 0` to decide whether solar is coming in. The old lines are kept as Jinja comments in `zendure_gielz1986_global.yaml`.
+- Also works on the old firmware. Restart Home Assistant after updating (REST sensors).
+
 ## 2026.11.3 — based on Gielz v20261007
 
 **New: electric car** *(optional package)*
