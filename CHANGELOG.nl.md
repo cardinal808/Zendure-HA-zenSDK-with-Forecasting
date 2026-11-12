@@ -2,6 +2,34 @@
 
 Versies volgen `jaar.maand.volgnummer`; het volgnummer begint elke maand bij 1. Elke versie vermeldt op welke Gielz-versie hij is gebaseerd. [English](CHANGELOG.md)
 
+## 2026.11.5 (in ontwikkeling) — gebaseerd op Gielz v20261007
+
+**Slim vasthouden als eigen schakelaar**
+- Nieuwe schakelaar **Slim vasthouden** (`input_boolean.forecast_slim_vasthouden`) in Forecasting Configuratie (Basis). Slim vasthouden (haalt de accu het niet, dan bewaart hij zijn lading voor de duurste kwartieren) hing tot nu toe aan *Niet ontladen in goedkoop dal*. Stond die uit, dan ontlaadde de accu 's ochtends bij lage prijzen en kocht het huis de avondpiek in. Slim vasthouden kost geen extra verlies en staat nu standaard **aan**, ook als de dal-schakelaar uit staat (eenmalig gezet na de upgrade; daarna blijft je keuze staan).
+- De pad-check over de dag heen werkt met de dal-schakelaar **of** slim vasthouden.
+- **Kleine bijlaadslots blokkeren slim vasthouden niet meer:** pas vanaf 0,5 kWh gepland netladen vóór het einde van het gat gaat slim vasthouden uit. Een restje telt mee in wat de accu kan leveren.
+- **Nieuw: vasthouden tussen laadslots** (hoort bij slim vasthouden). Is er later een laadslot gepland en is de prijs nu lager dan dat slot na laad- en ontlaadverlies (prijs slot / rendement), dan levert de accu nu niet: wat hij nu levert, moet daar met verlies weer worden bijgeladen. Voorkomt dat de accu 's nachts tussen twee laadblokken ontlaadt en daarna duurder wordt bijgeladen. Attribuut `tussen_laden_vasthouden`.
+
+**Laden in Dynamisch NOM + Forecasting**
+- **Opgelost: "laden gestart" elke 2 minuten terwijl de accu ontlaadt.** Gielz' controle *Dynamisch laden loopt status is foutief* zette het laden na 30 seconden uit als het geen goedkoopste periode van Gielz was, ook als de planner een laadslot had. Daarna begon de planner na 2 minuten opnieuw. De controle geldt nu niet meer in Dynamisch NOM + Forecasting.
+- **Nieuw: Forecasting-laadcontrole.** Loopt het laden nog terwijl de planner al een minuut geen *Laden* meer zegt (bv. na een herstart van Home Assistant midden in een laadslot), dan stopt de automation het laden en gaat terug naar NOM.
+
+**Gemeten laadvermogen zonder balanceer-staart**
+- `sensor.forecast_netladen_vermogen` meet alleen nog tot 10% onder het maximale laadpercentage. Aan het eind van een lading zakt het vermogen (balanceren tussen de accu's); dat trok het gemeten laadvermogen omlaag (bij een gebruiker 559 W bij 2,4 kW), waardoor de planner met veel te veel kwartieren rekende.
+- *Gemeten Laadvermogen* gebruikt nu de mediaan in plaats van het gemiddelde. Oude lage metingen vallen binnen 14 dagen weg; sneller met *Verbruiksgegevens resetten*.
+
+**Invoer en herkenning**
+- **Invoervelden opgeschoond:** een nieuwe automatisering zet ingevulde entiteiten om naar kleine letters zonder spaties (bv. `Sensor .solcast_…` van autocorrectie op een telefoon wordt `sensor.solcast_…`). Geldt voor de forecasting-, negatieve-prijs-, Nordpool-, EV- en HVAC-velden en Gielz' Nordpool- en afwijkende P1-sensor. Staat in het logboek.
+- **HomeWizard in een Nederlandstalige Home Assistant** wordt nu automatisch herkend (`sensor.p1_meter_energie_import` / `_export`).
+- **Melding op het dashboard** (tab Zendure, Forecasting) als de zonnepanelen-teller of een eigen net-teller niet naar een bestaande sensor wijst.
+- **Verbruiksprofiel leert door zonder geldige zonnepanelen-teller:** is het veld leeg of bestaat de sensor niet, dan rekent het profiel met 0 zonproductie (eerder stopte het leren helemaal). Valt de teller even weg, dan blijft de vorige meting staan in plaats van te verdwijnen.
+- **Opslag teruglevering:** bereik nu −0,50 tot 0,50 €/kWh (was −1 tot 1) en een waarschuwing in Forecasting Configuratie (Negatieve Prijs) bij een opslag buiten −0,10 tot 0,10. Een opslag van −1,00 maakte de terugleverprijs altijd negatief en blokkeerde teruglevering permanent.
+- **Diagnose-export:** `meta.ontbrekende_helpers` (verwachte instellingen die niet bestaan) en `meta.ingevuld_maar_bestaat_niet` (ingevulde entiteiten die niet bestaan).
+
+**Upgraden**
+- Vervang `zendure_forecasting.yaml`, `zendure_negatieve_prijs.yaml`, de automation en het dashboard (optioneel ook `zendure_export.yaml`) en **herstart** Home Assistant (nieuwe helpers). Plak het dashboard opnieuw via de Raw configuratie-editor.
+- Na de herstart staat *Slim vasthouden* aan. Wil je het gedrag van vóór deze versie met de dal-schakelaar uit, zet *Slim vasthouden* dan uit.
+
 ## 2026.11.4 — gebaseerd op Gielz v20261007
 
 **Fix voor nieuwe Zendure-firmware** *(vooruitlopend op Gielz)*

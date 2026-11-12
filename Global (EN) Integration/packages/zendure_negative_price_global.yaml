@@ -126,8 +126,9 @@ input_number:
   savings_setting_dynamic_feedin_markup:
     name: Savings Dynamic Feed-in Markup
     icon: mdi:cash-minus
-    min: -1
-    max: 1
+    # Realistic is −0.05 to 0; −1 (the old minimum) blocked export permanently
+    min: -0.5
+    max: 0.5
     step: 0.0001
     mode: box
     unit_of_measurement: "€/kWh"

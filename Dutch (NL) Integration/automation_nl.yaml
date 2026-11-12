@@ -674,6 +674,12 @@ actions:
             entity_id: input_boolean.dynamisch_laden_loopt
             state:
               - 'on'
+          - alias: Niet in Forecasting (daar plant de planner, niet de goedkoopste periode van Gielz)
+            condition: not
+            conditions:
+              - condition: state
+                entity_id: input_select.zendure_2400_ac_modus_selecteren
+                state: Dynamisch NOM + Forecasting
         sequence:
           - action: input_boolean.turn_off
             target:
@@ -688,6 +694,39 @@ actions:
               entity_id: input_select.zendure_2400_ac_modus_selecteren
               name: ' '
         alias: Dynamisch laden controle
+      - conditions:
+          - condition: trigger
+            id:
+              - aansturing_trigger
+          - condition: state
+            entity_id: input_select.zendure_2400_ac_modus_selecteren
+            state: Dynamisch NOM + Forecasting
+          - alias: Laden loopt, maar de planner zegt al een minuut niet Laden (bv. na een herstart)
+            condition: state
+            entity_id: input_boolean.dynamisch_laden_loopt
+            state:
+              - 'on'
+          - condition: template
+            value_template: >-
+              {{ not is_state('sensor.zendure_forecast_plan', 'Laden')
+                 and (as_timestamp(now()) - as_timestamp(states.sensor.zendure_forecast_plan.last_changed, 0)) > 60 }}
+        sequence:
+          - action: input_boolean.turn_off
+            target:
+              entity_id:
+                - input_boolean.dynamisch_laden_loopt
+            data: {}
+          - action: rest_command.zendure_stop_met_alles
+            data:
+              sn: '{{ states(''sensor.zendure_2400_ac_serienummer'') }}'
+          - action: logbook.log
+            data:
+              message: >-
+                ⚠️Dynamisch NOM + Forecasting laden loopt nog, maar er is geen laadslot.
+                Laden gestopt —
+              entity_id: input_select.zendure_2400_ac_modus_selecteren
+              name: ' '
+        alias: Dynamisch NOM + Forecasting laden controle
       - conditions:
           - condition: trigger
             id:

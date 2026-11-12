@@ -77,6 +77,15 @@ input_boolean:
   forecast_dal_ontladen_blokkeren:
     name: Forecast Niet Ontladen In Goedkoop Dal
     icon: mdi:battery-lock
+  # Slim vasthouden: haalt de accu het niet, dan krijgt de lading de duurste kwartieren.
+  # Staat standaard aan (eenmalig gezet door de automatisering onderaan).
+  forecast_slim_vasthouden:
+    name: Forecast Slim Vasthouden
+    icon: mdi:battery-clock
+  # Intern: slim vasthouden is al eens standaard aangezet
+  forecast_slim_vasthouden_ingesteld:
+    name: Forecast Slim Vasthouden Ingesteld
+    icon: mdi:robot
   forecast_tonen_op_dashboard:
     name: Forecasting Tonen Op Dashboard
     icon: mdi:calendar-clock
@@ -170,7 +179,8 @@ sensor:
     name: "Forecast Gemeten Laadvermogen"
     unique_id: forecast_gemeten_laadvermogen
     entity_id: sensor.forecast_netladen_vermogen
-    state_characteristic: mean
+    # Mediaan: een paar lage metingen (bv. aan het eind van een lading) trekken hem niet omlaag
+    state_characteristic: median
     max_age:
       days: 14
     sampling_size: 3000
@@ -247,7 +257,9 @@ sensor:
     precision: 2
 
 template:
-  # Laadvermogen uit het net zoals de accu het echt haalt (> 300 W). Buiten het netladen houdt de
+  # Laadvermogen uit het net zoals de accu het echt haalt (> 300 W), alleen tot 10% onder het
+  # maximale laadpercentage: aan het eind van een lading zakt het vermogen (balanceren), en dat
+  # zegt niets over wat een laadslot oplevert. Buiten het netladen houdt de
   # sensor zijn laatste meting (ook na een herstart), zodat de statistiek Gemeten Laadvermogen
   # beschikbaar blijft en alleen echte laadsessies meetelt. Was: niet beschikbaar buiten het
   # netladen, waardoor de planner bijna altijd met het ingestelde vermogen rekende.
@@ -265,12 +277,14 @@ template:
         availability: >
           {% set laden = [states('sensor.zendure_2400_ac_vermogen_aansturing') | float(0), 0] | max %}
           {% set import_w = [states('sensor.p1_aansturing_vermogen') | float(0), 0] | max %}
-          {{ (has_value('sensor.p1_aansturing_vermogen') and has_value('sensor.zendure_2400_ac_vermogen_aansturing') and ([import_w, laden] | min) > 300)
+          {% set onder_staart = states('sensor.zendure_2400_ac_laadpercentage') | float(100) <= states('sensor.zendure_2400_ac_maximale_laadpercentage') | float(100) - 10 %}
+          {{ (has_value('sensor.p1_aansturing_vermogen') and has_value('sensor.zendure_2400_ac_vermogen_aansturing') and ([import_w, laden] | min) > 300 and onder_staart)
              or this.state | is_number }}
         state: >
           {% set laden = [states('sensor.zendure_2400_ac_vermogen_aansturing') | float(0), 0] | max %}
           {% set import_w = [states('sensor.p1_aansturing_vermogen') | float(0), 0] | max %}
-          {% if has_value('sensor.p1_aansturing_vermogen') and has_value('sensor.zendure_2400_ac_vermogen_aansturing') and ([import_w, laden] | min) > 300 %}
+          {% set onder_staart = states('sensor.zendure_2400_ac_laadpercentage') | float(100) <= states('sensor.zendure_2400_ac_maximale_laadpercentage') | float(100) - 10 %}
+          {% if has_value('sensor.p1_aansturing_vermogen') and has_value('sensor.zendure_2400_ac_vermogen_aansturing') and ([import_w, laden] | min) > 300 and onder_staart %}
             {{ [import_w, laden] | min | round(0) }}
           {% else %}
             {{ this.state }}
@@ -410,10 +424,12 @@ template:
       p1_import_groepen:
         - ['sensor.energy_consumed_tariff_1', 'sensor.energy_consumed_tariff_2']
         - ['sensor.p1_meter_energy_import']
+        - ['sensor.p1_meter_energie_import']
         - ['sensor.electricity_meter_energy_consumption_tarif_1', 'sensor.electricity_meter_energy_consumption_tarif_2']
       p1_export_groepen:
         - ['sensor.energy_produced_tariff_1', 'sensor.energy_produced_tariff_2']
         - ['sensor.p1_meter_energy_export']
+        - ['sensor.p1_meter_energie_export']
         - ['sensor.electricity_meter_energy_production_tarif_1', 'sensor.electricity_meter_energy_production_tarif_2']
       p1_import_eigen: >
         {{ (states('input_text.forecast_net_import_teller_sensor') | lower).split(',') | map('trim') | select('match', '^sensor\\.[a-z0-9_]+$') | list }}
@@ -708,17 +724,19 @@ template:
       # Airco zolang hij niet uit de accu mag (zendure_hvac.yaml) telt ook niet mee. Zonder pakket 0.
       t_hvac: "{{ states('sensor.hvac_apart_totaal') | float(-1) }}"
       t_prod: >
-        {% set e = states('input_text.forecast_zon_productie_sensor') %}
-        {% if e | lower | regex_match('^sensor\\..+') and has_value(e) %}
+        {% set e = states('input_text.forecast_zon_productie_sensor') | lower | replace(' ', '') %}
+        {% if e | regex_match('^sensor\\..+') and has_value(e) %}
           {% set u = state_attr(e, 'unit_of_measurement') %}
           {% set v = states(e) | float(-1) %}
           {% if v < 0 %}-1{% elif u == 'Wh' %}{{ v / 1000 }}{% elif u == 'MWh' %}{{ v * 1000 }}{% else %}{{ v }}{% endif %}
+        {% elif not e | regex_match('^sensor\\..+') or (states(e) == 'unknown' and state_attr(e, 'friendly_name') is none) %}-2
         {% else %}-1{% endif %}
       vorige: "{{ state_attr(profiel, 'meting') }}"
       vorige_k: "{{ state_attr(profiel, 'meting_kwartier') }}"
       # 's Nachts mag de omvormer offline zijn: dan geldt de vorige stand (geen productie)
       prod_nu: >
         {% if t_prod >= 0 %}{{ t_prod }}
+        {% elif t_prod == -2 %}0
         {% elif vorige_k is mapping and not is_state('sun.sun', 'above_horizon') %}{{ vorige_k.prod }}
         {% elif vorige is mapping and not is_state('sun.sun', 'above_horizon') %}{{ vorige.prod }}
         {% else %}-1{% endif %}
@@ -902,11 +920,11 @@ template:
           # Tellerstand voor de berekening over een uur (alleen op het hele uur bijgewerkt)
           meting: >
             {% if heel_uur %}
-              {% if meting_ok %}{{ {'ts': nu_ts | round(0), 'imp': t_imp, 'exp': t_exp, 'prod': prod_nu, 'laden': t_laden, 'ontl': t_ontl, 'ev': ev_nu, 'hvac': hvac_nu, 'dagtype': dagtype_nu} }}{% else %}{{ none }}{% endif %}
+              {% if meting_ok %}{{ {'ts': nu_ts | round(0), 'imp': t_imp, 'exp': t_exp, 'prod': prod_nu, 'laden': t_laden, 'ontl': t_ontl, 'ev': ev_nu, 'hvac': hvac_nu, 'dagtype': dagtype_nu} }}{% else %}{{ vorige }}{% endif %}
             {% else %}{{ vorige }}{% endif %}
           # Tellerstand voor de berekening over een kwartier
           meting_kwartier: >
-            {% if meting_ok %}{{ {'ts': nu_ts | round(0), 'imp': t_imp, 'exp': t_exp, 'prod': prod_nu, 'laden': t_laden, 'ontl': t_ontl, 'ev': ev_nu, 'hvac': hvac_nu, 'dagtype': dagtype_nu} }}{% else %}{{ none }}{% endif %}
+            {% if meting_ok %}{{ {'ts': nu_ts | round(0), 'imp': t_imp, 'exp': t_exp, 'prod': prod_nu, 'laden': t_laden, 'ontl': t_ontl, 'ev': ev_nu, 'hvac': hvac_nu, 'dagtype': dagtype_nu} }}{% else %}{{ vorige_k }}{% endif %}
 
   # -------------------------------------------------------------------
   # 4. DE PLANNER
@@ -931,6 +949,7 @@ template:
           - input_number.forecast_laad_marge
           - input_number.forecast_betrouwbaarheid
           - input_boolean.forecast_dal_ontladen_blokkeren
+          - input_boolean.forecast_slim_vasthouden
           - sensor.forecast_gemeten_laadvermogen
           - input_number.dynamisch_minimale_spread
           - input_number.zendure_2400_ac_max_oplaadvermogen
@@ -951,6 +970,7 @@ template:
       c_laden_start_kwh: 0.3             # vanaf dit netladen (kWh) begint een laadronde
       c_laden_stop_kwh: 0.05             # onder dit restant (kWh) stopt een laadronde
       c_vasthouden_min_verschil: 0.01    # slim vasthouden: prijs nu minstens zoveel (€/kWh) onder de grensprijs
+      c_vasthouden_laden_min_kwh: 0.5    # slim vasthouden: pas uit bij minstens zoveel gepland netladen (kWh) vóór het einde van het gat
       c_laden_min_w: 500                 # gemeten laadvermogen onder dit niveau wordt genegeerd
       c_prijs_noemer: 0.02               # ondergrens in prijsvergelijkingen (EUR/kWh)
       c_pad_min_uren: 0.25               # pad-check pas bij een gat van minstens 15 minuten
@@ -1526,8 +1546,11 @@ template:
       # pad-check toch door tot het einde van de overbrugging. Zo ziet hij ook de avondpiek ná de zon:
       # op een sombere dag vult de zon de accu niet en loont laden in de goedkope nacht voor de avond.
       # De zon telt per detailperiode mee (direct verbruik en overschot naar de accu).
-      # Alleen met "Niet ontladen in goedkoop dal": anders gaat de nachtstroom 's ochtends al op.
-      pad_dag: "{{ not pad_verder and t_zon_dek_ts < t_end_ts and is_state('input_boolean.forecast_dal_ontladen_blokkeren', 'on') }}"
+      # Alleen met "Niet ontladen in goedkoop dal" of "Slim vasthouden": anders gaat de nachtstroom
+      # 's ochtends al op. Beide houden de nachtlading vast tot de duurdere kwartieren.
+      pad_dag: >
+        {{ not pad_verder and t_zon_dek_ts < t_end_ts
+           and (is_state('input_boolean.forecast_dal_ontladen_blokkeren', 'on') or is_state('input_boolean.forecast_slim_vasthouden', 'on')) }}
       t_pad_horizon_ts: "{{ t_pad_morgen_ts if pad_verder else (t_end_ts if pad_dag else [t_zon_dek_ts, t_end_ts] | min) }}"
       pad_horizon_bron: >
         {%- if pad_dag -%}Over de dag heen tot einde overbrugging (zon telt mee)
@@ -1891,9 +1914,13 @@ template:
           {%- endif -%}
         {%- endfor -%}
         {{ ns.l }}
-      vh_laden_gepland: "{{ gekozen | selectattr('e', 'gt', nu_ts) | selectattr('s', 'lt', t_gap_eind_ts) | list | length > 0 }}"
+      # Gepland netladen vóór het einde van het gat (kWh AC). Een restje (bv. twee bijlaadslots met een
+      # bijna volle accu) zet slim vasthouden niet uit; het telt mee in wat de accu kan leveren.
+      vh_gepland_ac: >
+        {{ ([(gekozen | selectattr('e', 'gt', nu_ts) | selectattr('s', 'lt', t_gap_eind_ts) | list | length) * e_slot, gepland_ac] | min) | round(3) }}
+      vh_laden_gepland: "{{ vh_gepland_ac >= c_vasthouden_laden_min_kwh }}"
       vh_grens: >
-        {%- set ns = namespace(e=s_nu * eff_out, p=none) -%}
+        {%- set ns = namespace(e=(s_nu + [vh_gepland_ac * eff_in, room] | min) * eff_out, p=none) -%}
         {%- set totaal = vh_kwartieren | map(attribute='kwh') | sum -%}
         {%- if ns.e > 0 and totaal > ns.e -%}
           {%- for q in vh_kwartieren | sort(attribute='v', reverse=true) -%}
@@ -1902,11 +1929,18 @@ template:
         {%- endif -%}
         {{ ns.p }}
       slim_vasthouden: >
-        {{ is_state('input_boolean.forecast_dal_ontladen_blokkeren', 'on') and prijzen_ok and prijs_nu < 999
+        {{ is_state('input_boolean.forecast_slim_vasthouden', 'on') and prijzen_ok and prijs_nu < 999 and not slot_nu
            and not vh_laden_gepland and vh_grens is number and zon_dc <= room
            and prijs_nu < vh_grens - c_vasthouden_min_verschil }}
       # Vooraf ontladen gaat voor: in de kwartieren boven de grensprijs niet vasthouden
-      ontladen_vasthouden: "{{ (dal_vasthouden or slim_vasthouden) and not vo_ontladen_nu }}"
+      # Tussen laadslots: wat de accu nu levert, laadt een later gepland slot weer bij (met verlies).
+      # Is de prijs nu lager dan dat slot na laad- en ontlaadverlies (prijs slot / rendement), dan is
+      # direct inkopen goedkoper en houdt de accu vast. Hoort bij Slim vasthouden (kost geen verlies).
+      tussen_laden_vasthouden: >
+        {%- set later = gekozen | selectattr('s', 'gt', nu_ts) | list -%}
+        {{ is_state('input_boolean.forecast_slim_vasthouden', 'on') and prijzen_ok and prijs_nu < 999 and not slot_nu
+           and later | length > 0 and eff_rt > 0 and prijs_nu < (later | map(attribute='v') | max) / eff_rt }}
+      ontladen_vasthouden: "{{ (dal_vasthouden or slim_vasthouden or tussen_laden_vasthouden) and not vo_ontladen_nu }}"
 
       # ---- Accu leeg (voor het dashboard) ----------------------------------
       # Zoals het plan het verwacht: zon van vandaag (en morgen) telt mee, in goedkope dalen levert
@@ -1915,7 +1949,7 @@ template:
       # laadslots tellen niet mee (zoals voorheen). Alleen voor de weergave, het plan rekent met
       # t_leeg_plan_ts / t_leeg_verder_ts.
       vh_plan_actief: >
-        {{ is_state('input_boolean.forecast_dal_ontladen_blokkeren', 'on') and prijzen_ok
+        {{ is_state('input_boolean.forecast_slim_vasthouden', 'on') and prijzen_ok
            and not vh_laden_gepland and vh_grens is number and zon_dc <= room }}
       t_leeg_toon_ts: >
         {%- set emax = s_max * eff_out -%}
@@ -2207,6 +2241,7 @@ template:
           in_dal: "{{ in_dal }}"
           ontladen_vasthouden: "{{ ontladen_vasthouden }}"
           slim_vasthouden: "{{ slim_vasthouden }}"
+          tussen_laden_vasthouden: "{{ tussen_laden_vasthouden }}"
           vasthouden_grensprijs: "{{ vh_grens }}"
           # --- Vooraf ontladen voor een negatieve terugleverprijs ---
           vooraf_ontladen: "{{ vo_actief }}"
@@ -2382,6 +2417,92 @@ template:
 #    blijft bewaard. Forecast Gemeten Laadvermogen blijft ook staan.
 # ---------------------------------------------------------------------
 automation:
+  # Slim vasthouden staat standaard aan: een nieuwe input_boolean begint in HA uit, en
+  # initial: true zou hem bij elke herstart terugzetten. Daarom eenmalig aanzetten; daarna
+  # blijft de keuze van de gebruiker staan.
+  - id: forecast_slim_vasthouden_standaard
+    alias: Forecast Slim Vasthouden Standaard Aan
+    description: >-
+      Forecasting 2026.11.5 - Zet Slim vasthouden eenmalig aan (na installatie of upgrade).
+    mode: single
+    triggers:
+      - trigger: homeassistant
+        event: start
+      - trigger: state
+        entity_id: input_boolean.forecast_slim_vasthouden_ingesteld
+        to: 'off'
+    conditions:
+      - condition: state
+        entity_id: input_boolean.forecast_slim_vasthouden_ingesteld
+        state: 'off'
+    actions:
+      - delay:
+          seconds: 5
+      - action: input_boolean.turn_on
+        target:
+          entity_id:
+            - input_boolean.forecast_slim_vasthouden
+            - input_boolean.forecast_slim_vasthouden_ingesteld
+
+  # Invoervelden met een entiteit opschonen: op een telefoon maakt autocorrectie er snel
+  # "Sensor .solcast_..." van (hoofdletter, spatie). Zo'n veld wordt dan niet herkend. Deze
+  # automatisering zet het om naar kleine letters zonder spaties (ook bij komma-lijsten).
+  - id: forecast_invoervelden_opschonen
+    alias: Forecast Invoervelden Opschonen
+    description: >-
+      Forecasting 2026.11.5 - Zet ingevulde entiteiten om naar kleine letters zonder spaties.
+    mode: queued
+    max: 5
+    triggers:
+      - trigger: homeassistant
+        event: start
+      - trigger: state
+        entity_id:
+          - input_text.forecast_zon_resterend_vandaag_sensor
+          - input_text.forecast_zon_morgen_sensor
+          - input_text.forecast_zon_productie_sensor
+          - input_text.forecast_net_import_teller_sensor
+          - input_text.forecast_net_export_teller_sensor
+          - input_text.afwijkende_p1_sensor
+          - input_text.dynamisch_nordpool_sensor
+          - input_text.dynamisch_marktprijs_sensor
+          - input_text.negatieve_prijs_omvormer_limiet
+          - input_text.negatieve_prijs_omvormer_vermogen_sensor
+          - input_text.negatieve_prijs_omvormer_limiet_secundair
+          - input_text.hvac_sensor
+          - input_text.hvac_vermogen_sensor
+          - input_text.ev_vermogen_sensor
+          - input_text.ev_schakelaar
+        not_to:
+          - unknown
+          - unavailable
+    conditions: []
+    actions:
+      - variables:
+          velden: >
+            {%- set ns = namespace(l=[]) -%}
+            {%- for e in ['input_text.forecast_zon_resterend_vandaag_sensor', 'input_text.forecast_zon_morgen_sensor', 'input_text.forecast_zon_productie_sensor', 'input_text.forecast_net_import_teller_sensor', 'input_text.forecast_net_export_teller_sensor', 'input_text.afwijkende_p1_sensor', 'input_text.dynamisch_nordpool_sensor', 'input_text.dynamisch_marktprijs_sensor', 'input_text.negatieve_prijs_omvormer_limiet', 'input_text.negatieve_prijs_omvormer_vermogen_sensor', 'input_text.negatieve_prijs_omvormer_limiet_secundair', 'input_text.hvac_sensor', 'input_text.hvac_vermogen_sensor', 'input_text.ev_vermogen_sensor', 'input_text.ev_schakelaar'] -%}
+              {%- set oud = states(e) -%}
+              {%- if oud not in ['unknown', 'unavailable'] -%}
+                {%- set nieuw = oud | lower | regex_replace('\\s+', '') -%}
+                {%- if nieuw != oud -%}{%- set ns.l = ns.l + [{'e': e, 'oud': oud, 'nieuw': nieuw}] -%}{%- endif -%}
+              {%- endif -%}
+            {%- endfor -%}
+            {{ ns.l }}
+      - repeat:
+          for_each: "{{ velden }}"
+          sequence:
+            - action: input_text.set_value
+              target:
+                entity_id: "{{ repeat.item.e }}"
+              data:
+                value: "{{ repeat.item.nieuw }}"
+            - action: logbook.log
+              data:
+                name: Zendure Forecasting
+                message: "Invoerveld opgeschoond: '{{ repeat.item.oud }}' wordt '{{ repeat.item.nieuw }}'"
+                entity_id: "{{ repeat.item.e }}"
+
   - id: forecast_verbruiksgegevens_resetten
     alias: Forecast Verbruiksgegevens Resetten
     description: >-

@@ -77,6 +77,15 @@ input_boolean:
   forecast_setting_hold_discharge_in_dip:
     name: Forecast Hold Discharge In Cheap Dip
     icon: mdi:battery-lock
+  # Smart hold: if the battery won't last, its charge goes to the most expensive quarter hours.
+  # On by default (set once by the automation at the bottom).
+  forecast_setting_smart_hold:
+    name: Forecast Smart Hold
+    icon: mdi:battery-clock
+  # Internal: smart hold has been turned on by default once
+  forecast_setting_smart_hold_set:
+    name: Forecast Smart Hold Set
+    icon: mdi:robot
   dashboard_setting_show_forecasting:
     name: Show Forecasting On Dashboard
     icon: mdi:calendar-clock
@@ -170,7 +179,8 @@ sensor:
     name: "Forecast Measured Charge Power"
     unique_id: forecast_measured_charge_power
     entity_id: sensor.forecast_grid_charge_power
-    state_characteristic: mean
+    # Median: a few low readings (e.g. at the end of a charge) do not pull it down
+    state_characteristic: median
     max_age:
       days: 14
     sampling_size: 3000
@@ -247,7 +257,9 @@ sensor:
     precision: 2
 
 template:
-  # Grid charging power as the battery really achieves it (> 300 W). Outside grid charging the
+  # Grid charging power as the battery really achieves it (> 300 W), only up to 10% below the
+  # maximum state of charge: at the end of a charge the power drops (balancing), and that says
+  # nothing about what a charge slot yields. Outside grid charging the
   # sensor keeps its last measurement (also after a restart), so the statistic Measured Charge
   # Power stays available and only counts real charging sessions. Was: unavailable outside grid
   # charging, so the planner almost always used the configured power.
@@ -265,12 +277,14 @@ template:
         availability: >
           {% set laden = [states('sensor.zendure_power') | float(0), 0] | max %}
           {% set import_w = [states('sensor.home_energy_meter_power') | float(0), 0] | max %}
-          {{ (has_value('sensor.home_energy_meter_power') and has_value('sensor.zendure_power') and ([import_w, laden] | min) > 300)
+          {% set onder_staart = states('sensor.zendure_total_state_of_charge') | float(100) <= states('sensor.zendure_maximum_state_of_charge') | float(100) - 10 %}
+          {{ (has_value('sensor.home_energy_meter_power') and has_value('sensor.zendure_power') and ([import_w, laden] | min) > 300 and onder_staart)
              or this.state | is_number }}
         state: >
           {% set laden = [states('sensor.zendure_power') | float(0), 0] | max %}
           {% set import_w = [states('sensor.home_energy_meter_power') | float(0), 0] | max %}
-          {% if has_value('sensor.home_energy_meter_power') and has_value('sensor.zendure_power') and ([import_w, laden] | min) > 300 %}
+          {% set onder_staart = states('sensor.zendure_total_state_of_charge') | float(100) <= states('sensor.zendure_maximum_state_of_charge') | float(100) - 10 %}
+          {% if has_value('sensor.home_energy_meter_power') and has_value('sensor.zendure_power') and ([import_w, laden] | min) > 300 and onder_staart %}
             {{ [import_w, laden] | min | round(0) }}
           {% else %}
             {{ this.state }}
@@ -410,10 +424,12 @@ template:
       p1_import_groups:
         - ['sensor.energy_consumed_tariff_1', 'sensor.energy_consumed_tariff_2']
         - ['sensor.p1_meter_energy_import']
+        - ['sensor.p1_meter_energie_import']
         - ['sensor.electricity_meter_energy_consumption_tarif_1', 'sensor.electricity_meter_energy_consumption_tarif_2']
       p1_export_groups:
         - ['sensor.energy_produced_tariff_1', 'sensor.energy_produced_tariff_2']
         - ['sensor.p1_meter_energy_export']
+        - ['sensor.p1_meter_energie_export']
         - ['sensor.electricity_meter_energy_production_tarif_1', 'sensor.electricity_meter_energy_production_tarif_2']
       p1_import_own: >
         {{ (states('input_text.forecast_setting_grid_import_counter_sensor') | lower).split(',') | map('trim') | select('match', '^sensor\\.[a-z0-9_]+$') | list }}
@@ -708,17 +724,19 @@ template:
       # The AC while it may not run from the battery (zendure_hvac_global.yaml) does not count either. Without package 0.
       t_hvac: "{{ states('sensor.hvac_separate_total') | float(-1) }}"
       t_prod: >
-        {% set e = states('input_text.forecast_setting_solar_production_sensor') %}
-        {% if e | lower | regex_match('^sensor\\..+') and has_value(e) %}
+        {% set e = states('input_text.forecast_setting_solar_production_sensor') | lower | replace(' ', '') %}
+        {% if e | regex_match('^sensor\\..+') and has_value(e) %}
           {% set u = state_attr(e, 'unit_of_measurement') %}
           {% set v = states(e) | float(-1) %}
           {% if v < 0 %}-1{% elif u == 'Wh' %}{{ v / 1000 }}{% elif u == 'MWh' %}{{ v * 1000 }}{% else %}{{ v }}{% endif %}
+        {% elif not e | regex_match('^sensor\\..+') or (states(e) == 'unknown' and state_attr(e, 'friendly_name') is none) %}-2
         {% else %}-1{% endif %}
       prev: "{{ state_attr(profile, 'measurement') }}"
       prev_q: "{{ state_attr(profile, 'measurement_quarter') }}"
       # At night the inverter may be offline: then the previous value applies (no production)
       prod_now: >
         {% if t_prod >= 0 %}{{ t_prod }}
+        {% elif t_prod == -2 %}0
         {% elif prev_q is mapping and not is_state('sun.sun', 'above_horizon') %}{{ prev_q.prod }}
         {% elif prev is mapping and not is_state('sun.sun', 'above_horizon') %}{{ prev.prod }}
         {% else %}-1{% endif %}
@@ -902,11 +920,11 @@ template:
           # Counter values for the calculation an hour from now (only updated on the full hour)
           measurement: >
             {% if full_hour %}
-              {% if measurement_ok %}{{ {'ts': now_ts | round(0), 'imp': t_imp, 'exp': t_exp, 'prod': prod_now, 'charge': t_charge, 'disch': t_disch, 'ev': ev_now, 'hvac': hvac_now, 'daytype': daytype_now} }}{% else %}{{ none }}{% endif %}
+              {% if measurement_ok %}{{ {'ts': now_ts | round(0), 'imp': t_imp, 'exp': t_exp, 'prod': prod_now, 'charge': t_charge, 'disch': t_disch, 'ev': ev_now, 'hvac': hvac_now, 'daytype': daytype_now} }}{% else %}{{ prev }}{% endif %}
             {% else %}{{ prev }}{% endif %}
           # Counter values for the calculation a quarter from now
           measurement_quarter: >
-            {% if measurement_ok %}{{ {'ts': now_ts | round(0), 'imp': t_imp, 'exp': t_exp, 'prod': prod_now, 'charge': t_charge, 'disch': t_disch, 'ev': ev_now, 'hvac': hvac_now, 'daytype': daytype_now} }}{% else %}{{ none }}{% endif %}
+            {% if measurement_ok %}{{ {'ts': now_ts | round(0), 'imp': t_imp, 'exp': t_exp, 'prod': prod_now, 'charge': t_charge, 'disch': t_disch, 'ev': ev_now, 'hvac': hvac_now, 'daytype': daytype_now} }}{% else %}{{ prev_q }}{% endif %}
 
   # -------------------------------------------------------------------
   # 4. THE PLANNER
@@ -931,6 +949,7 @@ template:
           - input_number.forecast_setting_charge_margin
           - input_number.forecast_setting_solar_reliability
           - input_boolean.forecast_setting_hold_discharge_in_dip
+          - input_boolean.forecast_setting_smart_hold
           - sensor.forecast_measured_charge_power
           - input_number.dynamic_setting_minimal_spread
           - input_number.zendure_setting_max_charge_power
@@ -951,6 +970,7 @@ template:
       c_charge_start_kwh: 0.3             # a charging round starts from this grid charge (kWh)
       c_charge_stop_kwh: 0.05             # a charging round stops below this remainder (kWh)
       c_hold_min_difference: 0.01        # smart hold: price now at least this much (€/kWh) below the threshold price
+      c_hold_charge_min_kwh: 0.5         # smart hold: only off with at least this much planned grid charging (kWh) before the end of the gap
       c_charge_min_w: 500                 # measured charge power below this level is ignored
       c_price_floor: 0.02               # lower bound in price comparisons (EUR/kWh)
       c_path_min_hours: 0.25               # path check only for a gap of at least 15 minutes
@@ -1527,8 +1547,11 @@ template:
       # ahead to the end of the bridge. That way it also sees the evening peak after the solar: on a
       # dull day solar does not fill the battery and charging in the cheap night pays off for the
       # evening. Solar counts per detail period (direct use and surplus to the battery).
-      # Only with "Hold discharge in cheap dip": otherwise the night charge is used up in the morning.
-      path_day: "{{ not path_ahead and t_cover_ts < t_end_ts and is_state('input_boolean.forecast_setting_hold_discharge_in_dip', 'on') }}"
+      # Only with "Hold discharge in cheap dip" or "Smart hold": otherwise the night charge is used up
+      # in the morning. Both keep the night charge for the more expensive quarter hours.
+      path_day: >
+        {{ not path_ahead and t_cover_ts < t_end_ts
+           and (is_state('input_boolean.forecast_setting_hold_discharge_in_dip', 'on') or is_state('input_boolean.forecast_setting_smart_hold', 'on')) }}
       t_path_horizon_ts: "{{ t_path_tomorrow_ts if path_ahead else (t_end_ts if path_day else [t_cover_ts, t_end_ts] | min) }}"
       path_horizon_source: >
         {%- if path_day -%}Over the day until end of bridge (solar counts)
@@ -1892,9 +1915,14 @@ template:
           {%- endif -%}
         {%- endfor -%}
         {{ ns.l }}
-      sh_charge_planned: "{{ chosen | selectattr('e', 'gt', now_ts) | selectattr('s', 'lt', t_gap_end_ts) | list | length > 0 }}"
+      # Planned grid charging before the end of the gap (kWh AC). A small remainder (e.g. two top-up
+      # slots with an almost full battery) does not turn smart hold off; it counts towards what the
+      # battery can supply.
+      sh_planned_ac: >
+        {{ ([(chosen | selectattr('e', 'gt', now_ts) | selectattr('s', 'lt', t_gap_end_ts) | list | length) * e_slot, planned_ac] | min) | round(3) }}
+      sh_charge_planned: "{{ sh_planned_ac >= c_hold_charge_min_kwh }}"
       sh_threshold: >
-        {%- set ns = namespace(e=s_now * eff_out, p=none) -%}
+        {%- set ns = namespace(e=(s_now + [sh_planned_ac * eff_in, room] | min) * eff_out, p=none) -%}
         {%- set total = sh_quarters | map(attribute='kwh') | sum -%}
         {%- if ns.e > 0 and total > ns.e -%}
           {%- for q in sh_quarters | sort(attribute='v', reverse=true) -%}
@@ -1903,11 +1931,18 @@ template:
         {%- endif -%}
         {{ ns.p }}
       smart_hold: >
-        {{ is_state('input_boolean.forecast_setting_hold_discharge_in_dip', 'on') and prices_ok and price_now < 999
+        {{ is_state('input_boolean.forecast_setting_smart_hold', 'on') and prices_ok and price_now < 999 and not slot_now
            and not sh_charge_planned and sh_threshold is number and solar_dc <= room
            and price_now < sh_threshold - c_hold_min_difference }}
       # Pre-discharge comes first: no hold in the quarter hours above the threshold price
-      hold_discharge: "{{ (dip_hold or smart_hold) and not pd_discharge_now }}"
+      # Between charge slots: what the battery supplies now, a later planned slot charges back (with
+      # loss). If the price now is lower than that slot after charge and discharge loss (slot price /
+      # efficiency), buying directly is cheaper and the battery holds. Part of Smart hold (no loss).
+      between_charge_hold: >
+        {%- set later = chosen | selectattr('s', 'gt', now_ts) | list -%}
+        {{ is_state('input_boolean.forecast_setting_smart_hold', 'on') and prices_ok and price_now < 999 and not slot_now
+           and later | length > 0 and eff_rt > 0 and price_now < (later | map(attribute='v') | max) / eff_rt }}
+      hold_discharge: "{{ (dip_hold or smart_hold or between_charge_hold) and not pd_discharge_now }}"
 
       # ---- Battery empty (for the dashboard) ------------------------------
       # As the plan expects it: today's (and tomorrow's) solar counts, the battery does not supply
@@ -1915,7 +1950,7 @@ template:
       # negative window with pre-discharge no hold applies. Without charge margin; planned charge
       # slots do not count (as before). Display only, the plan uses t_empty_plan_ts / t_empty_ahead_ts.
       sh_plan_active: >
-        {{ is_state('input_boolean.forecast_setting_hold_discharge_in_dip', 'on') and prices_ok
+        {{ is_state('input_boolean.forecast_setting_smart_hold', 'on') and prices_ok
            and not sh_charge_planned and sh_threshold is number and solar_dc <= room }}
       t_empty_show_ts: >
         {%- set emax = s_max * eff_out -%}
@@ -2207,6 +2242,7 @@ template:
           in_dip: "{{ in_dip }}"
           hold_discharge: "{{ hold_discharge }}"
           smart_hold: "{{ smart_hold }}"
+          between_charge_hold: "{{ between_charge_hold }}"
           hold_threshold_price: "{{ sh_threshold }}"
           # --- Pre-discharge for a negative feed-in price ---
           pre_discharge: "{{ pd_active }}"
@@ -2382,6 +2418,91 @@ template:
 #    Forecast Measured Charge Power is kept as well.
 # ---------------------------------------------------------------------
 automation:
+  # Smart hold is on by default: a new input_boolean starts off in HA, and initial: true would
+  # reset it on every restart. So turn it on once; after that the user's choice stays.
+  - id: forecast_smart_hold_default
+    alias: Forecast Smart Hold Default On
+    description: >-
+      Forecasting 2026.11.5 - Turns Smart hold on once (after installation or upgrade).
+    mode: single
+    triggers:
+      - trigger: homeassistant
+        event: start
+      - trigger: state
+        entity_id: input_boolean.forecast_setting_smart_hold_set
+        to: 'off'
+    conditions:
+      - condition: state
+        entity_id: input_boolean.forecast_setting_smart_hold_set
+        state: 'off'
+    actions:
+      - delay:
+          seconds: 5
+      - action: input_boolean.turn_on
+        target:
+          entity_id:
+            - input_boolean.forecast_setting_smart_hold
+            - input_boolean.forecast_setting_smart_hold_set
+
+  # Clean up input fields with an entity: on a phone autocorrect easily turns them into
+  # "Sensor .solcast_..." (capital letter, space). Such a field is then not recognised. This
+  # automation converts it to lower case without spaces (also for comma lists).
+  - id: forecast_clean_input_fields
+    alias: Forecast Clean Input Fields
+    description: >-
+      Forecasting 2026.11.5 - Converts entered entities to lower case without spaces.
+    mode: queued
+    max: 5
+    triggers:
+      - trigger: homeassistant
+        event: start
+      - trigger: state
+        entity_id:
+          - input_text.forecast_setting_solar_remaining_today_sensor
+          - input_text.forecast_setting_solar_tomorrow_sensor
+          - input_text.forecast_setting_solar_production_sensor
+          - input_text.forecast_setting_grid_import_counter_sensor
+          - input_text.forecast_setting_grid_export_counter_sensor
+          - input_text.home_energy_setting_meter_sensor
+          - input_text.dynamic_setting_nordpool_sensor
+          - input_text.dynamic_setting_market_price_sensor
+          - input_text.negative_price_inverter_limiter
+          - input_text.negative_price_inverter_power_sensor
+          - input_text.negative_price_inverter_limiter_secondary
+          - input_text.hvac_sensor
+          - input_text.hvac_power_sensor
+          - input_text.ev_power_sensor
+          - input_text.ev_charger_switch
+        not_to:
+          - unknown
+          - unavailable
+    conditions: []
+    actions:
+      - variables:
+          velden: >
+            {%- set ns = namespace(l=[]) -%}
+            {%- for e in ['input_text.forecast_setting_solar_remaining_today_sensor', 'input_text.forecast_setting_solar_tomorrow_sensor', 'input_text.forecast_setting_solar_production_sensor', 'input_text.forecast_setting_grid_import_counter_sensor', 'input_text.forecast_setting_grid_export_counter_sensor', 'input_text.home_energy_setting_meter_sensor', 'input_text.dynamic_setting_nordpool_sensor', 'input_text.dynamic_setting_market_price_sensor', 'input_text.negative_price_inverter_limiter', 'input_text.negative_price_inverter_power_sensor', 'input_text.negative_price_inverter_limiter_secondary', 'input_text.hvac_sensor', 'input_text.hvac_power_sensor', 'input_text.ev_power_sensor', 'input_text.ev_charger_switch'] -%}
+              {%- set oud = states(e) -%}
+              {%- if oud not in ['unknown', 'unavailable'] -%}
+                {%- set nieuw = oud | lower | regex_replace('\\s+', '') -%}
+                {%- if nieuw != oud -%}{%- set ns.l = ns.l + [{'e': e, 'oud': oud, 'nieuw': nieuw}] -%}{%- endif -%}
+              {%- endif -%}
+            {%- endfor -%}
+            {{ ns.l }}
+      - repeat:
+          for_each: "{{ velden }}"
+          sequence:
+            - action: input_text.set_value
+              target:
+                entity_id: "{{ repeat.item.e }}"
+              data:
+                value: "{{ repeat.item.nieuw }}"
+            - action: logbook.log
+              data:
+                name: Zendure Forecasting
+                message: "Input field cleaned up: '{{ repeat.item.oud }}' becomes '{{ repeat.item.nieuw }}'"
+                entity_id: "{{ repeat.item.e }}"
+
   - id: forecast_reset_usage_data
     alias: Forecast Reset Usage Data
     description: >-

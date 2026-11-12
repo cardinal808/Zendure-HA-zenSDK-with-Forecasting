@@ -2,6 +2,34 @@
 
 Versions follow `year.month.sequence`; the sequence restarts at 1 every month. Each version states which Gielz version it is based on. [Nederlands](CHANGELOG.nl.md)
 
+## 2026.11.5 (in development) — based on Gielz v20261007
+
+**Smart hold as its own switch**
+- New **Smart hold** switch (`input_boolean.forecast_setting_smart_hold`) in Forecasting Configuration (Basic). Smart hold (if the battery won't last, it keeps its charge for the most expensive quarter hours) used to depend on *Hold discharge in cheap dip*. With that switch off the battery discharged at low prices in the morning and the house bought the evening peak. Smart hold costs no extra loss and is now **on** by default, also when the dip switch is off (set once after the upgrade; after that your choice stays).
+- The path check over the day works with the dip switch **or** smart hold.
+- **Small top-up slots no longer block smart hold:** smart hold only turns off from 0.5 kWh of planned grid charging before the end of the gap. A remainder counts towards what the battery can supply.
+- **New: hold between charge slots** (part of smart hold). If a charge slot is planned later and the price now is lower than that slot after charge and discharge loss (slot price / efficiency), the battery does not supply now: what it supplies now would have to be charged back there with loss. Prevents the battery from discharging at night between two charge blocks and being charged back at a higher cost. Attribute `between_charge_hold`.
+
+**Charging in Dynamic Smart Matching + Forecasting**
+- **Fixed: "charging started" every 2 minutes while the battery discharges.** Gielz's check *Dynamic charging running status is incorrect* turned charging off after 30 seconds when it was not Gielz's cheapest period, even when the planner had a charge slot. The planner then started again after 2 minutes. The check no longer applies in Dynamic Smart Matching + Forecasting.
+- **New: Forecasting charging check.** If charging is still running while the planner has not said *Charging* for a minute (e.g. after a Home Assistant restart in the middle of a charge slot), the automation stops charging and returns to Smart Matching.
+
+**Measured charging power without the balancing tail**
+- `sensor.forecast_grid_charge_power` now only measures up to 10% below the maximum state of charge. At the end of a charge the power drops (balancing between the batteries); that pulled the measured charging power down (559 W at 2.4 kW for one user), so the planner used far too many quarter hours.
+- *Measured Charge Power* now uses the median instead of the mean. Old low readings drop out within 14 days; faster with *Reset usage data*.
+
+**Input and detection**
+- **Input fields cleaned up:** a new automation converts entered entities to lower case without spaces (e.g. `Sensor .solcast_…` from phone autocorrect becomes `sensor.solcast_…`). Applies to the forecasting, negative price, Nordpool, EV and HVAC fields and Gielz's Nordpool and grid meter sensor. Logged in the logbook.
+- **HomeWizard in a Dutch-language Home Assistant** is now detected automatically (`sensor.p1_meter_energie_import` / `_export`).
+- **Dashboard notice** (Zendure tab, Forecasting) when the solar panel counter or a custom grid counter does not point to an existing sensor.
+- **Usage profile keeps learning without a valid solar panel counter:** if the field is empty or the sensor does not exist, the profile uses 0 solar production (previously learning stopped completely). If the counter drops out briefly, the previous measurement stays instead of disappearing.
+- **Feed-in markup:** range now −0.50 to 0.50 €/kWh (was −1 to 1) and a warning in Forecasting Configuration (Negative Price) for a markup outside −0.10 to 0.10. A markup of −1.00 made the feed-in price always negative and blocked export permanently.
+- **Diagnostics export:** `meta.missing_helpers` (expected settings that do not exist) and `meta.filled_in_but_missing` (entered entities that do not exist).
+
+**Upgrading**
+- Replace `zendure_forecasting_global.yaml`, `zendure_negative_price_global.yaml`, the automation and the dashboard (optionally also `zendure_export_global.yaml`) and **restart** Home Assistant (new helpers). Paste the dashboard again via the Raw configuration editor.
+- After the restart *Smart hold* is on. If you want the behaviour from before this version with the dip switch off, turn *Smart hold* off.
+
 ## 2026.11.4 — based on Gielz v20261007
 
 **Fix for new Zendure firmware** *(ahead of Gielz)*

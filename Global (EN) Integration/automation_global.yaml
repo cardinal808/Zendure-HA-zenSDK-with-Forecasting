@@ -666,6 +666,12 @@ actions:
               hours: 0
               minutes: 0
               seconds: 30
+          - alias: Not in Forecasting (there the planner plans, not Gielz's cheapest period)
+            condition: not
+            conditions:
+              - condition: state
+                entity_id: input_select.zendure_operation_mode
+                state: Dynamic Smart Matching + Forecasting
         sequence:
           - action: input_boolean.turn_off
             target:
@@ -680,6 +686,39 @@ actions:
               entity_id: input_select.zendure_operation_mode
               name: ' '
         alias: Dynamic charging check
+      - conditions:
+          - condition: trigger
+            id:
+              - aansturing_trigger
+          - condition: state
+            entity_id: input_select.zendure_operation_mode
+            state: Dynamic Smart Matching + Forecasting
+          - alias: Charging is running, but the planner has not said Charging for a minute (e.g. after a restart)
+            condition: state
+            entity_id: input_boolean.dynamic_charging_running
+            state:
+              - 'on'
+          - condition: template
+            value_template: >-
+              {{ not is_state('sensor.zendure_forecast_plan', 'Charging')
+                 and (as_timestamp(now()) - as_timestamp(states.sensor.zendure_forecast_plan.last_changed, 0)) > 60 }}
+        sequence:
+          - action: input_boolean.turn_off
+            target:
+              entity_id:
+                - input_boolean.dynamic_charging_running
+            data: {}
+          - action: rest_command.zendure_stop_with_everything
+            data:
+              sn: '{{ states(''sensor.zendure_serial_number'') }}'
+          - action: logbook.log
+            data:
+              message: >-
+                ⚠️Dynamic Smart Matching + Forecasting charging still running, but there is no
+                charge slot. Charging stopped —
+              entity_id: input_select.zendure_operation_mode
+              name: ' '
+        alias: Dynamic Smart Matching + Forecasting charging check
       - conditions:
           - condition: trigger
             id:

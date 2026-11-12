@@ -257,6 +257,11 @@ script:
                    'last_triggered': s.attributes.last_triggered | default(none),
                    'running': s.attributes.current | default(0), 'mode': s.attributes.mode | default('')}]] -%}
             {%- endfor -%}
+            {#- Expected core helpers that are missing (renamed, disabled or package not loaded),
+                and filled-in entities that do not exist -#}
+            {%- set bestaat_niet = namespace(h=[], e=[]) -%}
+            {%- for e in ['input_text.forecast_setting_solar_remaining_today_sensor', 'input_text.forecast_setting_solar_tomorrow_sensor', 'input_text.forecast_setting_solar_production_sensor', 'input_text.forecast_setting_grid_import_counter_sensor', 'input_text.forecast_setting_grid_export_counter_sensor', 'input_number.forecast_setting_charge_margin', 'input_number.forecast_setting_solar_reliability', 'input_boolean.forecast_setting_hold_discharge_in_dip', 'input_boolean.forecast_setting_smart_hold', 'input_boolean.dashboard_setting_show_forecasting', 'input_text.dynamic_setting_market_price_sensor', 'input_number.savings_setting_dynamic_feedin_markup', 'input_number.savings_setting_dynamic_feedin_bonus', 'input_boolean.negative_price_block_export', 'input_text.dynamic_setting_nordpool_sensor'] if states(e) == 'unknown' and state_attr(e, 'friendly_name') is none -%}{%- set bestaat_niet.h = bestaat_niet.h + [e] -%}{%- endfor -%}
+            {%- for e in ns.ent_ext if states(e) == 'unknown' and state_attr(e, 'friendly_name') is none -%}{%- set bestaat_niet.e = bestaat_niet.e + [e] -%}{%- endfor -%}
             {%- set export = {
                  'meta': {
                    'export': now().isoformat(),
@@ -265,7 +270,9 @@ script:
                    'gielz_version': states('sensor.zendure_configuration_version'),
                    'packages': state_attr('sensor.forecasting_version', 'packages'),
                    'home_assistant': state_attr('update.home_assistant_core_update', 'installed_version'),
-                   'time_zone': now().tzname()
+                   'time_zone': now().tzname(),
+                   'missing_helpers': bestaat_niet.h,
+                   'filled_in_but_missing': bestaat_niet.e
                  },
                  'settings': dict(ns.set | sort(attribute='0')),
                  'sensors': dict(ns.sens | sort(attribute='0')),

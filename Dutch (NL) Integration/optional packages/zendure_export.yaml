@@ -256,6 +256,11 @@ script:
                    'laatst_getriggerd': s.attributes.last_triggered | default(none),
                    'nu_actief': s.attributes.current | default(0), 'modus': s.attributes.mode | default('')}]] -%}
             {%- endfor -%}
+            {#- Verwachte helpers van de basis die ontbreken (hernoemd, uitgeschakeld of pakket niet geladen),
+                en ingevulde entiteiten die niet bestaan -#}
+            {%- set bestaat_niet = namespace(h=[], e=[]) -%}
+            {%- for e in ['input_text.forecast_zon_resterend_vandaag_sensor', 'input_text.forecast_zon_morgen_sensor', 'input_text.forecast_zon_productie_sensor', 'input_text.forecast_net_import_teller_sensor', 'input_text.forecast_net_export_teller_sensor', 'input_number.forecast_laad_marge', 'input_number.forecast_betrouwbaarheid', 'input_boolean.forecast_dal_ontladen_blokkeren', 'input_boolean.forecast_slim_vasthouden', 'input_boolean.forecast_tonen_op_dashboard', 'input_text.dynamisch_marktprijs_sensor', 'input_number.besparing_dyn_opslag_teruglevering', 'input_number.besparing_dyn_bonus_teruglevering', 'input_boolean.negatieve_prijs_export_blokkeren', 'input_text.dynamisch_nordpool_sensor'] if states(e) == 'unknown' and state_attr(e, 'friendly_name') is none -%}{%- set bestaat_niet.h = bestaat_niet.h + [e] -%}{%- endfor -%}
+            {%- for e in ns.ent_ext if states(e) == 'unknown' and state_attr(e, 'friendly_name') is none -%}{%- set bestaat_niet.e = bestaat_niet.e + [e] -%}{%- endfor -%}
             {%- set export = {
                  'meta': {
                    'export': now().isoformat(),
@@ -264,7 +269,9 @@ script:
                    'gielz_versie': states('sensor.zendure_2400_ac_configuratie_versie'),
                    'pakketten': state_attr('sensor.forecasting_versie', 'pakketten'),
                    'home_assistant': state_attr('update.home_assistant_core_update', 'installed_version'),
-                   'tijdzone': now().tzname()
+                   'tijdzone': now().tzname(),
+                   'ontbrekende_helpers': bestaat_niet.h,
+                   'ingevuld_maar_bestaat_niet': bestaat_niet.e
                  },
                  'instellingen': dict(ns.inst | sort(attribute='0')),
                  'sensoren': dict(ns.sens | sort(attribute='0')),

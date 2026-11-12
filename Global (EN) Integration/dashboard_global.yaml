@@ -2001,7 +2001,7 @@ views:
                 text: Recalculate
           - type: markdown
             content: |-
-              {% set p = 'sensor.zendure_forecast_plan' %}{% set a = states[p].attributes %}{% if states('input_select.zendure_operation_mode') != 'Dynamic Smart Matching + Forecasting' %}<ha-alert alert-type="info">Mode **Dynamic Smart Matching + Forecasting** is not active. The plan below is a simulation.</ha-alert>{% endif %}{% if a.solar_remaining_today_sensor_ok == false or a.solar_tomorrow_sensor_ok == false %}<ha-alert alert-type="warning">A solar forecast sensor is not filled in or not available. That solar is counted as 0 kWh (more grid charging will be planned).</ha-alert>{% endif %}
+              {% set p = 'sensor.zendure_forecast_plan' %}{% set a = states[p].attributes %}{% if states('input_select.zendure_operation_mode') != 'Dynamic Smart Matching + Forecasting' %}<ha-alert alert-type="info">Mode **Dynamic Smart Matching + Forecasting** is not active. The plan below is a simulation.</ha-alert>{% endif %}{% if a.solar_remaining_today_sensor_ok == false or a.solar_tomorrow_sensor_ok == false %}<ha-alert alert-type="warning">A solar forecast sensor is not filled in or not available. That solar is counted as 0 kWh (more grid charging will be planned).</ha-alert>{% endif %}{% set ns = namespace(l=[]) %}{% for e in (states('input_text.forecast_setting_solar_production_sensor') | lower | replace(' ', '')).split(',') | reject('eq', '') %}{% if e not in ['unknown', 'unavailable'] and (not e is match('^sensor\\.[a-z0-9_]+$') or (states(e) == 'unknown' and state_attr(e, 'friendly_name') is none)) %}{% set ns.l = ns.l + ['Solar panels production sensor (' ~ e ~ ')'] %}{% endif %}{% endfor %}{% for e in (states('input_text.forecast_setting_grid_import_counter_sensor') | lower | replace(' ', '')).split(',') | reject('eq', '') %}{% if e not in ['unknown', 'unavailable'] and (not e is match('^sensor\\.[a-z0-9_]+$') or (states(e) == 'unknown' and state_attr(e, 'friendly_name') is none)) %}{% set ns.l = ns.l + ['Grid import counter (' ~ e ~ ')'] %}{% endif %}{% endfor %}{% for e in (states('input_text.forecast_setting_grid_export_counter_sensor') | lower | replace(' ', '')).split(',') | reject('eq', '') %}{% if e not in ['unknown', 'unavailable'] and (not e is match('^sensor\\.[a-z0-9_]+$') or (states(e) == 'unknown' and state_attr(e, 'friendly_name') is none)) %}{% set ns.l = ns.l + ['Grid export counter (' ~ e ~ ')'] %}{% endif %}{% endfor %}{% if ns.l | length > 0 %}<ha-alert alert-type="warning">Filled-in field does not point to an existing sensor: {{ ns.l | join(', ') }}. Check the entity ID (Settings → Entities). Without a valid solar panel counter the usage profile learns without solar production.</ha-alert>{% endif %}
               **Status:** {{ states(p) }}
 
               **Scenario:** {{ a.scenario }}
@@ -2014,7 +2014,7 @@ views:
               {% set td = now().strftime('%Y-%m-%d') %}- Today's plan runs until **{{ ('tomorrow ' if (a.bridge_until or '')[:10] != td else '') ~ (a.bridge_until or '')[11:] }}** ({{ a.bridge_hours }} hours), the start of tomorrow's cheap hours; after that it plans again with tomorrow's prices
               {% set lb = a.charge_blocks | default([]) %}- Expected usage until end of bridge (after direct solar): **{{ '%.1f' | format(a.expected_battery_usage_kwh | float(0)) }} kWh**, covered by the battery{% if lb | length > 0 %} and the planned charging{% endif %}{% if a.pathcheck_dip_hold %} (outside the cheap dips){% endif %}, the rest directly from the grid
               - Expected solar to battery: **{{ a.expected_solar_to_battery_kwh }} kWh** (solar still expected: {{ a.solar_remaining_today_kwh }} kWh, {{ a.self_consumption_pct }}% used directly){% if a.get('ev_daytime_from_solar_kwh', 0) | float(0) > 0 %}; the car still charges {{ '%.1f' | format(a.get('ev_daytime_from_solar_kwh', 0) | float(0)) }} kWh during the day, which comes off the solar surplus first{% endif %}
-              - Price now: €{{ '%.3f' | format(a.price_now | float(0)) }}{% if a.smart_hold %}: the battery is saved for the most expensive quarters (€{{ '%.3f' | format(a.hold_threshold_price | float(0)) }} and up), because it does not last until the end of the bridge; until then the house buys directly{% elif a.in_dip %}, cheap dip{% if a.hold_discharge %}: the battery is being saved and the house buys directly from the grid, because that is cheaper than power from the battery{% endif %}{% endif %}
+              - Price now: €{{ '%.3f' | format(a.price_now | float(0)) }}{% if a.smart_hold %}: the battery is saved for the most expensive quarters (€{{ '%.3f' | format(a.hold_threshold_price | float(0)) }} and up), because it does not last until the end of the bridge; until then the house buys directly{% elif a.between_charge_hold %}: the battery holds until the next charge slot, because what it supplies now would have to be charged back there with loss; buying directly is cheaper now{% elif a.in_dip %}, cheap dip{% if a.hold_discharge %}: the battery is being saved and the house buys directly from the grid, because that is cheaper than power from the battery{% endif %}{% endif %}
               {% set lb = a.charge_blocks | default([]) %}- **Charge from the grid: {% if lb | length > 0 %}{{ '%.1f' | format(a.planned_grid_charge_kwh | float(0)) }} kWh planned at {{ a.charge_power_used_kw }} kW, estimated cost €{{ '%.2f' | format(a.estimated_cost) }}**{% else %}nothing planned**{% endif %}{% set rest = (a.grid_charge_today_kwh | float(0)) - (a.planned_grid_charge_kwh | float(0)) %}{% if rest >= 0.3 %} (energy balance {{ '%.1f' | format(a.grid_charge_today_kwh | float(0)) }} kWh; the rest is not stored, because buying directly from the grid is then cheaper after charge and discharge losses){% endif %}
               {% if a.pathcheck_gap_hours | float(0) > 0 %}{% set td = now().strftime('%Y-%m-%d') %}- Path check: battery empty around **{{ ('tomorrow ' if (a.pathcheck_battery_empty_at or '')[:10] != td else '') ~ (a.pathcheck_battery_empty_at or '')[11:] }}**{% if a.pathcheck_dip_hold %} (the battery does not supply in cheap dips){% endif %}, checked until **{{ ('tomorrow ' if (a.pathcheck_gap_end or '')[:10] != td else '') ~ (a.pathcheck_gap_end or '')[11:] }}** {% if a.pathcheck_beyond_night %}(beyond the night: {{ (a.pathcheck_horizon or '')[:1] | lower }}{{ (a.pathcheck_horizon or '')[1:] }}){% elif a.pathcheck_over_day %}(over the day, solar counts){% elif (a.pathcheck_solar_source or '') is search('no longer|None') %}(solar does not cover usage before the end of the bridge){% else %}(solar covers usage from {{ ('tomorrow ' if (a.pathcheck_solar_covers_from or '')[:10] != td else '') ~ (a.pathcheck_solar_covers_from or '')[11:] }}, {{ a.pathcheck_solar_source }}){% endif %}. In those {{ a.pathcheck_gap_hours }} hours the house buys about {{ '%.1f' | format(a.pathcheck_shortfall_kwh | float(0)) }} kWh directly from the grid, of which {{ '%.1f' | format(a.pathcheck_shortfall_expensive_slots_kwh | float(0)) }} kWh in expensive quarter hours{% if a.pathcheck_gap_price | float(0) > 0 %} (average €{{ '%.3f' | format(a.pathcheck_gap_price | float(0)) }}){% endif %}{% if a.pathcheck_extra_slots | int(0) > 0 %}: {{ a.pathcheck_extra_slots }} charge slot(s) planned for it{% endif %}{% endif %}
               {% for b in lb %}- Charge {{ b.day }} {{ b.start }}–{{ b.end }}: {{ b.minutes }} minutes{{ ' left' if b.running | default(false) else '' }}, about {{ '%.1f' | format(b.kwh) }} kWh, average €{{ '%.3f' | format(b.price) }}
@@ -4002,7 +4002,11 @@ views:
               capacity. The kWh counters of your grid meter are detected automatically
               (SlimmeLezer, HomeWizard, DSMR integration). With another meter, e.g. a
               Shelly Pro 3EM, enter the grid import and export counter (several
-              sensors separated by a comma, e.g. tariff 1 and 2).
+              sensors separated by a comma, e.g. tariff 1 and 2). **Hold discharge in
+              cheap dip**: the battery does not supply in cheap dips when grid
+              charging is still needed. **Smart hold**: if the battery won't last until
+              the sun or the next charge moment, it keeps its charge for the most
+              expensive quarter hours (no extra loss; on by default).
             text_only: true
             visibility:
               - condition: state
@@ -4029,6 +4033,8 @@ views:
                 name: Solar forecast reliability % (0 = 100%)
               - entity: input_boolean.forecast_setting_hold_discharge_in_dip
                 name: Hold discharge in cheap dip (save the battery)
+              - entity: input_boolean.forecast_setting_smart_hold
+                name: Smart hold (keep the charge for the most expensive quarter hours)
             visibility:
               - condition: state
                 entity: input_boolean.dashboard_setting_show_forecasting
@@ -4149,6 +4155,22 @@ views:
               - condition: state
                 entity: input_boolean.dashboard_setting_show_help
                 state: 'on'
+              - condition: state
+                entity: input_boolean.dashboard_setting_show_pv
+                state: 'on'
+          - type: markdown
+            content: >-
+              <ha-alert alert-type="warning">Feed-in markup is set to {{ states('input_number.savings_setting_dynamic_feedin_markup') | float(0) | round(3) }} €/kWh. That is unusually large (usually between −0.05 and 0). With a large negative markup the feed-in price is almost always negative and export is blocked all the time. Did you mean e.g. −0.01?</ha-alert>
+            text_only: true
+            visibility:
+              - condition: or
+                conditions:
+                  - condition: numeric_state
+                    entity: input_number.savings_setting_dynamic_feedin_markup
+                    below: -0.1
+                  - condition: numeric_state
+                    entity: input_number.savings_setting_dynamic_feedin_markup
+                    above: 0.1
               - condition: state
                 entity: input_boolean.dashboard_setting_show_pv
                 state: 'on'
