@@ -6,7 +6,7 @@
 
 > **Dit is een fork van [Gielz1986/Zendure-HA-zenSDK](https://github.com/Gielz1986/Zendure-HA-zenSDK)** van Michiel Hofker (Gielz1986). Alle eer voor de integratie, de automation en het dashboard gaat naar het oorspronkelijke project. Deze fork voegt **één extra modus toe: Dynamisch NOM + Forecasting** (Engels: *Dynamic Smart Matching + Forecasting*). Voor al het andere (modussen, wiki, ondersteuning, updates) zie je de oorspronkelijke repository. De originele README staat onder deze sectie.
 
-**Versie:** `2026.11.4` · gebaseerd op Gielz-configuratie `v20261113` · beschikbaar in het Nederlands (NL) en Engels (Global) · [Changelog](CHANGELOG.nl.md)
+**Versie:** `2026.11.5` · gebaseerd op Gielz-configuratie `v20261113` · beschikbaar in het Nederlands (NL) en Engels (Global) · [Changelog](CHANGELOG.nl.md)
 
 Versies volgen `jaar.maand.volgnummer` (het volgnummer begint elke maand bij 1). In Home Assistant zie je de versie in gebruik en de nieuwste versie op GitHub (`sensor.forecasting_versie`, `sensor.forecasting_releasecheck`) op het tabblad Configuratie, en de releasenotes onder Releasenotes.
 
@@ -50,7 +50,7 @@ De set bestaat uit een basis die je altijd nodig hebt en vijf optionele pakkette
 | EV | `zendure_ev.yaml` / `zendure_ev_global.yaml` | Optioneel | Auto laden zonder dat de accu erin ontlaadt; laadsessie nacht of overdag. | Vermogensmeting van de lader (bv. Shelly 1PM); voor een laadsessie een schakelaar | De accu kan in de auto ontladen; het laden telt mee in het verbruiksprofiel. |
 | HVAC | `zendure_hvac.yaml` / `zendure_hvac_global.yaml` | Optioneel | Airco niet uit de accu, per airco-modus: niet ontladen of het airco-vermogen aftrekken; airco-verbruik dan apart van het verbruiksprofiel. | `climate.*`, vermogenssensor of schakelaar van de airco; voor aftrekken een vermogensmeting | Ontladen gaat gewoon door als de airco draait. |
 | Nordpool | `zendure_nordpool.yaml` / `zendure_nordpool_global.yaml` | Optioneel | Twee Nord Pool-sensoren: all-in prijs voor levering (marktprijs + energiebelasting + opslag, met btw) en kale marktprijs met btw voor teruglevering, met invoervelden voor de bedragen. | Nord Pool-integratie (HACS); haal je eigen Nord Pool-YAML met dezelfde instellingen weg | Je stelt de Nord Pool-sensor(en) zelf in. |
-| Diagnose-export | `zendure_export.yaml` / `zendure_export_global.yaml` | Optioneel | Eén JSON-bestand met instellingen, sensoren en logs, om mee te sturen bij een vraag of issue. | button-card (HACS) voor de downloadknop; zet zelf `system_log: fire_event: true` aan | Geen export; meesturen van gegevens gaat handmatig. |
+| Diagnose-export | `zendure_export.yaml` / `zendure_export_global.yaml` | Optioneel | Eén JSON-bestand met instellingen, sensoren en logs, om mee te sturen bij een vraag of issue. | button-card (HACS) voor de downloadknop. Het pakket zet `system_log: fire_event: true` zelf aan; staat `system_log:` al in je configuration.yaml, haal het blok dan uit het pakket | Geen export; meesturen van gegevens gaat handmatig. |
 
 Elk optioneel bestand heeft direct onder de versiekop de regel `# OPTIONEEL PAKKET`, de vereiste `# VEREIST PAKKET`, zodat je in de map meteen ziet welke je mag weglaten.
 

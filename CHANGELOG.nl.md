@@ -2,7 +2,7 @@
 
 Versies volgen `jaar.maand.volgnummer`; het volgnummer begint elke maand bij 1. Elke versie vermeldt op welke Gielz-versie hij is gebaseerd. [English](CHANGELOG.md)
 
-## 2026.11.5 (in ontwikkeling) — gebaseerd op Gielz v20261113
+## 2026.11.5 — gebaseerd op Gielz v20261113
 
 **Bijgewerkt naar Gielz v20261113**
 - Configuratie Versie en de automation-beschrijving staan op v20261113, zodat Gielz' releasecheck weer *Up-to-date* toont.
@@ -32,6 +32,7 @@ Versies volgen `jaar.maand.volgnummer`; het volgnummer begint elke maand bij 1. 
 - **Verbruiksprofiel leert door zonder geldige zonnepanelen-teller:** is het veld leeg of bestaat de sensor niet, dan rekent het profiel met 0 zonproductie (eerder stopte het leren helemaal). Valt de teller even weg, dan blijft de vorige meting staan in plaats van te verdwijnen.
 - **Opslag teruglevering:** bereik nu −0,50 tot 0,50 €/kWh (was −1 tot 1) en een waarschuwing in Forecasting Configuratie (Negatieve Prijs) bij een opslag buiten −0,10 tot 0,10. Een opslag van −1,00 maakte de terugleverprijs altijd negatief en blokkeerde teruglevering permanent.
 - **Diagnose-export, foutlog:** lange meldingen houden begin én eind (de oorzaak van een templatefout staat achteraan; eerder werd alles na 400 tekens afgekapt).
+- README: bij Diagnose-export duidelijker dat het pakket `system_log: fire_event: true` zelf aanzet.
 - **Diagnose-export:** `meta.ontbrekende_helpers` (verwachte instellingen die niet bestaan) en `meta.ingevuld_maar_bestaat_niet` (ingevulde entiteiten die niet bestaan).
 
 **Verbruiksprofiel per weekdag**
@@ -64,7 +65,8 @@ Versies volgen `jaar.maand.volgnummer`; het volgnummer begint elke maand bij 1. 
 - Getallen in het plan en bij *Verzamelde gegevens* met een komma (NL).
 
 **Upgraden**
-- Vervang `zendure_forecasting.yaml`, `zendure_negatieve_prijs.yaml`, de automation en het dashboard (optioneel ook `zendure_export.yaml`) en **herstart** Home Assistant (nieuwe helpers). Plak het dashboard opnieuw via de Raw configuratie-editor.
+- Vervang alle bestanden (in inhoud gewijzigd: `zendure_gielz1986_nl.yaml`, `zendure_forecasting.yaml`, `zendure_negatieve_prijs.yaml`, `zendure_export.yaml`, de automation en het dashboard; de andere alleen het versienummer) en **herstart** Home Assistant (nieuwe helpers). Plak het dashboard opnieuw via de Raw configuratie-editor.
+- **Gemeten laadvermogen opnieuw beginnen** (aanbevolen als *Gemeten Laadvermogen* duidelijk lager staat dan je echte laadvermogen): Ontwikkelhulpmiddelen → Acties, `recorder.purge_entities` met `entity_id: sensor.forecast_netladen_vermogen` en `keep_days: 0`; ~15 seconden later `statistics.reload`. Tot de volgende netlading rekent de planner met je ingestelde laadvermogen.
 - Na de herstart staat *Slim vasthouden* aan. Wil je het gedrag van vóór deze versie met de dal-schakelaar uit, zet *Slim vasthouden* dan uit.
 - Had je een zonkrediet ingesteld: dat veld bestaat niet meer (`input_number.negatieve_prijs_vooraf_zonkrediet` kan weg). Vul eventueel de betrouwbaarheid per maand in.
 - Kalibratieladen staat aan (na 14 dagen zonder 100%). Uitzetten met *Kalibratieladen uit*.

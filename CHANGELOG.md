@@ -2,7 +2,7 @@
 
 Versions follow `year.month.sequence`; the sequence restarts at 1 every month. Each version states which Gielz version it is based on. [Nederlands](CHANGELOG.nl.md)
 
-## 2026.11.5 (in development) — based on Gielz v20261113
+## 2026.11.5 — based on Gielz v20261113
 
 **Updated to Gielz v20261113**
 - Configuration Version and the automation description are at v20261113, so Gielz's release check shows *Up-to-date* again.
@@ -32,6 +32,7 @@ Versions follow `year.month.sequence`; the sequence restarts at 1 every month. E
 - **Usage profile keeps learning without a valid solar panel counter:** if the field is empty or the sensor does not exist, the profile uses 0 solar production (previously learning stopped completely). If the counter drops out briefly, the previous measurement stays instead of disappearing.
 - **Feed-in markup:** range now −0.50 to 0.50 €/kWh (was −1 to 1) and a warning in Forecasting Configuration (Negative Price) for a markup outside −0.10 to 0.10. A markup of −1.00 made the feed-in price always negative and blocked export permanently.
 - **Diagnostics export, error log:** long messages keep both start and end (the cause of a template error is at the end; before, everything after 400 characters was cut off).
+- README: clearer that the Diagnostics export package turns on `system_log: fire_event: true` itself.
 - **Diagnostics export:** `meta.missing_helpers` (expected settings that do not exist) and `meta.filled_in_but_missing` (entered entities that do not exist).
 
 **Usage profile per weekday**
@@ -63,7 +64,8 @@ Versions follow `year.month.sequence`; the sequence restarts at 1 every month. E
 - The *empty* time is the start of the shortfall (new attribute `pathcheck_gap_start`). Before, it showed the empty time with smart hold, which could fall after the end of the shortfall (*empty tomorrow around 22:34 … until tomorrow 09:00 buy 0.2 kWh*).
 
 **Upgrading**
-- Replace `zendure_forecasting_global.yaml`, `zendure_negative_price_global.yaml`, the automation and the dashboard (optionally also `zendure_export_global.yaml`) and **restart** Home Assistant (new helpers). Paste the dashboard again via the Raw configuration editor.
+- Replace all files (changed in content: `zendure_gielz1986_global.yaml`, `zendure_forecasting_global.yaml`, `zendure_negative_price_global.yaml`, `zendure_export_global.yaml`, the automation and the dashboard; the others only in version number) and **restart** Home Assistant (new helpers). Paste the dashboard again via the Raw configuration editor.
+- **Start the measured charge power over** (recommended if *Measured Charge Power* is clearly lower than your real charging power): Developer tools → Actions, `recorder.purge_entities` with `entity_id: sensor.forecast_grid_charge_power` and `keep_days: 0`; about 15 seconds later `statistics.reload`. Until the next grid charge the planner uses your configured charge power.
 - After the restart *Smart hold* is on. If you want the behaviour from before this version with the dip switch off, turn *Smart hold* off.
 - If you had set a solar credit: that field no longer exists (`input_number.negative_price_pre_discharge_solar_credit` can go). Fill in the reliability per month if you like.
 - Calibration charging is on (after 14 days without 100%). Turn it off with *Calibration charging off*.

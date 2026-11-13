@@ -1,7 +1,7 @@
-# Zendure zenSDK (Gielz) + Forecasting 2026.11.4 | based on Gielz v20261113
+# Zendure zenSDK (Gielz) + Forecasting 2026.11.5 | based on Gielz v20261113
 # Based on Gielz1986/Zendure-HA-zenSDK (Michiel Hofker). See README.md for license and changes.
 alias: Zendure zenSDK (Gielz) Global
-description: Configuration Version (v20261113) + Forecasting 2026.11.4
+description: Configuration Version (v20261113) + Forecasting 2026.11.5
 triggers:
   - seconds: /5
     id: aansturing_trigger

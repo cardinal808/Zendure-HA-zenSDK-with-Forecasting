@@ -7,7 +7,7 @@ Choose your preferred language
 
 > **This is a fork of [Gielz1986/Zendure-HA-zenSDK](https://github.com/Gielz1986/Zendure-HA-zenSDK)** by Michiel Hofker (Gielz1986). All credit for the integration, the automation and the dashboard goes to the original project. This fork adds **one extra mode: Dynamic Smart Matching + Forecasting** (Dutch: *Dynamisch NOM + Forecasting*). For everything else (modes, wiki, support, updates), see the original repository. The original README follows below this section.
 
-**Version:** `2026.11.4` · based on Gielz configuration `v20261113` · available in Dutch (NL) and Global (EN) · [Changelog](CHANGELOG.md)
+**Version:** `2026.11.5` · based on Gielz configuration `v20261113` · available in Dutch (NL) and Global (EN) · [Changelog](CHANGELOG.md)
 
 Versions follow `year.month.sequence` (the sequence restarts at 1 every month). In Home Assistant you see the installed version and the latest version on GitHub (`sensor.forecasting_version`, `sensor.forecasting_release_check`) on the Configuration tab, and the release notes under Releasenotes.
 
@@ -51,7 +51,7 @@ The set consists of a base you always need and five optional packages. The base 
 | EV | `zendure_ev_global.yaml` / `zendure_ev.yaml` | Optional | Charge the car without the battery discharging into it; night or daytime charging session. | Power measurement of the charger (e.g. Shelly 1PM); a switch for a charging session | The battery can discharge into the car; charging counts in the usage profile. |
 | HVAC | `zendure_hvac_global.yaml` / `zendure_hvac.yaml` | Optional | AC not from the battery, per AC mode: no discharging or subtract the AC power; AC usage then kept out of the usage profile. | `climate.*`, power sensor or switch of the AC; a power measurement for subtracting | Discharging continues while the AC runs. |
 | Nordpool | `zendure_nordpool_global.yaml` / `zendure_nordpool.yaml` | Optional | Two Nord Pool sensors: all-in price for supply (market price + energy tax + markup, with VAT) and bare market price with VAT for export, with input fields for the amounts. | Nord Pool integration (HACS); remove your own Nord Pool YAML with the same settings | You set up the Nord Pool sensor(s) yourself. |
-| Diagnostics export | `zendure_export_global.yaml` / `zendure_export.yaml` | Optional | One JSON file with settings, sensors and logs, to attach to a question or issue. | button-card (HACS) for the download button; turns on `system_log: fire_event: true` | No export; sharing data is manual. |
+| Diagnostics export | `zendure_export_global.yaml` / `zendure_export.yaml` | Optional | One JSON file with settings, sensors and logs, to attach to a question or issue. | button-card (HACS) for the download button. The package turns on `system_log: fire_event: true` itself; if `system_log:` is already in your configuration.yaml, remove the block from the package | No export; sharing data is manual. |
 
 Every optional file has the line `# OPTIONAL PACKAGE` right below the version header, the required ones `# REQUIRED PACKAGE`, so you can see in the folder which ones you can leave out.
 
