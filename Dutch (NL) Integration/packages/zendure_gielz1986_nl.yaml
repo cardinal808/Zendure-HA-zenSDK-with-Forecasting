@@ -1,4 +1,4 @@
-# Zendure zenSDK (Gielz) + Forecasting 2026.11.4 | gebaseerd op Gielz v20261007
+# Zendure zenSDK (Gielz) + Forecasting 2026.11.4 | gebaseerd op Gielz v20261113
 # Gebaseerd op Gielz1986/Zendure-HA-zenSDK (Michiel Hofker). Zie README.md voor licentie en wijzigingen.
 input_select:
   zendure_2400_ac_modus_selecteren:
@@ -377,7 +377,7 @@ template:
       - name: "Zendure 2400 AC Configuratie Versie"
         unique_id: Zendure_2400_AC_Configuratie_Versie
         icon: mdi:one-up
-        state: "v20261007"
+        state: "v20261113"
 
       - name: "Zendure 2400 AC Laatste Kalibratie (Dagen)"
         unique_id: Zendure_2400_AC_Laatste_Kalibratie_Dagen
@@ -1781,7 +1781,14 @@ rest:
           {% set product = value_json.product %}
           {% if product in ["solarFlow4000MixAC+", "solarFlow4000MixPro", "solarFlow3000MixAC+"] %}
             {% set mapping = {
-              70: 8.00
+              5: 2.88,
+              70: 8.00,
+              250: 0.96,
+              240: 1.92,
+              300: 1.92,
+              350: 2.88,
+              280: 2.88,
+              500: 2.40
             } %}
           {% else %}
             {% set mapping = {

@@ -2,7 +2,13 @@
 
 Versions follow `year.month.sequence`; the sequence restarts at 1 every month. Each version states which Gielz version it is based on. [Nederlands](CHANGELOG.nl.md)
 
-## 2026.11.5 (in development) — based on Gielz v20261007
+## 2026.11.5 (in development) — based on Gielz v20261113
+
+**Updated to Gielz v20261113**
+- Configuration Version and the automation description are at v20261113, so Gielz's release check shows *Up-to-date* again.
+- **Total Capacity** now knows all battery types for the SolarFlow 4000/3000 Mix models (previously only packType 70). Nothing changes for the 2400 AC.
+- Automation: notation only (`name: " "`, two lines joined); works the same.
+- **Deliberately not adopted:** Gielz now reads `pvStatus` more safely but still uses it. This set has not used `pvStatus` at all since 2026.11.4 (new Zendure firmware reports it incorrectly); that stays.
 
 **Smart hold as its own switch**
 - New **Smart hold** switch (`input_boolean.forecast_setting_smart_hold`) in Forecasting Configuration (Basic). Smart hold (if the battery won't last, it keeps its charge for the most expensive quarter hours) used to depend on *Hold discharge in cheap dip*. With that switch off the battery discharged at low prices in the morning and the house bought the evening peak. Smart hold costs no extra loss and is now **on** by default, also when the dip switch is off (set once after the upgrade; after that your choice stays).

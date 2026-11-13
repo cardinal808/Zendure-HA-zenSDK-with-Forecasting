@@ -1,4 +1,4 @@
-# Zendure zenSDK (Gielz) + Forecasting 2026.11.4 | gebaseerd op Gielz v20261007
+# Zendure zenSDK (Gielz) + Forecasting 2026.11.4 | gebaseerd op Gielz v20261113
 # Gebaseerd op Gielz1986/Zendure-HA-zenSDK (Michiel Hofker). Zie README.md voor licentie en wijzigingen.
 # VEREIST PAKKET - hoort bij de basis van deze set (naast zendure_gielz1986_nl.yaml).
 # =====================================================================
@@ -440,7 +440,7 @@ template:
         icon: mdi:one-up
         state: "2026.11.4"
         attributes:
-          gielz_basis: "v20261007"
+          gielz_basis: "v20261113"
           # Optionele pakketten die geladen zijn
           pakketten: >
             {% set ns = namespace(l=[]) %}

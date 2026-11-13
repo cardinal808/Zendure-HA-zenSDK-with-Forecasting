@@ -2,7 +2,13 @@
 
 Versies volgen `jaar.maand.volgnummer`; het volgnummer begint elke maand bij 1. Elke versie vermeldt op welke Gielz-versie hij is gebaseerd. [English](CHANGELOG.md)
 
-## 2026.11.5 (in ontwikkeling) — gebaseerd op Gielz v20261007
+## 2026.11.5 (in ontwikkeling) — gebaseerd op Gielz v20261113
+
+**Bijgewerkt naar Gielz v20261113**
+- Configuratie Versie en de automation-beschrijving staan op v20261113, zodat Gielz' releasecheck weer *Up-to-date* toont.
+- **Totale Capaciteit** kent nu alle accutypes bij de SolarFlow 4000/3000 Mix-modellen (eerder alleen packType 70). Voor de 2400 AC verandert er niets.
+- Automation: alleen schrijfwijze (`name: " "`, twee regels samengevoegd); werkt hetzelfde.
+- **Bewust niet overgenomen:** Gielz leest `pvStatus` nu veiliger uit, maar gebruikt het nog wel. Deze set gebruikt `pvStatus` sinds 2026.11.4 helemaal niet meer (nieuwe Zendure-firmware meldt het onjuist); dat blijft zo.
 
 **Slim vasthouden als eigen schakelaar**
 - Nieuwe schakelaar **Slim vasthouden** (`input_boolean.forecast_slim_vasthouden`) in Forecasting Configuratie (Basis). Slim vasthouden (haalt de accu het niet, dan bewaart hij zijn lading voor de duurste kwartieren) hing tot nu toe aan *Niet ontladen in goedkoop dal*. Stond die uit, dan ontlaadde de accu 's ochtends bij lage prijzen en kocht het huis de avondpiek in. Slim vasthouden kost geen extra verlies en staat nu standaard **aan**, ook als de dal-schakelaar uit staat (eenmalig gezet na de upgrade; daarna blijft je keuze staan).
