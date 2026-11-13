@@ -15,7 +15,7 @@ Versions follow `year.month.sequence` (the sequence restarts at 1 every month). 
 
 The battery charges at the cheapest moments, but **only as much as is actually needed**, taking into account your solar forecast, your usage and tomorrow's prices.
 
-- Calculates a charging plan every minute (`sensor.zendure_forecast_plan`) with the state *Charge / Waiting / Not needed / Not favorable*.
+- Calculates a charging plan every quarter hour (and on every change) (`sensor.zendure_forecast_plan`) with the state *Charge / Waiting / Not needed / Not favorable*.
 - **Scenario A** (tomorrow cheaper or equal, or prices not yet known): charges enough to bridge until tomorrow's cheap moment or until there is enough sun, plus an adjustable margin.
 - **Scenario B** (tomorrow more expensive): charges as full as possible, as long as the price now is lower than tomorrow's charging moment.
 - Takes expected solar (today and tomorrow) into account, with a reliability percentage.
@@ -96,7 +96,7 @@ First install the original integration as described below (packages file, automa
 | Charges only what is needed instead of a fixed number of cheap periods: fewer unnecessary grid kWh and cycles. | More to set up: a solar forecast integration and a total counter for your solar panels. |
 | Uses your solar forecast, so a sunny day ahead means less grid charging. | Needs about a week of history before usage and self-consumption are measured; until then it uses default values. |
 | Looks at tomorrow's prices (scenario A/B) and checks whether the battery lasts until the first charge slot. | Only as good as your solar forecast; the reliability setting helps, but cannot fix a poor forecast. |
-| Adapts to your system: measured efficiency, measured charge power, 7-day self-consumption. | Extra sensors and a planner that recalculates every minute. |
+| Adapts to your system: measured efficiency, measured charge power, 7-day self-consumption. | Extra sensors and a planner that recalculates every quarter hour. |
 | The plan is fully visible on the dashboard, with a recalculate button. | Rule-based: a good plan, not a mathematically proven optimum. |
 
 **Compared with a full optimizer such as [Day Ahead Optimizer (DAO)](https://github.com/corneel27/day-ahead)**

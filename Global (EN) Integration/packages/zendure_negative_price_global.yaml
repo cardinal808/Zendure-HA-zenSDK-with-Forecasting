@@ -142,17 +142,6 @@ input_number:
     mode: box
     unit_of_measurement: "%"
 
-  # Pre-discharge: share of the expected solar surplus that counts (%). 0 = default (75%).
-  # Higher = discharge deeper and more room for solar; lower = more careful with an optimistic forecast.
-  negative_price_pre_discharge_solar_credit:
-    name: Negative Price Pre Discharge Solar Credit
-    icon: mdi:weather-sunny-alert
-    min: 0
-    max: 100
-    step: 5
-    mode: box
-    unit_of_measurement: "%"
-
   # Internal: inverter limit before limiting
   negative_price_previous_limit:
     name: Negative Price Previous Limit

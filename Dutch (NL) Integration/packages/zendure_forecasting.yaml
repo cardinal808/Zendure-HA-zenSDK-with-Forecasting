@@ -64,12 +64,123 @@ input_number:
     mode: box
     unit_of_measurement: "%"
 
+  # Kalibratieladen: na zoveel dagen zonder kalibratie (100%) laadt de planner de accu vol uit het net.
+  # Vanaf de helft wacht hij op een zonnige dag. 0 = standaard (14 dagen).
+  forecast_kalibratie_dagen:
+    name: Forecast Kalibratie Na Dagen
+    icon: mdi:battery-sync
+    min: 0
+    max: 60
+    step: 1
+    mode: box
+    unit_of_measurement: "d"
+
   forecast_betrouwbaarheid:
     name: Forecast Betrouwbaarheid Zonvoorspelling
     icon: mdi:weather-partly-cloudy
     min: 0
     max: 100
     step: 5
+    mode: box
+    unit_of_measurement: "%"
+
+  # Betrouwbaarheid per maand (%). 0 = niet ingevuld: dan geldt de algemene betrouwbaarheid hierboven.
+  # Aan het eind van elke maand vult de set de gemeten verhouding (werkelijke zon / voorspelling) in
+  # voor die maand, zodat hij volgend jaar klopt. Uitzetten met "Niet automatisch invullen".
+  forecast_betrouwbaarheid_jan:
+    name: Forecast Betrouwbaarheid Januari
+    icon: mdi:weather-partly-cloudy
+    min: 0
+    max: 150
+    step: 1
+    mode: box
+    unit_of_measurement: "%"
+  forecast_betrouwbaarheid_feb:
+    name: Forecast Betrouwbaarheid Februari
+    icon: mdi:weather-partly-cloudy
+    min: 0
+    max: 150
+    step: 1
+    mode: box
+    unit_of_measurement: "%"
+  forecast_betrouwbaarheid_mrt:
+    name: Forecast Betrouwbaarheid Maart
+    icon: mdi:weather-partly-cloudy
+    min: 0
+    max: 150
+    step: 1
+    mode: box
+    unit_of_measurement: "%"
+  forecast_betrouwbaarheid_apr:
+    name: Forecast Betrouwbaarheid April
+    icon: mdi:weather-partly-cloudy
+    min: 0
+    max: 150
+    step: 1
+    mode: box
+    unit_of_measurement: "%"
+  forecast_betrouwbaarheid_mei:
+    name: Forecast Betrouwbaarheid Mei
+    icon: mdi:weather-partly-cloudy
+    min: 0
+    max: 150
+    step: 1
+    mode: box
+    unit_of_measurement: "%"
+  forecast_betrouwbaarheid_jun:
+    name: Forecast Betrouwbaarheid Juni
+    icon: mdi:weather-partly-cloudy
+    min: 0
+    max: 150
+    step: 1
+    mode: box
+    unit_of_measurement: "%"
+  forecast_betrouwbaarheid_jul:
+    name: Forecast Betrouwbaarheid Juli
+    icon: mdi:weather-partly-cloudy
+    min: 0
+    max: 150
+    step: 1
+    mode: box
+    unit_of_measurement: "%"
+  forecast_betrouwbaarheid_aug:
+    name: Forecast Betrouwbaarheid Augustus
+    icon: mdi:weather-partly-cloudy
+    min: 0
+    max: 150
+    step: 1
+    mode: box
+    unit_of_measurement: "%"
+  forecast_betrouwbaarheid_sep:
+    name: Forecast Betrouwbaarheid September
+    icon: mdi:weather-partly-cloudy
+    min: 0
+    max: 150
+    step: 1
+    mode: box
+    unit_of_measurement: "%"
+  forecast_betrouwbaarheid_okt:
+    name: Forecast Betrouwbaarheid Oktober
+    icon: mdi:weather-partly-cloudy
+    min: 0
+    max: 150
+    step: 1
+    mode: box
+    unit_of_measurement: "%"
+  forecast_betrouwbaarheid_nov:
+    name: Forecast Betrouwbaarheid November
+    icon: mdi:weather-partly-cloudy
+    min: 0
+    max: 150
+    step: 1
+    mode: box
+    unit_of_measurement: "%"
+  forecast_betrouwbaarheid_dec:
+    name: Forecast Betrouwbaarheid December
+    icon: mdi:weather-partly-cloudy
+    min: 0
+    max: 150
+    step: 1
     mode: box
     unit_of_measurement: "%"
 
@@ -86,6 +197,18 @@ input_boolean:
   forecast_slim_vasthouden_ingesteld:
     name: Forecast Slim Vasthouden Ingesteld
     icon: mdi:robot
+  # Toont de 12 maandvelden van de betrouwbaarheid op het dashboard
+  # Kalibratieladen uitzetten (standaard aan)
+  forecast_kalibratie_uit:
+    name: Forecast Kalibratieladen Uit
+    icon: mdi:battery-sync-outline
+  forecast_betrouwbaarheid_per_maand_tonen:
+    name: Forecast Betrouwbaarheid Per Maand Tonen
+    icon: mdi:calendar-month
+  # Aan = de gemeten maandwaarde niet automatisch invullen
+  forecast_betrouwbaarheid_niet_automatisch:
+    name: Forecast Betrouwbaarheid Niet Automatisch Invullen
+    icon: mdi:calendar-lock
   forecast_tonen_op_dashboard:
     name: Forecasting Tonen Op Dashboard
     icon: mdi:calendar-clock
@@ -708,6 +831,7 @@ template:
       # Gewicht van een nieuwe meting zodra er genoeg metingen zijn (geheugen = ongeveer 1 / gewicht metingen):
       c_alpha_min_werkdag: 0.1           # werkdag: ~10 metingen = ongeveer 2 weken
       c_alpha_min_weekend: 0.2           # weekend: ~5 metingen = ongeveer 2,5 week
+      c_alpha_min_dag: 0.25              # per weekdag: ~4 metingen = ongeveer 4 weken (één meting per week)
       c_alpha_vorm_werkdag: 0.05         # vorm per kwartier, werkdag: ~20 metingen = ongeveer 4 weken
       c_alpha_vorm_weekend: 0.1          # vorm per kwartier, weekend: ~10 metingen = ongeveer 5 weken
       c_vorm_min_uur_kwh: 0.1            # uren met minder verbruik zeggen niets over de vorm
@@ -764,6 +888,9 @@ template:
         {% else %}-1{% endif %}
       uur_idx: "{{ ((vorige.ts | float(0)) | timestamp_custom('%H', true) | int) if vorige is mapping else -1 }}"
       uur_type: "{{ (vorige.dagtype if vorige is mapping and vorige.dagtype is defined else 'werkdag') }}"
+      # Weekdag van die meting (0 = maandag). Feestdagen (werkdag-weekdag die als weekend telt) niet per dag leren.
+      uur_wdag: "{{ (((((vorige.ts | float(0)) | timestamp_custom('%w', true) | int) + 6) % 7) if vorige is mapping else -1) }}"
+      uur_dag_ok: "{{ uur_kwh >= 0 and uur_wdag >= 0 and uur_type == ('werkdag' if uur_wdag < 5 else 'weekend') }}"
       # Verbruik van het afgelopen kwartier (als de vorige kwartiermeting ongeveer een kwartier oud is).
       # Een klein negatief verschil (tellers die net niet tegelijk bijwerken) telt als 0.
       kwart_kwh: >
@@ -860,6 +987,38 @@ template:
               {% set ns.l = ns.l + [k + 1 if (uur_kwh >= 0 and uur_type == 'weekend' and uur_idx == i) else k] %}
             {% endfor %}
             {{ ns.l }}
+          # Per weekdag (0 = maandag): gemiddeld verbruik per uur, en het aantal metingen
+          per_dag: >
+            {% set oud = state_attr(profiel, 'per_dag') or [] %}
+            {% set n = state_attr(profiel, 'n_per_dag') or [] %}
+            {% set ns = namespace(l=[]) %}
+            {% for d in range(7) %}
+              {% set rij = oud[d] if oud | length == 7 and oud[d] | length == 24 else [none] * 24 %}
+              {% set nr = n[d] if n | length == 7 and n[d] | length == 24 else [0] * 24 %}
+              {% set nd = namespace(l=[]) %}
+              {% for i in range(24) %}
+                {% set w = rij[i] %}
+                {% if uur_dag_ok and uur_wdag == d and uur_idx == i %}
+                  {% set a = [1 / ((nr[i] | int(0)) + 1), c_alpha_min_dag] | max %}
+                  {% set w = (uur_kwh if w is none else (w * (1 - a) + uur_kwh * a)) | round(3) %}
+                {% endif %}
+                {% set nd.l = nd.l + [w] %}
+              {% endfor %}
+              {% set ns.l = ns.l + [nd.l] %}
+            {% endfor %}
+            {{ ns.l }}
+          n_per_dag: >
+            {% set n = state_attr(profiel, 'n_per_dag') or [] %}
+            {% set ns = namespace(l=[]) %}
+            {% for d in range(7) %}
+              {% set nr = n[d] if n | length == 7 and n[d] | length == 24 else [0] * 24 %}
+              {% set nd = namespace(l=[]) %}
+              {% for i in range(24) %}
+                {% set nd.l = nd.l + [(nr[i] | int(0)) + (1 if (uur_dag_ok and uur_wdag == d and uur_idx == i) else 0)] %}
+              {% endfor %}
+              {% set ns.l = ns.l + [nd.l] %}
+            {% endfor %}
+            {{ ns.l }}
           # Vormfactor per kwartier van de dag (96 waarden, index 0 = 00:00-00:15; 1 = gelijk verdeeld,
           # de vier kwartieren van een uur zijn samen 4)
           vorm_werkdag: >
@@ -927,6 +1086,59 @@ template:
             {% if meting_ok %}{{ {'ts': nu_ts | round(0), 'imp': t_imp, 'exp': t_exp, 'prod': prod_nu, 'laden': t_laden, 'ontl': t_ontl, 'ev': ev_nu, 'hvac': hvac_nu, 'dagtype': dagtype_nu} }}{% else %}{{ vorige_k }}{% endif %}
 
   # -------------------------------------------------------------------
+  # Zon per maand: werkelijke zonproductie tegenover de voorspelling (voor de betrouwbaarheid per maand).
+  #   Elke dag om 23:58: zonproductie van vandaag (zon-teller) en de voorspelling die gisteren om
+  #   23:58 voor vandaag gold ("Zon morgen sensor", zonder betrouwbaarheidscorrectie) optellen.
+  #   Bij de eerste meting in een nieuwe maand wordt de vorige maand afgerond (attribuut afgerond);
+  #   een automatisering zet die waarde in het maandveld. State = verhouding deze maand (%).
+  # -------------------------------------------------------------------
+  - trigger:
+      - platform: time_pattern
+        hours: 23
+        minutes: 58
+    variables:
+      zm_vorig: "{{ states.sensor.forecast_zon_maandmeting.attributes if states.sensor.forecast_zon_maandmeting is not none else {} }}"
+      zm_teller: "{{ states('sensor.forecast_teller_zon_productie') | float(-1) }}"
+      zm_morgen: >
+        {% set e = states('input_text.forecast_zon_morgen_sensor') | lower | replace(' ', '') %}
+        {% if e | regex_match('^sensor\\..+') and has_value(e) %}
+          {% set u = state_attr(e, 'unit_of_measurement') %}
+          {% set v = states(e) | float(-1) %}
+          {% if v < 0 %}-1{% elif u == 'Wh' %}{{ v / 1000 }}{% elif u == 'MWh' %}{{ v * 1000 }}{% else %}{{ v }}{% endif %}
+        {% else %}-1{% endif %}
+      zm_gisteren: "{{ (now() - timedelta(days=1)).strftime('%Y-%m-%d') }}"
+      zm_maand: "{{ now().strftime('%Y-%m') }}"
+      # Telt vandaag mee? Gisteren een tellerstand en een voorspelling voor vandaag vastgelegd.
+      zm_dag_ok: >
+        {{ zm_vorig.datum is defined and zm_vorig.datum == zm_gisteren and zm_teller >= 0
+           and (zm_vorig.teller_start | float(-1)) >= 0 and (zm_vorig.verwacht_vandaag | float(-1)) > 0
+           and 0 <= zm_teller - (zm_vorig.teller_start | float(0)) <= 200 }}
+      zm_nieuwe_maand: "{{ zm_vorig.maand is defined and zm_vorig.maand != zm_maand }}"
+      zm_w: "{{ ((0 if zm_nieuwe_maand else (zm_vorig.werkelijk_kwh | float(0))) + ((zm_teller - (zm_vorig.teller_start | float(0))) if zm_dag_ok else 0)) | round(3) }}"
+      zm_v: "{{ ((0 if zm_nieuwe_maand else (zm_vorig.verwacht_kwh | float(0))) + ((zm_vorig.verwacht_vandaag | float(0)) if zm_dag_ok else 0)) | round(3) }}"
+      zm_n: "{{ (0 if zm_nieuwe_maand else (zm_vorig.dagen | int(0))) + (1 if zm_dag_ok else 0) }}"
+    sensor:
+      - name: "Forecast Zon Maandmeting"
+        unique_id: forecast_zon_maandmeting
+        icon: mdi:calendar-month
+        unit_of_measurement: "%"
+        state: "{{ ((zm_w / zm_v * 100) | round(0)) if zm_v >= 1 else none }}"
+        attributes:
+          maand: "{{ zm_maand }}"
+          datum: "{{ now().strftime('%Y-%m-%d') }}"
+          werkelijk_kwh: "{{ zm_w }}"
+          verwacht_kwh: "{{ zm_v }}"
+          dagen: "{{ zm_n }}"
+          teller_start: "{{ zm_teller if zm_teller >= 0 else none }}"
+          verwacht_vandaag: "{{ zm_morgen if zm_morgen > 0 else none }}"
+          # Afgeronde vorige maand: minstens 10 dagen en 5 kWh voorspeld, verhouding 10-150%
+          afgerond: >
+            {% if zm_nieuwe_maand and (zm_vorig.dagen | int(0)) >= 10 and (zm_vorig.verwacht_kwh | float(0)) >= 5 %}
+              {{ {'maand': zm_vorig.maand, 'pct': ([[((zm_vorig.werkelijk_kwh | float(0)) / (zm_vorig.verwacht_kwh | float(1)) * 100) | round(0) | int, 10] | max, 150] | min),
+                  'werkelijk_kwh': zm_vorig.werkelijk_kwh, 'verwacht_kwh': zm_vorig.verwacht_kwh, 'dagen': zm_vorig.dagen} }}
+            {% else %}{{ zm_vorig.afgerond if zm_vorig.afgerond is defined else none }}{% endif %}
+
+  # -------------------------------------------------------------------
   # 4. DE PLANNER
   #    Alle berekeningen staan in "variables" (eenmalig per berekening)
   #    en worden door de state en de attributes hergebruikt.
@@ -936,8 +1148,11 @@ template:
   #    De automation laadt alleen als de state "Laden" is.
   # -------------------------------------------------------------------
   - trigger:
+      # Elk kwartier, net na de prijswissel (en na het verbruiksprofiel op :05). Daarnaast direct bij
+      # wijzigingen in instellingen, prijzen of het laadpercentage (stopt laden op tijd als de accu vol is).
       - platform: time_pattern
-        minutes: "/1"
+        minutes: "/15"
+        seconds: 10
       - platform: homeassistant
         event: start
       - platform: state
@@ -948,8 +1163,23 @@ template:
           - input_text.forecast_zon_productie_sensor
           - input_number.forecast_laad_marge
           - input_number.forecast_betrouwbaarheid
+          - input_number.forecast_betrouwbaarheid_jan
+          - input_number.forecast_betrouwbaarheid_feb
+          - input_number.forecast_betrouwbaarheid_mrt
+          - input_number.forecast_betrouwbaarheid_apr
+          - input_number.forecast_betrouwbaarheid_mei
+          - input_number.forecast_betrouwbaarheid_jun
+          - input_number.forecast_betrouwbaarheid_jul
+          - input_number.forecast_betrouwbaarheid_aug
+          - input_number.forecast_betrouwbaarheid_sep
+          - input_number.forecast_betrouwbaarheid_okt
+          - input_number.forecast_betrouwbaarheid_nov
+          - input_number.forecast_betrouwbaarheid_dec
           - input_boolean.forecast_dal_ontladen_blokkeren
           - input_boolean.forecast_slim_vasthouden
+          - input_boolean.forecast_kalibratie_uit
+          - input_number.forecast_kalibratie_dagen
+          - sensor.zendure_2400_ac_laatste_kalibratie_dagen
           - sensor.forecast_gemeten_laadvermogen
           - input_number.dynamisch_minimale_spread
           - input_number.zendure_2400_ac_max_oplaadvermogen
@@ -981,6 +1211,8 @@ template:
       c_zon_krediet: 0.75                # vooraf ontladen: verwacht zon-overschot telt maar voor 75% (forecast kan te optimistisch zijn)
       c_vo_min_kwh: 0.5                  # vooraf ontladen: pas vanaf zoveel verwacht zon-overschot in een negatief venster
       c_vorm_n_vol_werkdag: 10           # vorm per kwartier telt volledig mee na zoveel complete uren (werkdag)
+      c_kalibratie_dagen: 14             # kalibratieladen: standaard na zoveel dagen zonder 100% netladen
+      c_dag_n_vol: 3                     # profiel per weekdag telt volledig mee na zoveel metingen (weken) van dat uur
       c_vorm_n_vol_weekend: 5            # idem weekend; daarvoor geleidelijk (minder metingen = dichter bij gelijk verdeeld)
 
       # ---- Tijd -------------------------------------------------------
@@ -1041,10 +1273,12 @@ template:
           {% set v = states(e) | float(0) %}
           {% if u == 'Wh' %}{{ v / 1000 }}{% elif u == 'MWh' %}{{ v * 1000 }}{% else %}{{ v }}{% endif %}
         {% else %}-1{% endif %}
-      # 0 = niet gebruiken (=100%)
-      betr: >
-        {% set b = states('input_number.forecast_betrouwbaarheid') | float(0) %}
-        {{ (b if b > 0 else 100) / 100 }}
+      # Betrouwbaarheid van deze maand; 0 = niet ingevuld, dan de algemene; ook 0 = 100%
+      betr_maand: "{{ states('input_number.forecast_betrouwbaarheid_' ~ ['jan', 'feb', 'mrt', 'apr', 'mei', 'jun', 'jul', 'aug', 'sep', 'okt', 'nov', 'dec'][now().month - 1]) | float(0) }}"
+      betr_algemeen: "{{ states('input_number.forecast_betrouwbaarheid') | float(0) }}"
+      betr_ingevuld: "{{ betr_maand > 0 or betr_algemeen > 0 }}"
+      betr: "{{ (betr_maand if betr_maand > 0 else (betr_algemeen if betr_algemeen > 0 else 100)) / 100 }}"
+      betr_bron: "{{ ('Maand (' ~ ['jan', 'feb', 'mrt', 'apr', 'mei', 'jun', 'jul', 'aug', 'sep', 'okt', 'nov', 'dec'][now().month - 1] ~ ')') if betr_maand > 0 else ('Algemeen' if betr_algemeen > 0 else 'Niet ingevuld (100%)') }}"
       zon_rest: "{{ ([zon_rest_raw, 0] | max * betr) | round(2) }}"
       zon_morgen: "{{ ([zon_morgen_raw, 0] | max * betr) | round(2) }}"
 
@@ -1150,6 +1384,8 @@ template:
       prof_we: "{{ state_attr('sensor.forecast_verbruiksprofiel', 'weekend') or [] }}"
       prof_n_wd: "{{ state_attr('sensor.forecast_verbruiksprofiel', 'n_werkdag') or [] }}"
       prof_n_we: "{{ state_attr('sensor.forecast_verbruiksprofiel', 'n_weekend') or [] }}"
+      prof_dag: "{{ state_attr('sensor.forecast_verbruiksprofiel', 'per_dag') or [] }}"
+      prof_n_dag: "{{ state_attr('sensor.forecast_verbruiksprofiel', 'n_per_dag') or [] }}"
       vandaag_werkdag: >
         {% if has_value('binary_sensor.workday_sensor') %}{{ is_state('binary_sensor.workday_sensor', 'on') }}
         {% else %}{{ now().weekday() < 5 }}{% endif %}
@@ -1173,7 +1409,16 @@ template:
               (1 van 2 metingen = half profiel, half daggemiddelde). Zo telt een duidelijke
               avondpiek al mee terwijl het profiel nog leert. -#}
           {%- set kw = (prof[h] | float(l_uur)) if ok else (((n * (prof[h] | float(l_uur)) + (nmin - n) * l_uur) / nmin) if heeft and n > 0 else l_uur) -%}
-          {%- set ns.l = ns.l + [{'s': st, 'kw': kw | round(4), 'p': ok, 'wd': wd}] -%}
+          {#- Per weekdag (bv. thuiswerkdagen): meng het profiel van die weekdag erdoor naar het aantal
+              metingen (3 = volledig). Niet op een feestdag die als weekend telt. -#}
+          {%- set wdag = ((st | timestamp_custom('%w', true) | int) + 6) % 7 -%}
+          {%- set normaal = wdag < 5 -%}
+          {%- set pd = prof_dag[wdag] if prof_dag | length == 7 and prof_dag[wdag] | length == 24 else [] -%}
+          {%- set pdn = ((prof_n_dag[wdag][h] | int(0)) if prof_n_dag | length == 7 and prof_n_dag[wdag] | length == 24 else 0) if pd | length == 24 and pd[h] is not none and wd == normaal else 0 -%}
+          {%- set wdg = [pdn / c_dag_n_vol, 1] | min -%}
+          {%- set kw = (wdg * (pd[h] | float(kw)) + (1 - wdg) * kw) if pdn > 0 else kw -%}
+          {%- set ok = ok or pdn >= c_dag_n_vol -%}
+          {%- set ns.l = ns.l + [{'s': st, 'kw': kw | round(4), 'p': ok, 'wd': wd, 'dg': (wdg * 100) | round(0)}] -%}
         {%- endfor -%}
         {{ ns.l }}
       uur_last_eind_ts: "{{ (nu_ts // 3600) * 3600 + 52 * 3600 }}"
@@ -1779,8 +2024,9 @@ template:
           {%- endfor -%}
         {%- endif -%}
         {{ ns.w }}
-      # Zonkrediet: invoerveld in %, 0 = standaard (c_zon_krediet)
-      vo_krediet: "{{ ((states('input_number.negatieve_prijs_vooraf_zonkrediet') | float(0)) / 100) if (states('input_number.negatieve_prijs_vooraf_zonkrediet') | float(0)) > 0 else c_zon_krediet }}"
+      # Zonkrediet: is er een betrouwbaarheid ingevuld (per maand of algemeen), dan zit die al in de
+      # zonvoorspelling en telt het overschot volledig; anders voor 75% (c_zon_krediet)
+      vo_krediet: "{{ 1 if betr_ingevuld else c_zon_krediet }}"
       # Doel bij het begin van het venster (kWh boven min. SOC): ruimte voor het zonkrediet-deel van het overschot
       vo_doel_dc: >
         {{ ([s_max - vo_venster.kwh * vo_krediet * eff_in, 0] | max) | round(3) if vo_venster is mapping else s_max }}
@@ -1812,13 +2058,36 @@ template:
       # ---- Totaal netladen en definitieve slots ------------------------------
       # Het gewone plan en de pad-check overlappen: het gat zit al in de totale energiebalans.
       # Daarom telt het grootste van de twee, niet de som.
-      netladen_ac: "{{ ([grid_ac, pad_netladen_ac if extra_slots | length > 0 else 0] | max) | round(3) }}"
+      # ---- Kalibratieladen -------------------------------------------
+      # De Zendure kalibreert (SOC + balanceren) bij 100%. Met de forecasting haalt de accu dat in de
+      # winter zelden. Vanaf de helft van de drempel wacht de planner op zon die de accu vol krijgt;
+      # op de drempel laadt hij de accu vol uit het net in de goedkoopste kwartieren (buiten het
+      # rendementsfilter: het is onderhoud). Gaat vanzelf uit zodra Gielz een nieuwe kalibratie ziet.
+      kal_dagen: "{{ states('sensor.zendure_2400_ac_laatste_kalibratie_dagen') | float(-1) }}"
+      kal_drempel: "{{ (states('input_number.forecast_kalibratie_dagen') | float(0)) if (states('input_number.forecast_kalibratie_dagen') | float(0)) > 0 else c_kalibratie_dagen }}"
+      kal_wacht_vanaf: "{{ (kal_drempel / 2) | round(0, 'ceil') }}"
+      kal_aan: "{{ not is_state('input_boolean.forecast_kalibratie_uit', 'on') and kal_dagen >= 0 and cap > 0 }}"
+      kal_max_ok: "{{ soc_max >= 100 }}"
+      # Vult de zon de accu vandaag (rest van de dag) of morgen (overschot ≥ 80% van de bruikbare capaciteit)?
+      kal_zon_vandaag: "{{ room > 0 and ([zon_rest - direct_rest_kwh - ev_zon_vandaag_kwh, 0] | max) * eff_in >= room }}"
+      kal_zon_morgen: "{{ morgen_bekend and ([zon_morgen - direct_morgen_kwh - ev_zon_morgen_kwh, 0] | max) * eff_in >= s_max * 0.8 }}"
+      kal_laden: "{{ kal_aan and kal_max_ok and prijzen_ok and kal_dagen >= kal_drempel and room > 0.05 * cap and not kal_zon_vandaag }}"
+      kal_extra_ac: "{{ (([room - zon_dc, 0] | max) / eff_in) | round(3) if kal_laden and eff_in > 0 else 0 }}"
+      kal_status: >
+        {% if not kal_aan or kal_dagen < kal_wacht_vanaf %}{{ none }}
+        {% elif not kal_max_ok %}max_te_laag
+        {% elif kal_dagen >= kal_drempel %}{{ 'zon_vandaag' if kal_zon_vandaag else ('laden' if kal_laden else 'vol') }}
+        {% else %}{{ 'zon_vandaag' if kal_zon_vandaag else ('zon_morgen' if kal_zon_morgen else 'wachten') }}{% endif %}
+
+      netladen_ac: "{{ ([grid_ac, pad_netladen_ac if extra_slots | length > 0 else 0, kal_extra_ac] | max) | round(3) }}"
       n_totaal: >
         {% if netladen_ac >= c_laden_stop_kwh and e_slot > 0 %}{{ (netladen_ac / e_slot) | round(0, 'ceil') | int }}{% else %}0{% endif %}
       gekozen_plan: >
         {%- set extra_s = extra_slots | map(attribute='s') | list -%}
         {%- set ns = namespace(l=extra_slots) -%}
-        {%- for x in gekozen_basis | sort(attribute='v') -%}
+        {#- Kalibratieladen: de goedkoopste kwartieren van vandaag en (bekend) morgen, buiten het rendementsfilter -#}
+        {%- set basis = (pad_kand | selectattr('e', 'gt', nu_ts) | list) if kal_laden else gekozen_basis -%}
+        {%- for x in basis | sort(attribute='v') -%}
           {%- if x.s not in extra_s and ns.l | length < n_totaal -%}
             {%- set ns.l = ns.l + [x] -%}
           {%- endif -%}
@@ -2235,6 +2504,10 @@ template:
           padcheck_netladen_kwh: "{{ pad_netladen_ac }}"
           padcheck_extra_slots: "{{ extra_slots | length }}"
           padcheck_dal_blokkade: "{{ dal_blokkade_plan }}"
+          # Voor de regel "Tekort tot de zon": eerste en laatste laadslot daarvoor, en de ruimte die vrij blijft voor de zon
+          padcheck_laden_van: "{{ ((extra_slots | map(attribute='s') | min) | timestamp_custom('%Y-%m-%d %H:%M', true)) if extra_slots | length > 0 else none }}"
+          padcheck_laden_tot: "{{ ((extra_slots | map(attribute='e') | max) | timestamp_custom('%Y-%m-%d %H:%M', true)) if extra_slots | length > 0 else none }}"
+          padcheck_zon_ruimte_kwh: "{{ zon_dc if pad_dag else 0 }}"
           # --- Dal en laadvermogen ---
           prijs_nu: "{{ prijs_nu if prijs_nu < 999 else none }}"
           dal_drempel: "{{ dal_drempel }}"
@@ -2264,6 +2537,11 @@ template:
           zon_resterend_vandaag_sensor_ok: "{{ zon_rest_raw >= 0 }}"
           zon_morgen_sensor_ok: "{{ zon_morgen_raw >= 0 }}"
           betrouwbaarheid_pct: "{{ (betr * 100) | round(0) }}"
+          betrouwbaarheid_bron: "{{ betr_bron }}"
+          kalibratie_status: "{{ kal_status }}"
+          kalibratie_dagen: "{{ kal_dagen | int if kal_dagen >= 0 else none }}"
+          kalibratie_drempel: "{{ kal_drempel | int }}"
+          kalibratie_extra_kwh: "{{ kal_extra_ac }}"
           zelfverbruik_pct: "{{ direct_rest_pct if zon_rest > 0 else direct_morgen_pct }}"
           zelfverbruik_vandaag_pct: "{{ direct_rest_pct }}"
           zelfverbruik_morgen_pct: "{{ direct_morgen_pct }}"
@@ -2502,6 +2780,36 @@ automation:
                 name: Zendure Forecasting
                 message: "Invoerveld opgeschoond: '{{ repeat.item.oud }}' wordt '{{ repeat.item.nieuw }}'"
                 entity_id: "{{ repeat.item.e }}"
+
+  # Betrouwbaarheid per maand: de gemeten verhouding van de afgeronde maand invullen (voor volgend jaar)
+  - id: forecast_betrouwbaarheid_maand_invullen
+    alias: Forecast Betrouwbaarheid Maand Invullen
+    description: >-
+      Forecasting 2026.11.5 - Vult na afloop van een maand de gemeten betrouwbaarheid in voor die maand.
+    mode: single
+    triggers:
+      - trigger: state
+        entity_id: sensor.forecast_zon_maandmeting
+        attribute: afgerond
+    conditions:
+      - condition: template
+        value_template: >-
+          {{ trigger.to_state.attributes.afgerond is mapping and (trigger.to_state.attributes.afgerond.pct | int(0)) > 0
+             and not is_state('input_boolean.forecast_betrouwbaarheid_niet_automatisch', 'on') }}
+    actions:
+      - variables:
+          a: "{{ trigger.to_state.attributes.afgerond }}"
+          veld: "input_number.forecast_betrouwbaarheid_{{ ['jan','feb','mrt','apr','mei','jun','jul','aug','sep','okt','nov','dec'][(a.maand[5:7] | int) - 1] }}"
+      - action: input_number.set_value
+        target:
+          entity_id: "{{ veld }}"
+        data:
+          value: "{{ a.pct }}"
+      - action: logbook.log
+        data:
+          name: Zendure Forecasting
+          message: "Betrouwbaarheid {{ a.maand }} ingevuld: {{ a.pct }}% ({{ a.werkelijk_kwh }} kWh zon, {{ a.verwacht_kwh }} kWh voorspeld, {{ a.dagen }} dagen)"
+          entity_id: "{{ veld }}"
 
   - id: forecast_verbruiksgegevens_resetten
     alias: Forecast Verbruiksgegevens Resetten

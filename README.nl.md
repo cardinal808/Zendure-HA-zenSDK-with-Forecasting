@@ -14,7 +14,7 @@ Versies volgen `jaar.maand.volgnummer` (het volgnummer begint elke maand bij 1).
 
 De accu laadt op de goedkoopste momenten, maar **alleen zoveel als nodig is**, rekening houdend met je zonvoorspelling, je verbruik en de prijzen van morgen.
 
-- Berekent elke minuut een laadplan (`sensor.zendure_forecast_plan`) met status *Laden / Wachten / Niet nodig / Niet gunstig*.
+- Berekent elk kwartier (en bij elke wijziging) een laadplan (`sensor.zendure_forecast_plan`) met status *Laden / Wachten / Niet nodig / Niet gunstig*.
 - **Scenario A** (morgen goedkoper of gelijk, of prijzen nog onbekend): laadt genoeg om te overbruggen tot het goedkope moment van morgen of tot er voldoende zon is, plus een instelbare marge.
 - **Scenario B** (morgen duurder): laadt zo vol mogelijk, mits de prijs nu lager is dan het laadmoment van morgen.
 - Houdt rekening met zon die je nog verwacht (vandaag en morgen), met een betrouwbaarheidspercentage.
@@ -95,7 +95,7 @@ Installeer eerst de oorspronkelijke integratie zoals hieronder beschreven (packa
 | Laadt alleen wat nodig is in plaats van een vast aantal goedkope periodes: minder onnodige kWh uit het net en minder cycli. | Meer in te stellen: een zon-forecast integratie en een totaalteller van je zonnepanelen. |
 | Gebruikt je zonvoorspelling: een zonnige dag erna betekent minder netladen. | Heeft ongeveer een week historie nodig voordat verbruik en zelfverbruik gemeten zijn; tot die tijd gebruikt het standaardwaarden. |
 | Kijkt naar de prijzen van morgen (scenario A/B) en controleert of de accu het eerste laadslot haalt. | Zo goed als je zonvoorspelling; de betrouwbaarheidsinstelling helpt, maar maakt een slechte voorspelling niet goed. |
-| Past zich aan op je systeem: gemeten rendement, gemeten laadvermogen, 7-daags zelfverbruik. | Extra sensoren en een planner die elke minuut herberekent. |
+| Past zich aan op je systeem: gemeten rendement, gemeten laadvermogen, 7-daags zelfverbruik. | Extra sensoren en een planner die elk kwartier herberekent. |
 | Het plan is volledig zichtbaar op het dashboard, met een herbereken-knop. | Regelgebaseerd: een goed plan, geen wiskundig bewezen optimum. |
 
 **Ten opzichte van een volledige optimizer zoals [Day Ahead Optimizer (DAO)](https://github.com/corneel27/day-ahead)**

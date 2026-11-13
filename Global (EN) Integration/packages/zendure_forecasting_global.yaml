@@ -64,12 +64,123 @@ input_number:
     mode: box
     unit_of_measurement: "%"
 
+  # Calibration charging: after this many days without calibration (100%) the planner charges the
+  # battery full from the grid. From half of it, it waits for a sunny day. 0 = default (14 days).
+  forecast_setting_calibration_days:
+    name: Forecast Calibration After Days
+    icon: mdi:battery-sync
+    min: 0
+    max: 60
+    step: 1
+    mode: box
+    unit_of_measurement: "d"
+
   forecast_setting_solar_reliability:
     name: Forecast Solar Forecast Reliability
     icon: mdi:weather-partly-cloudy
     min: 0
     max: 100
     step: 5
+    mode: box
+    unit_of_measurement: "%"
+
+  # Reliability per month (%). 0 = not filled in: then the general reliability above applies.
+  # At the end of each month the set fills in the measured ratio (actual solar / forecast) for
+  # that month, so it is right next year. Turn off with "Do not fill in automatically".
+  forecast_setting_solar_reliability_jan:
+    name: Forecast Solar Reliability January
+    icon: mdi:weather-partly-cloudy
+    min: 0
+    max: 150
+    step: 1
+    mode: box
+    unit_of_measurement: "%"
+  forecast_setting_solar_reliability_feb:
+    name: Forecast Solar Reliability February
+    icon: mdi:weather-partly-cloudy
+    min: 0
+    max: 150
+    step: 1
+    mode: box
+    unit_of_measurement: "%"
+  forecast_setting_solar_reliability_mar:
+    name: Forecast Solar Reliability March
+    icon: mdi:weather-partly-cloudy
+    min: 0
+    max: 150
+    step: 1
+    mode: box
+    unit_of_measurement: "%"
+  forecast_setting_solar_reliability_apr:
+    name: Forecast Solar Reliability April
+    icon: mdi:weather-partly-cloudy
+    min: 0
+    max: 150
+    step: 1
+    mode: box
+    unit_of_measurement: "%"
+  forecast_setting_solar_reliability_may:
+    name: Forecast Solar Reliability May
+    icon: mdi:weather-partly-cloudy
+    min: 0
+    max: 150
+    step: 1
+    mode: box
+    unit_of_measurement: "%"
+  forecast_setting_solar_reliability_jun:
+    name: Forecast Solar Reliability June
+    icon: mdi:weather-partly-cloudy
+    min: 0
+    max: 150
+    step: 1
+    mode: box
+    unit_of_measurement: "%"
+  forecast_setting_solar_reliability_jul:
+    name: Forecast Solar Reliability July
+    icon: mdi:weather-partly-cloudy
+    min: 0
+    max: 150
+    step: 1
+    mode: box
+    unit_of_measurement: "%"
+  forecast_setting_solar_reliability_aug:
+    name: Forecast Solar Reliability August
+    icon: mdi:weather-partly-cloudy
+    min: 0
+    max: 150
+    step: 1
+    mode: box
+    unit_of_measurement: "%"
+  forecast_setting_solar_reliability_sep:
+    name: Forecast Solar Reliability September
+    icon: mdi:weather-partly-cloudy
+    min: 0
+    max: 150
+    step: 1
+    mode: box
+    unit_of_measurement: "%"
+  forecast_setting_solar_reliability_oct:
+    name: Forecast Solar Reliability October
+    icon: mdi:weather-partly-cloudy
+    min: 0
+    max: 150
+    step: 1
+    mode: box
+    unit_of_measurement: "%"
+  forecast_setting_solar_reliability_nov:
+    name: Forecast Solar Reliability November
+    icon: mdi:weather-partly-cloudy
+    min: 0
+    max: 150
+    step: 1
+    mode: box
+    unit_of_measurement: "%"
+  forecast_setting_solar_reliability_dec:
+    name: Forecast Solar Reliability December
+    icon: mdi:weather-partly-cloudy
+    min: 0
+    max: 150
+    step: 1
     mode: box
     unit_of_measurement: "%"
 
@@ -86,6 +197,18 @@ input_boolean:
   forecast_setting_smart_hold_set:
     name: Forecast Smart Hold Set
     icon: mdi:robot
+  # Shows the 12 monthly reliability fields on the dashboard
+  # Turn calibration charging off (on by default)
+  forecast_setting_calibration_off:
+    name: Forecast Calibration Charging Off
+    icon: mdi:battery-sync-outline
+  forecast_setting_show_reliability_per_month:
+    name: Forecast Show Reliability Per Month
+    icon: mdi:calendar-month
+  # On = do not fill in the measured monthly value automatically
+  forecast_setting_reliability_no_auto_fill:
+    name: Forecast Reliability No Auto Fill
+    icon: mdi:calendar-lock
   dashboard_setting_show_forecasting:
     name: Show Forecasting On Dashboard
     icon: mdi:calendar-clock
@@ -708,6 +831,7 @@ template:
       # Weight of a new measurement once there are enough measurements (memory = about 1 / weight measurements):
       c_alpha_min_workday: 0.1           # workday: ~10 measurements = about 2 weeks
       c_alpha_min_weekend: 0.2           # weekend: ~5 measurements = about 2.5 weeks
+      c_alpha_min_day: 0.25              # per weekday: ~4 measurements = about 4 weeks (one measurement per week)
       c_alpha_shape_workday: 0.05        # shape per quarter, workday: ~20 measurements = about 4 weeks
       c_alpha_shape_weekend: 0.1         # shape per quarter, weekend: ~10 measurements = about 5 weeks
       c_shape_min_hour_kwh: 0.1          # hours with less usage say nothing about the shape
@@ -764,6 +888,9 @@ template:
         {% else %}-1{% endif %}
       hour_idx: "{{ ((prev.ts | float(0)) | timestamp_custom('%H', true) | int) if prev is mapping else -1 }}"
       hour_type: "{{ (prev.daytype if prev is mapping and prev.daytype is defined else 'workday') }}"
+      # Weekday of that measurement (0 = Monday). Holidays (a workday weekday counted as weekend) are not learned per day.
+      hour_wday: "{{ (((((prev.ts | float(0)) | timestamp_custom('%w', true) | int) + 6) % 7) if prev is mapping else -1) }}"
+      hour_day_ok: "{{ hour_kwh >= 0 and hour_wday >= 0 and hour_type == ('workday' if hour_wday < 5 else 'weekend') }}"
       # Usage of the past quarter (if the previous quarter measurement is about a quarter old).
       # A small negative difference (counters not updating at exactly the same time) counts as 0.
       quarter_kwh: >
@@ -860,6 +987,38 @@ template:
               {% set ns.l = ns.l + [k + 1 if (hour_kwh >= 0 and hour_type == 'weekend' and hour_idx == i) else k] %}
             {% endfor %}
             {{ ns.l }}
+          # Per weekday (0 = Monday): average usage per hour, and the number of measurements
+          per_day: >
+            {% set oud = state_attr(profile, 'per_day') or [] %}
+            {% set n = state_attr(profile, 'n_per_day') or [] %}
+            {% set ns = namespace(l=[]) %}
+            {% for d in range(7) %}
+              {% set rij = oud[d] if oud | length == 7 and oud[d] | length == 24 else [none] * 24 %}
+              {% set nr = n[d] if n | length == 7 and n[d] | length == 24 else [0] * 24 %}
+              {% set nd = namespace(l=[]) %}
+              {% for i in range(24) %}
+                {% set w = rij[i] %}
+                {% if hour_day_ok and hour_wday == d and hour_idx == i %}
+                  {% set a = [1 / ((nr[i] | int(0)) + 1), c_alpha_min_day] | max %}
+                  {% set w = (hour_kwh if w is none else (w * (1 - a) + hour_kwh * a)) | round(3) %}
+                {% endif %}
+                {% set nd.l = nd.l + [w] %}
+              {% endfor %}
+              {% set ns.l = ns.l + [nd.l] %}
+            {% endfor %}
+            {{ ns.l }}
+          n_per_day: >
+            {% set n = state_attr(profile, 'n_per_day') or [] %}
+            {% set ns = namespace(l=[]) %}
+            {% for d in range(7) %}
+              {% set nr = n[d] if n | length == 7 and n[d] | length == 24 else [0] * 24 %}
+              {% set nd = namespace(l=[]) %}
+              {% for i in range(24) %}
+                {% set nd.l = nd.l + [(nr[i] | int(0)) + (1 if (hour_day_ok and hour_wday == d and hour_idx == i) else 0)] %}
+              {% endfor %}
+              {% set ns.l = ns.l + [nd.l] %}
+            {% endfor %}
+            {{ ns.l }}
           # Shape factor per quarter of the day (96 values, index 0 = 00:00-00:15; 1 = evenly spread,
           # the four quarters of an hour add up to 4)
           shape_workday: >
@@ -927,6 +1086,59 @@ template:
             {% if measurement_ok %}{{ {'ts': now_ts | round(0), 'imp': t_imp, 'exp': t_exp, 'prod': prod_now, 'charge': t_charge, 'disch': t_disch, 'ev': ev_now, 'hvac': hvac_now, 'daytype': daytype_now} }}{% else %}{{ prev_q }}{% endif %}
 
   # -------------------------------------------------------------------
+  # Solar per month: actual solar production versus the forecast (for the reliability per month).
+  #   Every day at 23:58: today's solar production (solar counter) and the forecast that applied for
+  #   today yesterday at 23:58 ("Solar tomorrow sensor", without reliability correction) are added up.
+  #   At the first measurement in a new month the previous month is finalised (attribute finalised);
+  #   an automation puts that value in the month field. State = ratio this month (%).
+  # -------------------------------------------------------------------
+  - trigger:
+      - platform: time_pattern
+        hours: 23
+        minutes: 58
+    variables:
+      sm_prev: "{{ states.sensor.forecast_solar_month_measurement.attributes if states.sensor.forecast_solar_month_measurement is not none else {} }}"
+      sm_counter: "{{ states('sensor.forecast_counter_solar_production') | float(-1) }}"
+      sm_tomorrow: >
+        {% set e = states('input_text.forecast_setting_solar_tomorrow_sensor') | lower | replace(' ', '') %}
+        {% if e | regex_match('^sensor\\..+') and has_value(e) %}
+          {% set u = state_attr(e, 'unit_of_measurement') %}
+          {% set v = states(e) | float(-1) %}
+          {% if v < 0 %}-1{% elif u == 'Wh' %}{{ v / 1000 }}{% elif u == 'MWh' %}{{ v * 1000 }}{% else %}{{ v }}{% endif %}
+        {% else %}-1{% endif %}
+      sm_yesterday: "{{ (now() - timedelta(days=1)).strftime('%Y-%m-%d') }}"
+      sm_month: "{{ now().strftime('%Y-%m') }}"
+      # Does today count? Yesterday a counter reading and a forecast for today were recorded.
+      sm_day_ok: >
+        {{ sm_prev.date is defined and sm_prev.date == sm_yesterday and sm_counter >= 0
+           and (sm_prev.counter_start | float(-1)) >= 0 and (sm_prev.forecast_today | float(-1)) > 0
+           and 0 <= sm_counter - (sm_prev.counter_start | float(0)) <= 200 }}
+      sm_new_month: "{{ sm_prev.month is defined and sm_prev.month != sm_month }}"
+      sm_a: "{{ ((0 if sm_new_month else (sm_prev.actual_kwh | float(0))) + ((sm_counter - (sm_prev.counter_start | float(0))) if sm_day_ok else 0)) | round(3) }}"
+      sm_f: "{{ ((0 if sm_new_month else (sm_prev.forecast_kwh | float(0))) + ((sm_prev.forecast_today | float(0)) if sm_day_ok else 0)) | round(3) }}"
+      sm_n: "{{ (0 if sm_new_month else (sm_prev.days | int(0))) + (1 if sm_day_ok else 0) }}"
+    sensor:
+      - name: "Forecast Solar Month Measurement"
+        unique_id: forecast_solar_month_measurement
+        icon: mdi:calendar-month
+        unit_of_measurement: "%"
+        state: "{{ ((sm_a / sm_f * 100) | round(0)) if sm_f >= 1 else none }}"
+        attributes:
+          month: "{{ sm_month }}"
+          date: "{{ now().strftime('%Y-%m-%d') }}"
+          actual_kwh: "{{ sm_a }}"
+          forecast_kwh: "{{ sm_f }}"
+          days: "{{ sm_n }}"
+          counter_start: "{{ sm_counter if sm_counter >= 0 else none }}"
+          forecast_today: "{{ sm_tomorrow if sm_tomorrow > 0 else none }}"
+          # Finalised previous month: at least 10 days and 5 kWh forecast, ratio 10-150%
+          finalised: >
+            {% if sm_new_month and (sm_prev.days | int(0)) >= 10 and (sm_prev.forecast_kwh | float(0)) >= 5 %}
+              {{ {'month': sm_prev.month, 'pct': ([[((sm_prev.actual_kwh | float(0)) / (sm_prev.forecast_kwh | float(1)) * 100) | round(0) | int, 10] | max, 150] | min),
+                  'actual_kwh': sm_prev.actual_kwh, 'forecast_kwh': sm_prev.forecast_kwh, 'days': sm_prev.days} }}
+            {% else %}{{ sm_prev.finalised if sm_prev.finalised is defined else none }}{% endif %}
+
+  # -------------------------------------------------------------------
   # 4. THE PLANNER
   #    All calculations are in "variables" (once per calculation)
   #    and are reused by the state and the attributes.
@@ -936,8 +1148,11 @@ template:
   #    The automation only charges when the state is "Charge".
   # -------------------------------------------------------------------
   - trigger:
+      # Every quarter hour, just after the price change (and after the usage profile at :05). Also right
+      # away on changes in settings, prices or state of charge (stops charging in time when the battery is full).
       - platform: time_pattern
-        minutes: "/1"
+        minutes: "/15"
+        seconds: 10
       - platform: homeassistant
         event: start
       - platform: state
@@ -948,9 +1163,24 @@ template:
           - input_text.forecast_setting_solar_production_sensor
           - input_number.forecast_setting_charge_margin
           - input_number.forecast_setting_solar_reliability
+          - input_number.forecast_setting_solar_reliability_jan
+          - input_number.forecast_setting_solar_reliability_feb
+          - input_number.forecast_setting_solar_reliability_mar
+          - input_number.forecast_setting_solar_reliability_apr
+          - input_number.forecast_setting_solar_reliability_may
+          - input_number.forecast_setting_solar_reliability_jun
+          - input_number.forecast_setting_solar_reliability_jul
+          - input_number.forecast_setting_solar_reliability_aug
+          - input_number.forecast_setting_solar_reliability_sep
+          - input_number.forecast_setting_solar_reliability_oct
+          - input_number.forecast_setting_solar_reliability_nov
+          - input_number.forecast_setting_solar_reliability_dec
           - input_boolean.forecast_setting_hold_discharge_in_dip
           - input_boolean.forecast_setting_smart_hold
           - sensor.forecast_measured_charge_power
+          - input_boolean.forecast_setting_calibration_off
+          - input_number.forecast_setting_calibration_days
+          - sensor.zendure_last_calibration_days
           - input_number.dynamic_setting_minimal_spread
           - input_number.zendure_setting_max_charge_power
           - input_boolean.dynamic_setting_15_minute_interval
@@ -981,6 +1211,8 @@ template:
       c_solar_credit: 0.75               # pre-discharge: expected solar surplus counts for only 75% (the forecast can be too optimistic)
       c_pd_min_kwh: 0.5                  # pre-discharge: only from this much expected solar surplus in a negative window
       c_shape_n_full_workday: 10         # shape per quarter counts fully after this many complete hours (workday)
+      c_calibration_days: 14             # calibration charging: default after this many days without 100%
+      c_day_n_full: 3                    # profile per weekday counts fully after this many measurements (weeks) of that hour
       c_shape_n_full_weekend: 5          # same for weekends; before that gradually (fewer measurements = closer to even)
 
       # ---- Time -------------------------------------------------------
@@ -1041,10 +1273,12 @@ template:
           {% set v = states(e) | float(0) %}
           {% if u == 'Wh' %}{{ v / 1000 }}{% elif u == 'MWh' %}{{ v * 1000 }}{% else %}{{ v }}{% endif %}
         {% else %}-1{% endif %}
-      # 0 = do not use (=100%)
-      reliab: >
-        {% set b = states('input_number.forecast_setting_solar_reliability') | float(0) %}
-        {{ (b if b > 0 else 100) / 100 }}
+      # Reliability of this month; 0 = not filled in, then the general one; also 0 = 100%
+      reliab_month: "{{ states('input_number.forecast_setting_solar_reliability_' ~ ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'][now().month - 1]) | float(0) }}"
+      reliab_general: "{{ states('input_number.forecast_setting_solar_reliability') | float(0) }}"
+      reliab_set: "{{ reliab_month > 0 or reliab_general > 0 }}"
+      reliab: "{{ (reliab_month if reliab_month > 0 else (reliab_general if reliab_general > 0 else 100)) / 100 }}"
+      reliab_source: "{{ ('Month (' ~ ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'][now().month - 1] ~ ')') if reliab_month > 0 else ('General' if reliab_general > 0 else 'Not filled in (100%)') }}"
       solar_rest: "{{ ([solar_rest_raw, 0] | max * reliab) | round(2) }}"
       solar_tomorrow: "{{ ([solar_tomorrow_raw, 0] | max * reliab) | round(2) }}"
 
@@ -1150,6 +1384,8 @@ template:
       prof_we: "{{ state_attr('sensor.forecast_usage_profile', 'weekend') or [] }}"
       prof_n_wd: "{{ state_attr('sensor.forecast_usage_profile', 'n_workday') or [] }}"
       prof_n_we: "{{ state_attr('sensor.forecast_usage_profile', 'n_weekend') or [] }}"
+      prof_day: "{{ state_attr('sensor.forecast_usage_profile', 'per_day') or [] }}"
+      prof_n_day: "{{ state_attr('sensor.forecast_usage_profile', 'n_per_day') or [] }}"
       today_workday: >
         {% if has_value('binary_sensor.workday_sensor') %}{{ is_state('binary_sensor.workday_sensor', 'on') }}
         {% else %}{{ now().weekday() < 5 }}{% endif %}
@@ -1173,7 +1409,16 @@ template:
               (1 of 2 measurements = half profile, half day average). That way a clear evening
               peak already counts while the profile is still learning. -#}
           {%- set kw = (prof[h] | float(l_hour)) if ok else (((n * (prof[h] | float(l_hour)) + (nmin - n) * l_hour) / nmin) if has and n > 0 else l_hour) -%}
-          {%- set ns.l = ns.l + [{'s': st, 'kw': kw | round(4), 'p': ok, 'wd': wd}] -%}
+          {#- Per weekday (e.g. working from home): blend in that weekday's profile by the number of
+              measurements (3 = fully). Not on a holiday counted as weekend. -#}
+          {%- set wday = ((st | timestamp_custom('%w', true) | int) + 6) % 7 -%}
+          {%- set normal = wday < 5 -%}
+          {%- set pd = prof_day[wday] if prof_day | length == 7 and prof_day[wday] | length == 24 else [] -%}
+          {%- set pdn = ((prof_n_day[wday][h] | int(0)) if prof_n_day | length == 7 and prof_n_day[wday] | length == 24 else 0) if pd | length == 24 and pd[h] is not none and wd == normal else 0 -%}
+          {%- set wdg = [pdn / c_day_n_full, 1] | min -%}
+          {%- set kw = (wdg * (pd[h] | float(kw)) + (1 - wdg) * kw) if pdn > 0 else kw -%}
+          {%- set ok = ok or pdn >= c_day_n_full -%}
+          {%- set ns.l = ns.l + [{'s': st, 'kw': kw | round(4), 'p': ok, 'wd': wd, 'dg': (wdg * 100) | round(0)}] -%}
         {%- endfor -%}
         {{ ns.l }}
       hour_load_end_ts: "{{ (now_ts // 3600) * 3600 + 52 * 3600 }}"
@@ -1780,8 +2025,9 @@ template:
           {%- endfor -%}
         {%- endif -%}
         {{ ns.w }}
-      # Solar credit: input field in %, 0 = default (c_solar_credit)
-      pd_credit: "{{ ((states('input_number.negative_price_pre_discharge_solar_credit') | float(0)) / 100) if (states('input_number.negative_price_pre_discharge_solar_credit') | float(0)) > 0 else c_solar_credit }}"
+      # Solar credit: if a reliability is filled in (per month or general), it is already in the solar
+      # forecast and the surplus counts fully; otherwise for 75% (c_solar_credit)
+      pd_credit: "{{ 1 if reliab_set else c_solar_credit }}"
       # Target at the start of the window (kWh above min. SOC): room for the solar-credit share of the surplus
       pd_target_dc: >
         {{ ([s_max - pd_window.kwh * pd_credit * eff_in, 0] | max) | round(3) if pd_window is mapping else s_max }}
@@ -1813,13 +2059,36 @@ template:
       # ---- Total grid charge and final slots ---------------------------------
       # The regular plan and the path check overlap: the gap is already part of the total
       # energy balance. So the larger of the two counts, not the sum.
-      grid_total_ac: "{{ ([grid_ac, path_grid_ac if extra_slots | length > 0 else 0] | max) | round(3) }}"
+      # ---- Calibration charging --------------------------------------
+      # The Zendure calibrates (SOC + balancing) at 100%. With the forecasting the battery rarely gets
+      # there in winter. From half the threshold the planner waits for sun that fills the battery; at
+      # the threshold it charges the battery full from the grid in the cheapest quarter hours (outside
+      # the efficiency filter: it is maintenance). Turns off by itself once Gielz sees a new calibration.
+      cal_days: "{{ states('sensor.zendure_last_calibration_days') | float(-1) }}"
+      cal_threshold: "{{ (states('input_number.forecast_setting_calibration_days') | float(0)) if (states('input_number.forecast_setting_calibration_days') | float(0)) > 0 else c_calibration_days }}"
+      cal_wait_from: "{{ (cal_threshold / 2) | round(0, 'ceil') }}"
+      cal_on: "{{ not is_state('input_boolean.forecast_setting_calibration_off', 'on') and cal_days >= 0 and cap > 0 }}"
+      cal_max_ok: "{{ soc_max >= 100 }}"
+      # Does the sun fill the battery today (rest of the day) or tomorrow (surplus ≥ 80% of usable capacity)?
+      cal_sun_today: "{{ room > 0 and ([solar_rest - direct_rest_kwh - ev_solar_today_kwh, 0] | max) * eff_in >= room }}"
+      cal_sun_tomorrow: "{{ tomorrow_known and ([solar_tomorrow - direct_tomorrow_kwh - ev_solar_tomorrow_kwh, 0] | max) * eff_in >= s_max * 0.8 }}"
+      cal_charge: "{{ cal_on and cal_max_ok and prices_ok and cal_days >= cal_threshold and room > 0.05 * cap and not cal_sun_today }}"
+      cal_extra_ac: "{{ (([room - solar_dc, 0] | max) / eff_in) | round(3) if cal_charge and eff_in > 0 else 0 }}"
+      cal_status: >
+        {% if not cal_on or cal_days < cal_wait_from %}{{ none }}
+        {% elif not cal_max_ok %}max_too_low
+        {% elif cal_days >= cal_threshold %}{{ 'sun_today' if cal_sun_today else ('charge' if cal_charge else 'full') }}
+        {% else %}{{ 'sun_today' if cal_sun_today else ('sun_tomorrow' if cal_sun_tomorrow else 'waiting') }}{% endif %}
+
+      grid_total_ac: "{{ ([grid_ac, path_grid_ac if extra_slots | length > 0 else 0, cal_extra_ac] | max) | round(3) }}"
       n_total: >
         {% if grid_total_ac >= c_charge_stop_kwh and e_slot > 0 %}{{ (grid_total_ac / e_slot) | round(0, 'ceil') | int }}{% else %}0{% endif %}
       chosen_plan: >
         {%- set extra_s = extra_slots | map(attribute='s') | list -%}
         {%- set ns = namespace(l=extra_slots) -%}
-        {%- for x in chosen_base | sort(attribute='v') -%}
+        {#- Calibration charging: the cheapest quarter hours of today and (known) tomorrow, outside the efficiency filter -#}
+        {%- set base = (path_cand | selectattr('e', 'gt', now_ts) | list) if cal_charge else chosen_base -%}
+        {%- for x in base | sort(attribute='v') -%}
           {%- if x.s not in extra_s and ns.l | length < n_total -%}
             {%- set ns.l = ns.l + [x] -%}
           {%- endif -%}
@@ -2236,6 +2505,10 @@ template:
           pathcheck_grid_charge_kwh: "{{ path_grid_ac }}"
           pathcheck_extra_slots: "{{ extra_slots | length }}"
           pathcheck_dip_hold: "{{ dip_hold_plan }}"
+          # For the "Shortfall until the sun" line: first and last charge slot for it, and the room kept free for the sun
+          pathcheck_charge_from: "{{ ((extra_slots | map(attribute='s') | min) | timestamp_custom('%Y-%m-%d %H:%M', true)) if extra_slots | length > 0 else none }}"
+          pathcheck_charge_until: "{{ ((extra_slots | map(attribute='e') | max) | timestamp_custom('%Y-%m-%d %H:%M', true)) if extra_slots | length > 0 else none }}"
+          pathcheck_solar_room_kwh: "{{ solar_dc if path_day else 0 }}"
           # --- Dip and charge power ---
           price_now: "{{ price_now if price_now < 999 else none }}"
           dip_threshold: "{{ dip_threshold }}"
@@ -2265,6 +2538,11 @@ template:
           solar_remaining_today_sensor_ok: "{{ solar_rest_raw >= 0 }}"
           solar_tomorrow_sensor_ok: "{{ solar_tomorrow_raw >= 0 }}"
           reliability_pct: "{{ (reliab * 100) | round(0) }}"
+          reliability_source: "{{ reliab_source }}"
+          calibration_status: "{{ cal_status }}"
+          calibration_days: "{{ cal_days | int if cal_days >= 0 else none }}"
+          calibration_threshold: "{{ cal_threshold | int }}"
+          calibration_extra_kwh: "{{ cal_extra_ac }}"
           self_consumption_pct: "{{ direct_rest_pct if solar_rest > 0 else direct_tomorrow_pct }}"
           self_consumption_today_pct: "{{ direct_rest_pct }}"
           self_consumption_tomorrow_pct: "{{ direct_tomorrow_pct }}"
@@ -2502,6 +2780,36 @@ automation:
                 name: Zendure Forecasting
                 message: "Input field cleaned up: '{{ repeat.item.oud }}' becomes '{{ repeat.item.nieuw }}'"
                 entity_id: "{{ repeat.item.e }}"
+
+  # Reliability per month: fill in the measured ratio of the finalised month (for next year)
+  - id: forecast_reliability_month_fill
+    alias: Forecast Reliability Month Fill
+    description: >-
+      Forecasting 2026.11.5 - Fills in the measured reliability for a month after it has ended.
+    mode: single
+    triggers:
+      - trigger: state
+        entity_id: sensor.forecast_solar_month_measurement
+        attribute: finalised
+    conditions:
+      - condition: template
+        value_template: >-
+          {{ trigger.to_state.attributes.finalised is mapping and (trigger.to_state.attributes.finalised.pct | int(0)) > 0
+             and not is_state('input_boolean.forecast_setting_reliability_no_auto_fill', 'on') }}
+    actions:
+      - variables:
+          a: "{{ trigger.to_state.attributes.finalised }}"
+          field: "input_number.forecast_setting_solar_reliability_{{ ['jan','feb','mar','apr','may','jun','jul','aug','sep','oct','nov','dec'][(a.month[5:7] | int) - 1] }}"
+      - action: input_number.set_value
+        target:
+          entity_id: "{{ field }}"
+        data:
+          value: "{{ a.pct }}"
+      - action: logbook.log
+        data:
+          name: Zendure Forecasting
+          message: "Reliability {{ a.month }} filled in: {{ a.pct }}% ({{ a.actual_kwh }} kWh solar, {{ a.forecast_kwh }} kWh forecast, {{ a.days }} days)"
+          entity_id: "{{ field }}"
 
   - id: forecast_reset_usage_data
     alias: Forecast Reset Usage Data

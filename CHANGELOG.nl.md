@@ -26,9 +26,32 @@ Versies volgen `jaar.maand.volgnummer`; het volgnummer begint elke maand bij 1. 
 - **Opslag teruglevering:** bereik nu −0,50 tot 0,50 €/kWh (was −1 tot 1) en een waarschuwing in Forecasting Configuratie (Negatieve Prijs) bij een opslag buiten −0,10 tot 0,10. Een opslag van −1,00 maakte de terugleverprijs altijd negatief en blokkeerde teruglevering permanent.
 - **Diagnose-export:** `meta.ontbrekende_helpers` (verwachte instellingen die niet bestaan) en `meta.ingevuld_maar_bestaat_niet` (ingevulde entiteiten die niet bestaan).
 
+**Verbruiksprofiel per weekdag**
+- Het verbruiksprofiel leert nu ook **per weekdag** (attributen `per_dag` / `n_per_dag`, 0 = maandag). Zo ziet de planner thuiswerkdagen. Elke weekdag komt één keer per week langs; zolang een uur van die dag minder dan 3 metingen heeft, mengt de planner hem met het werkdag- of weekendprofiel (1 meting = een derde). Feestdagen die als weekend tellen, leren niet mee per weekdag. Bestaande gegevens blijven: het werkdag/weekendprofiel is de start.
+- *Verzamelde gegevens* toont per weekdag hoeveel uren geleerd zijn.
+
+**Herberekenen elk kwartier**
+- De planner rekent elk kwartier (net na de prijswissel) in plaats van elke minuut, en daarnaast direct bij wijzigingen in instellingen, prijzen of het laadpercentage (zodat laden stopt als de accu vol is). De knop **Herberekenen** werkt zoals altijd.
+
+**Betrouwbaarheid zonvoorspelling per maand**
+- 12 maandvelden (0–150%, 0 = niet ingevuld: dan de algemene betrouwbaarheid). Zichtbaar met **Betrouwbaarheid per maand tonen** in Forecasting Configuratie (Basis).
+- Nieuwe `sensor.forecast_zon_maandmeting`: telt elke dag de werkelijke zon (zon-teller) tegen de voorspelling van de dag ervoor ("Zon morgen sensor"). State = verhouding deze maand (%). Na afloop van een maand (minstens 10 dagen en 5 kWh voorspeld) vult een automatisering de gemeten waarde in het veld van die maand in, voor volgend jaar. Uitzetten met **Maandwaarde niet automatisch invullen**.
+- **Zonkrediet vervalt** (Forecasting Configuratie (Negatieve Prijs)). Vooraf ontladen telt het zon-overschot nu volledig als er een betrouwbaarheid is ingevuld (per maand of algemeen; die zit dan al in de voorspelling), en anders voor 75%.
+
+**Kalibratieladen**
+- De Zendure kalibreert (SOC en balanceren) als de accu 100% haalt. Met de forecasting gebeurt dat in de winter zelden. Nieuw: **Kalibratie na dagen** (0 = 14) en **Kalibratieladen uit**.
+- Vanaf de helft van de drempel (dag 7) wacht de planner op een zonnige dag (vult de zon de accu vandaag of morgen, dan doet hij niets). Op de drempel (dag 14) laadt hij de accu tot 100% uit het net in de goedkoopste kwartieren van vandaag en morgen, buiten het rendementsfilter (het is onderhoud). Gaat vanzelf uit zodra Gielz' *Laatste Kalibratie* een nieuwe kalibratie ziet.
+- *Plan vandaag* toont een regel **Kalibratie** met het aantal dagen en wat de planner doet. Staat *Max. Laadpercentage* onder 100%, dan meldt hij dat (kalibratie gebeurt alleen bij 100%).
+
+**Pad-check heet nu "Tekort tot de zon"**
+- Nieuwe tekst, bijvoorbeeld: *Tekort tot de zon: zonder bijladen is de accu vandaag rond 08:21 leeg. Tot morgen 01:45 zou het huis dan 9,5 kWh inkopen, waarvan 7,9 kWh duur (gem. €0,428). Daarom 5,5 kWh laden 02:30–05:00 (10 kwartieren); 3,7 kWh ruimte blijft vrij voor de zon.* Duidelijk dat de inkoop zónder bijladen is, en waarom niet alles wordt bijgeladen (ruimte voor de zon).
+- Getallen in het plan en bij *Verzamelde gegevens* met een komma (NL).
+
 **Upgraden**
 - Vervang `zendure_forecasting.yaml`, `zendure_negatieve_prijs.yaml`, de automation en het dashboard (optioneel ook `zendure_export.yaml`) en **herstart** Home Assistant (nieuwe helpers). Plak het dashboard opnieuw via de Raw configuratie-editor.
 - Na de herstart staat *Slim vasthouden* aan. Wil je het gedrag van vóór deze versie met de dal-schakelaar uit, zet *Slim vasthouden* dan uit.
+- Had je een zonkrediet ingesteld: dat veld bestaat niet meer (`input_number.negatieve_prijs_vooraf_zonkrediet` kan weg). Vul eventueel de betrouwbaarheid per maand in.
+- Kalibratieladen staat aan (na 14 dagen zonder 100%). Uitzetten met *Kalibratieladen uit*.
 
 ## 2026.11.4 — gebaseerd op Gielz v20261007
 

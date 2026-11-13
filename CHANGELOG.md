@@ -26,9 +26,31 @@ Versions follow `year.month.sequence`; the sequence restarts at 1 every month. E
 - **Feed-in markup:** range now −0.50 to 0.50 €/kWh (was −1 to 1) and a warning in Forecasting Configuration (Negative Price) for a markup outside −0.10 to 0.10. A markup of −1.00 made the feed-in price always negative and blocked export permanently.
 - **Diagnostics export:** `meta.missing_helpers` (expected settings that do not exist) and `meta.filled_in_but_missing` (entered entities that do not exist).
 
+**Usage profile per weekday**
+- The usage profile now also learns **per weekday** (attributes `per_day` / `n_per_day`, 0 = Monday), so the planner sees working-from-home days. Each weekday comes round once a week; while an hour of that day has fewer than 3 measurements, the planner blends it with the workday or weekend profile (1 measurement = one third). Holidays counted as weekend are not learned per weekday. Existing data stays: the workday/weekend profile is the start.
+- *Collected data* shows how many hours are learned per weekday.
+
+**Recalculate every quarter hour**
+- The planner calculates every quarter hour (just after the price change) instead of every minute, and also right away on changes in settings, prices or state of charge (so charging stops when the battery is full). The **Recalculate** button works as always.
+
+**Solar forecast reliability per month**
+- 12 month fields (0–150%, 0 = not filled in: then the general reliability). Shown with **Show reliability per month** in Forecasting Configuration (Basic).
+- New `sensor.forecast_solar_month_measurement`: every day it counts actual solar (solar counter) against the previous day's forecast ("Solar tomorrow sensor"). State = ratio this month (%). After a month ends (at least 10 days and 5 kWh forecast) an automation fills the measured value into that month's field, for next year. Turn off with **Do not fill in the monthly value automatically**.
+- **Solar credit is gone** (Forecasting Configuration (Negative Price)). Pre-discharge now counts the solar surplus fully when a reliability is filled in (per month or general; it is then already in the forecast), and otherwise for 75%.
+
+**Calibration charging**
+- The Zendure calibrates (SOC and balancing) when the battery reaches 100%. With the forecasting that rarely happens in winter. New: **Calibration after days** (0 = 14) and **Calibration charging off**.
+- From half the threshold (day 7) the planner waits for a sunny day (if the sun fills the battery today or tomorrow, it does nothing). At the threshold (day 14) it charges the battery to 100% from the grid in the cheapest quarter hours of today and tomorrow, outside the efficiency filter (it is maintenance). Turns off by itself once Gielz's *Last Calibration* sees a new calibration.
+- *Plan today* shows a **Calibration** line with the number of days and what the planner does. If *Max. State Of Charge* is below 100%, it says so (calibration only happens at 100%).
+
+**Path check is now "Shortfall until the sun"**
+- New text, for example: *Shortfall until the sun: without topping up, the battery is empty today around 08:21. Until tomorrow 01:45 the house would then buy 9.5 kWh, of which 7.9 kWh expensive (avg. €0.428). So 5.5 kWh charging 02:30–05:00 (10 quarter hours); 3.7 kWh of room stays free for the sun.* Makes clear that the purchase is without topping up, and why not everything is topped up (room for the sun).
+
 **Upgrading**
 - Replace `zendure_forecasting_global.yaml`, `zendure_negative_price_global.yaml`, the automation and the dashboard (optionally also `zendure_export_global.yaml`) and **restart** Home Assistant (new helpers). Paste the dashboard again via the Raw configuration editor.
 - After the restart *Smart hold* is on. If you want the behaviour from before this version with the dip switch off, turn *Smart hold* off.
+- If you had set a solar credit: that field no longer exists (`input_number.negative_price_pre_discharge_solar_credit` can go). Fill in the reliability per month if you like.
+- Calibration charging is on (after 14 days without 100%). Turn it off with *Calibration charging off*.
 
 ## 2026.11.4 — based on Gielz v20261007
 
