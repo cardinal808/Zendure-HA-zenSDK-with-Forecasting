@@ -1685,10 +1685,9 @@ rest:
 
       - name: "Zendure Power PV To Home"
         value_template: >
-          {# {% set pv = value_json['properties']['pvStatus'] | int(0) %} #}
+          {% set pv = value_json.get('properties', {}).get('pvStatus', 0) | int(0) %}
           {% set solar = value_json['properties']['solarInputPower'] | float(0) %}
           {% set grid_off = value_json.get('properties', {}).get('gridOffPower', 0) | float(0) %}
-          {# {% set pv_active = (pv == 1) or (solar > 0) or (grid_off < 0) %} #}
           {% set pv_active = (solar > 0) or (grid_off < 0) %}
           {% set home = value_json['properties']['outputHomePower'] | float(0) %}
           {% set pack_in = value_json['properties']['packInputPower'] | float(0) %}
@@ -1700,10 +1699,9 @@ rest:
 
       - name: "Zendure Power PV Total"
         value_template: >
-          {# {% set pv = value_json['properties']['pvStatus'] | int(0) %} #}
+          {% set pv = value_json.get('properties', {}).get('pvStatus', 0) | int(0) %}
           {% set solar = value_json['properties']['solarInputPower'] | float(0) %}
           {% set grid_off = value_json.get('properties', {}).get('gridOffPower', 0) | float(0) %}
-          {# {% set pv_active = (pv == 1) or (solar > 0) or (grid_off < 0) %} #}
           {% set pv_active = (solar > 0) or (grid_off < 0) %}
           {{ (solar + (0 - grid_off if grid_off < 0 else 0)) if pv_active else 0 }}
         unique_id: zendure_power_pv_total
@@ -1713,10 +1711,9 @@ rest:
 
       - name: "Zendure Power PV To Battery"
         value_template: >
-          {# {% set pv = value_json['properties']['pvStatus'] | int(0) %} #}
+          {% set pv = value_json.get('properties', {}).get('pvStatus', 0) | int(0) %}
           {% set solar = value_json['properties']['solarInputPower'] | float(0) %}
           {% set grid_off = value_json.get('properties', {}).get('gridOffPower', 0) | float(0) %}
-          {# {% set pv_active = (pv == 1) or (solar > 0) or (grid_off < 0) %} #}
           {% set pv_active = (solar > 0) or (grid_off < 0) %}
           {% set pack = value_json['properties']['outputPackPower'] | float(0) %}
           {% set grid = value_json['properties']['gridInputPower'] | float(0) %}
@@ -2148,10 +2145,9 @@ rest:
 
       - name: "Zendure Power"
         value_template: >
-          {# {% set pv = value_json['properties']['pvStatus'] | int(0) %} #}
+          {% set pv = value_json.get('properties', {}).get('pvStatus', 0) | int(0) %}
           {% set solar = value_json['properties']['solarInputPower'] | float(0) %}
           {% set grid_off = value_json.get('properties', {}).get('gridOffPower', 0) | float(0) %}
-          {# {% set pv_active = (pv == 1) or (solar > 0) or (grid_off < 0) %} #}
           {% set pv_active = (solar > 0) or (grid_off < 0) %}
           {% set pass = value_json['properties']['pass'] | int %}
           {% set ac_mode = value_json['properties']['acMode'] | int %}
