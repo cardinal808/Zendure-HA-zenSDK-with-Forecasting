@@ -52,7 +52,7 @@ Versions follow `year.month.sequence`; the sequence restarts at 1 every month. E
 
 **Plan Timeline**
 - Price: planned grid charging is now **blue** (was green), like in the Battery row.
-- Battery: the state of charge has its own axis (0–100%) and no longer drops below the zero line of the kW columns.
+- Battery: the state of charge is on its own axis with 0% on the zero line of the kW columns; the line no longer drops below it.
 - Grid: **blue** = battery charging from the grid, **purple** = house from the grid, **grey** = export.
 
 **Path check is now "Shortfall until the sun"**

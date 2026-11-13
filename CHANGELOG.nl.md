@@ -52,7 +52,7 @@ Versies volgen `jaar.maand.volgnummer`; het volgnummer begint elke maand bij 1. 
 
 **Plan Tijdlijn**
 - Prijs: gepland laden uit het net is nu **blauw** (was groen), net als in de rij Accu.
-- Accu: het laadpercentage heeft een eigen as (0–100%) en zakt niet meer onder de nullijn van de kW-kolommen.
+- Accu: het laadpercentage staat op een eigen as waarvan 0% op de nullijn van de kW-kolommen valt; de lijn komt er niet meer onder.
 - Net: **blauw** = accu laden uit het net, **paars** = huis uit het net, **grijs** = teruglevering.
 
 **Pad-check heet nu "Tekort tot de zon"**

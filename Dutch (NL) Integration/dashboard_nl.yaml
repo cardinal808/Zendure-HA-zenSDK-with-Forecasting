@@ -1036,16 +1036,19 @@ views:
                   update_interval: 5min
                   header:
                     show: false
-                  # Aparte assen: accu in kW (rond 0), laadpercentage altijd 0–100%
-                  yaxis:
-                    - id: kw
-                      show: false
-                    - id: soc
-                      show: false
-                      opposite: true
-                      min: 0
-                      max: 100
                   apex_config:
+                    # Twee assen met de nul op dezelfde hoogte: accu kW symmetrisch (minstens ±2,4 kW), laadpercentage
+                    # −100…100%, zodat 0% op de nullijn van de kolommen valt en de lijn er nooit onder komt.
+                    yaxis:
+                      - seriesName: Accu
+                        show: false
+                        min: 'EVAL:function(min) { return Math.min(min, -2.4); }'
+                        max: 'EVAL:function(max) { return Math.max(max, 2.4); }'
+                      - seriesName: Laadpercentage
+                        opposite: true
+                        min: -100
+                        max: 100
+                        show: false
                     chart:
                       height: 80px
                       sparkline:
@@ -1112,7 +1115,6 @@ views:
                     - entity: sensor.zendure_forecast_grafiek
                       name: Accu
                       type: column
-                      yaxis_id: kw
                       color: '#01a180'
                       float_precision: 2
                       show:
@@ -1128,7 +1130,6 @@ views:
                     - entity: sensor.zendure_forecast_grafiek
                       name: Laadpercentage
                       type: line
-                      yaxis_id: soc
                       color: '#e1e1e1'
                       stroke_width: 1.5
                       curve: straight

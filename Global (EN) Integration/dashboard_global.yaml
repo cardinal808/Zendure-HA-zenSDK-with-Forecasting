@@ -1036,16 +1036,19 @@ views:
                   update_interval: 5min
                   header:
                     show: false
-                  # Separate axes: battery in kW (around 0), state of charge always 0–100%
-                  yaxis:
-                    - id: kw
-                      show: false
-                    - id: soc
-                      show: false
-                      opposite: true
-                      min: 0
-                      max: 100
                   apex_config:
+                    # Two axes with zero at the same height: battery kW symmetric (at least ±2.4 kW), state of charge
+                    # −100…100%, so 0% falls on the zero line of the columns and the line never drops below it.
+                    yaxis:
+                      - seriesName: Battery
+                        show: false
+                        min: 'EVAL:function(min) { return Math.min(min, -2.4); }'
+                        max: 'EVAL:function(max) { return Math.max(max, 2.4); }'
+                      - seriesName: State of charge
+                        opposite: true
+                        min: -100
+                        max: 100
+                        show: false
                     chart:
                       height: 80px
                       sparkline:
@@ -1112,7 +1115,6 @@ views:
                     - entity: sensor.zendure_forecast_chart
                       name: Battery
                       type: column
-                      yaxis_id: kw
                       color: '#01a180'
                       float_precision: 2
                       show:
@@ -1128,7 +1130,6 @@ views:
                     - entity: sensor.zendure_forecast_chart
                       name: State of charge
                       type: line
-                      yaxis_id: soc
                       color: '#e1e1e1'
                       stroke_width: 1.5
                       curve: straight
