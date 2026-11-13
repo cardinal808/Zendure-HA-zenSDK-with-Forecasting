@@ -22,7 +22,8 @@ Versions follow `year.month.sequence`; the sequence restarts at 1 every month. E
 
 **Measured charging power without the balancing tail**
 - `sensor.forecast_grid_charge_power` now only measures up to 10% below the maximum state of charge. At the end of a charge the power drops (balancing between the batteries); that pulled the measured charging power down (559 W at 2.4 kW for one user), so the planner used far too many quarter hours.
-- *Measured Charge Power* now uses the median instead of the mean. Old low readings drop out within 14 days; faster with *Reset usage data*.
+- *Measured Charge Power* now uses the median instead of the mean. Old low readings drop out within 14 days; faster with *Reset usage data* (now also clears the charge power readings).
+- **Measured at the Zendure, only during grid charging.** The charge power was the lower of P1 import and charging. With solar from another inverter (e.g. SolarEdge) the import is lower than what the Zendure charges, and charging from solar counted too: the median came out at 1.3 kW for a real 2.4 kW, and the planner then planned almost twice as many quarter hours. Now only the Zendure's charging power counts while *Dynamic charging running* is on (charging by Forecasting or Gielz).
 
 **Input and detection**
 - **Input fields cleaned up:** a new automation converts entered entities to lower case without spaces (e.g. `Sensor .solcast_…` from phone autocorrect becomes `sensor.solcast_…`). Applies to the forecasting, negative price, Nordpool, EV and HVAC fields and Gielz's Nordpool and grid meter sensor. Logged in the logbook.
@@ -30,6 +31,7 @@ Versions follow `year.month.sequence`; the sequence restarts at 1 every month. E
 - **Dashboard notice** (Zendure tab, Forecasting) when the solar panel counter or a custom grid counter does not point to an existing sensor.
 - **Usage profile keeps learning without a valid solar panel counter:** if the field is empty or the sensor does not exist, the profile uses 0 solar production (previously learning stopped completely). If the counter drops out briefly, the previous measurement stays instead of disappearing.
 - **Feed-in markup:** range now −0.50 to 0.50 €/kWh (was −1 to 1) and a warning in Forecasting Configuration (Negative Price) for a markup outside −0.10 to 0.10. A markup of −1.00 made the feed-in price always negative and blocked export permanently.
+- **Diagnostics export, error log:** long messages keep both start and end (the cause of a template error is at the end; before, everything after 400 characters was cut off).
 - **Diagnostics export:** `meta.missing_helpers` (expected settings that do not exist) and `meta.filled_in_but_missing` (entered entities that do not exist).
 
 **Usage profile per weekday**
@@ -58,6 +60,7 @@ Versions follow `year.month.sequence`; the sequence restarts at 1 every month. E
 
 **Path check is now "Shortfall until the sun"**
 - New text, for example: *Shortfall until the sun: without topping up, the battery is empty today around 08:21. Until tomorrow 01:45 the house would then buy 9.5 kWh, of which 7.9 kWh expensive (avg. €0.428). So 5.5 kWh charging 02:30–05:00 (10 quarter hours); 3.7 kWh of room stays free for the sun.* Makes clear that the purchase is without topping up, and why not everything is topped up (room for the sun).
+- The *empty* time is the start of the shortfall (new attribute `pathcheck_gap_start`). Before, it showed the empty time with smart hold, which could fall after the end of the shortfall (*empty tomorrow around 22:34 … until tomorrow 09:00 buy 0.2 kWh*).
 
 **Upgrading**
 - Replace `zendure_forecasting_global.yaml`, `zendure_negative_price_global.yaml`, the automation and the dashboard (optionally also `zendure_export_global.yaml`) and **restart** Home Assistant (new helpers). Paste the dashboard again via the Raw configuration editor.

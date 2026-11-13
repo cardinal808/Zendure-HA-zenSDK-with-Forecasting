@@ -94,8 +94,10 @@ template:
         {%- if trigger.id == 'fout' -%}
           {%- set d = trigger.event.data -%}
           {%- set nu = now().strftime('%Y-%m-%d %H:%M:%S') -%}
-          {%- set tekst = ((d.message if d.message is list else [d.message | default('')]) | join(' | ')
-               | regex_replace('\\s+', ' '))[:400] -%}
+          {#- Lange meldingen (bv. een templatefout met de hele template erin): begin en eind bewaren, want de oorzaak staat achteraan -#}
+          {%- set tekst = (d.message if d.message is list else [d.message | default('')]) | join(' | ')
+               | regex_replace('\\s+', ' ') -%}
+          {%- set tekst = (tekst[:200] ~ ' … ' ~ tekst[-300:]) if tekst | length > 500 else tekst -%}
           {%- set bron = ((d.source | default([]) | join(':')) if d.source is defined and d.source is not string
                else (d.source | default('') | string))[:150] -%}
           {%- set logger = d.name | default('') -%}

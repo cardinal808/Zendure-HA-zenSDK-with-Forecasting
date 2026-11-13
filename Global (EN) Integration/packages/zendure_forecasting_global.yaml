@@ -400,9 +400,12 @@ template:
           source: >
             {% set m = states('input_number.forecast_setting_solar_reliability_' ~ ['jan','feb','mar','apr','may','jun','jul','aug','sep','oct','nov','dec'][now().month - 1]) | float(0) %}
             {{ ('month value ' ~ ['January','February','March','April','May','June','July','August','September','October','November','December'][now().month - 1]) if m > 0 else ('general value' if states('input_number.forecast_setting_solar_reliability') | float(0) > 0 else 'not filled in (100%)') }}
-  # Grid charging power as the battery really achieves it (> 300 W), only up to 10% below the
-  # maximum state of charge: at the end of a charge the power drops (balancing), and that says
-  # nothing about what a charge slot yields. Outside grid charging the
+  # Charging power during grid charging as the battery really achieves it (> 300 W), only up to
+  # 10% below the maximum state of charge: at the end of a charge the power drops (balancing), and
+  # that says nothing about what a charge slot yields. Measured at the Zendure, only while Dynamic
+  # charging is running (Forecasting or Gielz). Was (up to 2026.11.4): the lower of P1 import and
+  # charging, but with solar from another inverter the import is lower than the charging power and
+  # the median came out too low (e.g. 1.3 kW at a real 2.4 kW). Outside grid charging the
   # sensor keeps its last measurement (also after a restart), so the statistic Measured Charge
   # Power stays available and only counts real charging sessions. Was: unavailable outside grid
   # charging, so the planner almost always used the configured power.
@@ -410,7 +413,7 @@ template:
       - trigger: state
         entity_id:
           - sensor.zendure_power
-          - sensor.home_energy_meter_power
+          - input_boolean.dynamic_charging_running
     sensor:
       - name: "Forecast Grid Charge Power"
         unique_id: forecast_grid_charge_power
@@ -419,16 +422,14 @@ template:
         state_class: measurement
         availability: >
           {% set laden = [states('sensor.zendure_power') | float(0), 0] | max %}
-          {% set import_w = [states('sensor.home_energy_meter_power') | float(0), 0] | max %}
           {% set onder_staart = states('sensor.zendure_total_state_of_charge') | float(100) <= states('sensor.zendure_maximum_state_of_charge') | float(100) - 10 %}
-          {{ (has_value('sensor.home_energy_meter_power') and has_value('sensor.zendure_power') and ([import_w, laden] | min) > 300 and onder_staart)
+          {{ (is_state('input_boolean.dynamic_charging_running', 'on') and has_value('sensor.zendure_power') and laden > 300 and onder_staart)
              or this.state | is_number }}
         state: >
           {% set laden = [states('sensor.zendure_power') | float(0), 0] | max %}
-          {% set import_w = [states('sensor.home_energy_meter_power') | float(0), 0] | max %}
           {% set onder_staart = states('sensor.zendure_total_state_of_charge') | float(100) <= states('sensor.zendure_maximum_state_of_charge') | float(100) - 10 %}
-          {% if has_value('sensor.home_energy_meter_power') and has_value('sensor.zendure_power') and ([import_w, laden] | min) > 300 and onder_staart %}
-            {{ [import_w, laden] | min | round(0) }}
+          {% if is_state('input_boolean.dynamic_charging_running', 'on') and has_value('sensor.zendure_power') and laden > 300 and onder_staart %}
+            {{ laden | round(0) }}
           {% else %}
             {{ this.state }}
           {% endif %}
@@ -2512,6 +2513,9 @@ template:
           pathcheck_battery_empty_at: "{{ (t_empty_show_ts | timestamp_custom('%Y-%m-%d %H:%M', true)) if t_empty_show_ts < now_ts + 172800 else none }}"
           pathcheck_solar_covers_from: "{{ t_cover_ts | timestamp_custom('%Y-%m-%d %H:%M', true) }}"
           pathcheck_solar_source: "{{ cover_source }}"
+          # Start of the shortfall (battery empty without topping up) for the line "Shortfall until the sun".
+          # pathcheck_battery_empty_at includes holding (dip, smart hold) and can therefore fall after the gap.
+          pathcheck_gap_start: "{{ t_gap_start_ts | timestamp_custom('%Y-%m-%d %H:%M', true) }}"
           pathcheck_gap_end: "{{ t_gap_end_ts | timestamp_custom('%Y-%m-%d %H:%M', true) }}"
           pathcheck_horizon: "{{ path_horizon_source }}"
           pathcheck_beyond_night: "{{ path_ahead }}"
@@ -2851,7 +2855,7 @@ automation:
             {{ ['sensor.forecast_counter_solar_production', 'sensor.forecast_counter_grid_import',
                 'sensor.forecast_counter_grid_export', 'sensor.forecast_counter_grid_export_from_solar',
                 'sensor.forecast_counter_zendure_charge', 'sensor.forecast_counter_zendure_discharge',
-                'sensor.forecast_counter_zendure_charge_from_solar',
+                'sensor.forecast_counter_zendure_charge_from_solar', 'sensor.forecast_grid_charge_power',
                 'sensor.ev_counter_charged', 'sensor.ev_counter_charged_from_solar',
                 'sensor.hvac_counter_separate', 'sensor.hvac_counter_separate_from_solar']
                | select('in', states.sensor | map(attribute='entity_id') | list) | list }}

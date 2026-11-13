@@ -22,7 +22,8 @@ Versies volgen `jaar.maand.volgnummer`; het volgnummer begint elke maand bij 1. 
 
 **Gemeten laadvermogen zonder balanceer-staart**
 - `sensor.forecast_netladen_vermogen` meet alleen nog tot 10% onder het maximale laadpercentage. Aan het eind van een lading zakt het vermogen (balanceren tussen de accu's); dat trok het gemeten laadvermogen omlaag (bij een gebruiker 559 W bij 2,4 kW), waardoor de planner met veel te veel kwartieren rekende.
-- *Gemeten Laadvermogen* gebruikt nu de mediaan in plaats van het gemiddelde. Oude lage metingen vallen binnen 14 dagen weg; sneller met *Verbruiksgegevens resetten*.
+- *Gemeten Laadvermogen* gebruikt nu de mediaan in plaats van het gemiddelde. Oude lage metingen vallen binnen 14 dagen weg; sneller met *Verbruiksgegevens resetten* (wist nu ook de laadvermogen-metingen).
+- **Gemeten aan de Zendure, alleen tijdens netladen.** Het laadvermogen was het laagste van P1-import en laden. Met zon van een andere omvormer (bv. SolarEdge) is de import lager dan wat de Zendure laadt, en telde ook laden uit zon mee: de mediaan kwam uit op 1,3 kW bij 2,4 kW echt, en de planner plande dan bijna twee keer zoveel kwartieren. Nu telt alleen het laadvermogen van de Zendure terwijl *Dynamisch laden loopt* aan staat (laden door Forecasting of Gielz).
 
 **Invoer en herkenning**
 - **Invoervelden opgeschoond:** een nieuwe automatisering zet ingevulde entiteiten om naar kleine letters zonder spaties (bv. `Sensor .solcast_…` van autocorrectie op een telefoon wordt `sensor.solcast_…`). Geldt voor de forecasting-, negatieve-prijs-, Nordpool-, EV- en HVAC-velden en Gielz' Nordpool- en afwijkende P1-sensor. Staat in het logboek.
@@ -30,6 +31,7 @@ Versies volgen `jaar.maand.volgnummer`; het volgnummer begint elke maand bij 1. 
 - **Melding op het dashboard** (tab Zendure, Forecasting) als de zonnepanelen-teller of een eigen net-teller niet naar een bestaande sensor wijst.
 - **Verbruiksprofiel leert door zonder geldige zonnepanelen-teller:** is het veld leeg of bestaat de sensor niet, dan rekent het profiel met 0 zonproductie (eerder stopte het leren helemaal). Valt de teller even weg, dan blijft de vorige meting staan in plaats van te verdwijnen.
 - **Opslag teruglevering:** bereik nu −0,50 tot 0,50 €/kWh (was −1 tot 1) en een waarschuwing in Forecasting Configuratie (Negatieve Prijs) bij een opslag buiten −0,10 tot 0,10. Een opslag van −1,00 maakte de terugleverprijs altijd negatief en blokkeerde teruglevering permanent.
+- **Diagnose-export, foutlog:** lange meldingen houden begin én eind (de oorzaak van een templatefout staat achteraan; eerder werd alles na 400 tekens afgekapt).
 - **Diagnose-export:** `meta.ontbrekende_helpers` (verwachte instellingen die niet bestaan) en `meta.ingevuld_maar_bestaat_niet` (ingevulde entiteiten die niet bestaan).
 
 **Verbruiksprofiel per weekdag**
@@ -58,6 +60,7 @@ Versies volgen `jaar.maand.volgnummer`; het volgnummer begint elke maand bij 1. 
 
 **Pad-check heet nu "Tekort tot de zon"**
 - Nieuwe tekst, bijvoorbeeld: *Tekort tot de zon: zonder bijladen is de accu vandaag rond 08:21 leeg. Tot morgen 01:45 zou het huis dan 9,5 kWh inkopen, waarvan 7,9 kWh duur (gem. €0,428). Daarom 5,5 kWh laden 02:30–05:00 (10 kwartieren); 3,7 kWh ruimte blijft vrij voor de zon.* Duidelijk dat de inkoop zónder bijladen is, en waarom niet alles wordt bijgeladen (ruimte voor de zon).
+- Het tijdstip *leeg* is het begin van het tekort (nieuw attribuut `padcheck_gat_start`). Eerder stond hier het leeg-moment mét slim vasthouden, dat ná het einde van het tekort kon liggen (*morgen rond 22:34 leeg … tot morgen 09:00 0,2 kWh inkopen*).
 - Getallen in het plan en bij *Verzamelde gegevens* met een komma (NL).
 
 **Upgraden**

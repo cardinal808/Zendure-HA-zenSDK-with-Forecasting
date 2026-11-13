@@ -400,9 +400,12 @@ template:
           bron: >
             {% set m = states('input_number.forecast_betrouwbaarheid_' ~ ['jan','feb','mrt','apr','mei','jun','jul','aug','sep','okt','nov','dec'][now().month - 1]) | float(0) %}
             {{ ('maandwaarde ' ~ ['januari','februari','maart','april','mei','juni','juli','augustus','september','oktober','november','december'][now().month - 1]) if m > 0 else ('algemene waarde' if states('input_number.forecast_betrouwbaarheid') | float(0) > 0 else 'niet ingevuld (100%)') }}
-  # Laadvermogen uit het net zoals de accu het echt haalt (> 300 W), alleen tot 10% onder het
+  # Laadvermogen tijdens netladen zoals de accu het echt haalt (> 300 W), alleen tot 10% onder het
   # maximale laadpercentage: aan het eind van een lading zakt het vermogen (balanceren), en dat
-  # zegt niets over wat een laadslot oplevert. Buiten het netladen houdt de
+  # zegt niets over wat een laadslot oplevert. Gemeten aan de Zendure, alleen als Dynamisch laden
+  # loopt (Forecasting of Gielz). Was (t/m 2026.11.4): het laagste van P1-import en laden, maar
+  # met zon van een andere omvormer is de import lager dan het laadvermogen en kwam de mediaan
+  # te laag uit (bv. 1,3 kW bij 2,4 kW echt). Buiten het netladen houdt de
   # sensor zijn laatste meting (ook na een herstart), zodat de statistiek Gemeten Laadvermogen
   # beschikbaar blijft en alleen echte laadsessies meetelt. Was: niet beschikbaar buiten het
   # netladen, waardoor de planner bijna altijd met het ingestelde vermogen rekende.
@@ -410,7 +413,7 @@ template:
       - trigger: state
         entity_id:
           - sensor.zendure_2400_ac_vermogen_aansturing
-          - sensor.p1_aansturing_vermogen
+          - input_boolean.dynamisch_laden_loopt
     sensor:
       - name: "Forecast Netladen Vermogen"
         unique_id: forecast_netladen_vermogen
@@ -419,16 +422,14 @@ template:
         state_class: measurement
         availability: >
           {% set laden = [states('sensor.zendure_2400_ac_vermogen_aansturing') | float(0), 0] | max %}
-          {% set import_w = [states('sensor.p1_aansturing_vermogen') | float(0), 0] | max %}
           {% set onder_staart = states('sensor.zendure_2400_ac_laadpercentage') | float(100) <= states('sensor.zendure_2400_ac_maximale_laadpercentage') | float(100) - 10 %}
-          {{ (has_value('sensor.p1_aansturing_vermogen') and has_value('sensor.zendure_2400_ac_vermogen_aansturing') and ([import_w, laden] | min) > 300 and onder_staart)
+          {{ (is_state('input_boolean.dynamisch_laden_loopt', 'on') and has_value('sensor.zendure_2400_ac_vermogen_aansturing') and laden > 300 and onder_staart)
              or this.state | is_number }}
         state: >
           {% set laden = [states('sensor.zendure_2400_ac_vermogen_aansturing') | float(0), 0] | max %}
-          {% set import_w = [states('sensor.p1_aansturing_vermogen') | float(0), 0] | max %}
           {% set onder_staart = states('sensor.zendure_2400_ac_laadpercentage') | float(100) <= states('sensor.zendure_2400_ac_maximale_laadpercentage') | float(100) - 10 %}
-          {% if has_value('sensor.p1_aansturing_vermogen') and has_value('sensor.zendure_2400_ac_vermogen_aansturing') and ([import_w, laden] | min) > 300 and onder_staart %}
-            {{ [import_w, laden] | min | round(0) }}
+          {% if is_state('input_boolean.dynamisch_laden_loopt', 'on') and has_value('sensor.zendure_2400_ac_vermogen_aansturing') and laden > 300 and onder_staart %}
+            {{ laden | round(0) }}
           {% else %}
             {{ this.state }}
           {% endif %}
@@ -2511,6 +2512,9 @@ template:
           padcheck_accu_leeg_om: "{{ (t_leeg_toon_ts | timestamp_custom('%Y-%m-%d %H:%M', true)) if t_leeg_toon_ts < nu_ts + 172800 else none }}"
           padcheck_zon_dekt_vanaf: "{{ t_zon_dek_ts | timestamp_custom('%Y-%m-%d %H:%M', true) }}"
           padcheck_zon_bron: "{{ zon_dek_bron }}"
+          # Begin van het tekort (accu leeg zonder bijladen) voor de regel "Tekort tot de zon". padcheck_accu_leeg_om
+          # rekent met vasthouden (dal, slim vasthouden) en kan daardoor na het einde van het gat liggen.
+          padcheck_gat_start: "{{ t_gap_start_ts | timestamp_custom('%Y-%m-%d %H:%M', true) }}"
           padcheck_gat_eind: "{{ t_gap_eind_ts | timestamp_custom('%Y-%m-%d %H:%M', true) }}"
           padcheck_horizon: "{{ pad_horizon_bron }}"
           padcheck_voorbij_nacht: "{{ pad_verder }}"
@@ -2851,7 +2855,7 @@ automation:
             {{ ['sensor.forecast_teller_zon_productie', 'sensor.forecast_teller_p1_import',
                 'sensor.forecast_teller_p1_export', 'sensor.forecast_teller_p1_export_uit_zon',
                 'sensor.forecast_teller_zendure_laden', 'sensor.forecast_teller_zendure_ontladen',
-                'sensor.forecast_teller_zendure_laden_uit_zon',
+                'sensor.forecast_teller_zendure_laden_uit_zon', 'sensor.forecast_netladen_vermogen',
                 'sensor.ev_teller_geladen', 'sensor.ev_teller_geladen_uit_zon',
                 'sensor.hvac_teller_apart', 'sensor.hvac_teller_apart_uit_zon']
                | select('in', states.sensor | map(attribute='entity_id') | list) | list }}
