@@ -380,6 +380,26 @@ sensor:
     precision: 2
 
 template:
+  # Betrouwbaarheid zonvoorspelling die nu geldt: de maandwaarde, anders de algemene, anders 100%.
+  # De binary sensor bepaalt op het dashboard welke rij zichtbaar is.
+  - binary_sensor:
+      - name: "Forecast Betrouwbaarheid Maand Ingevuld"
+        unique_id: forecast_betrouwbaarheid_maand_ingevuld
+        icon: mdi:calendar-check
+        state: "{{ states('input_number.forecast_betrouwbaarheid_' ~ ['jan','feb','mrt','apr','mei','jun','jul','aug','sep','okt','nov','dec'][now().month - 1]) | float(0) > 0 }}"
+    sensor:
+      - name: "Forecast Betrouwbaarheid Nu"
+        unique_id: forecast_betrouwbaarheid_nu
+        icon: mdi:weather-partly-cloudy
+        unit_of_measurement: "%"
+        state: >
+          {% set m = states('input_number.forecast_betrouwbaarheid_' ~ ['jan','feb','mrt','apr','mei','jun','jul','aug','sep','okt','nov','dec'][now().month - 1]) | float(0) %}
+          {% set g = states('input_number.forecast_betrouwbaarheid') | float(0) %}
+          {{ (m if m > 0 else (g if g > 0 else 100)) | round(0) }}
+        attributes:
+          bron: >
+            {% set m = states('input_number.forecast_betrouwbaarheid_' ~ ['jan','feb','mrt','apr','mei','jun','jul','aug','sep','okt','nov','dec'][now().month - 1]) | float(0) %}
+            {{ ('maandwaarde ' ~ ['januari','februari','maart','april','mei','juni','juli','augustus','september','oktober','november','december'][now().month - 1]) if m > 0 else ('algemene waarde' if states('input_number.forecast_betrouwbaarheid') | float(0) > 0 else 'niet ingevuld (100%)') }}
   # Laadvermogen uit het net zoals de accu het echt haalt (> 300 W), alleen tot 10% onder het
   # maximale laadpercentage: aan het eind van een lading zakt het vermogen (balanceren), en dat
   # zegt niets over wat een laadslot oplevert. Buiten het netladen houdt de

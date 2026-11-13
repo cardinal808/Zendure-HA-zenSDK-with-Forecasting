@@ -4038,8 +4038,20 @@ views:
                 name: Grid export counter (kWh, empty = automatic)
               - entity: input_number.forecast_setting_charge_margin
                 name: Battery charge margin %
-              - entity: input_number.forecast_setting_solar_reliability
-                name: Solar forecast reliability % (all months, 0 = 100%)
+              - type: conditional
+                conditions:
+                  - entity: binary_sensor.forecast_reliability_month_set
+                    state_not: 'on'
+                row:
+                  entity: input_number.forecast_setting_solar_reliability
+                  name: Solar forecast reliability % (0 = 100%)
+              - type: conditional
+                conditions:
+                  - entity: binary_sensor.forecast_reliability_month_set
+                    state: 'on'
+                row:
+                  entity: sensor.forecast_reliability_now
+                  name: Solar forecast reliability now (month value)
               - entity: input_boolean.forecast_setting_show_reliability_per_month
                 name: Show reliability per month
               - type: conditional

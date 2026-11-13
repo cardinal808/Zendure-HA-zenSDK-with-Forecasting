@@ -4044,8 +4044,20 @@ views:
                 name: Net export teller (kWh, leeg = automatisch)
               - entity: input_number.forecast_laad_marge
                 name: Batterij laadmarge %
-              - entity: input_number.forecast_betrouwbaarheid
-                name: Betrouwbaarheid zonvoorspelling % (alle maanden, 0 = 100%)
+              - type: conditional
+                conditions:
+                  - entity: binary_sensor.forecast_betrouwbaarheid_maand_ingevuld
+                    state_not: 'on'
+                row:
+                  entity: input_number.forecast_betrouwbaarheid
+                  name: Betrouwbaarheid zonvoorspelling % (0 = 100%)
+              - type: conditional
+                conditions:
+                  - entity: binary_sensor.forecast_betrouwbaarheid_maand_ingevuld
+                    state: 'on'
+                row:
+                  entity: sensor.forecast_betrouwbaarheid_nu
+                  name: Betrouwbaarheid zonvoorspelling nu (maandwaarde)
               - entity: input_boolean.forecast_betrouwbaarheid_per_maand_tonen
                 name: Betrouwbaarheid per maand tonen
               - type: conditional

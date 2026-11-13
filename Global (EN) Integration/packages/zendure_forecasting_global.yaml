@@ -380,6 +380,26 @@ sensor:
     precision: 2
 
 template:
+  # Solar forecast reliability that applies now: the month value, otherwise the general one, otherwise 100%.
+  # The binary sensor decides on the dashboard which row is visible.
+  - binary_sensor:
+      - name: "Forecast Reliability Month Set"
+        unique_id: forecast_reliability_month_set
+        icon: mdi:calendar-check
+        state: "{{ states('input_number.forecast_setting_solar_reliability_' ~ ['jan','feb','mar','apr','may','jun','jul','aug','sep','oct','nov','dec'][now().month - 1]) | float(0) > 0 }}"
+    sensor:
+      - name: "Forecast Reliability Now"
+        unique_id: forecast_reliability_now
+        icon: mdi:weather-partly-cloudy
+        unit_of_measurement: "%"
+        state: >
+          {% set m = states('input_number.forecast_setting_solar_reliability_' ~ ['jan','feb','mar','apr','may','jun','jul','aug','sep','oct','nov','dec'][now().month - 1]) | float(0) %}
+          {% set g = states('input_number.forecast_setting_solar_reliability') | float(0) %}
+          {{ (m if m > 0 else (g if g > 0 else 100)) | round(0) }}
+        attributes:
+          source: >
+            {% set m = states('input_number.forecast_setting_solar_reliability_' ~ ['jan','feb','mar','apr','may','jun','jul','aug','sep','oct','nov','dec'][now().month - 1]) | float(0) %}
+            {{ ('month value ' ~ ['January','February','March','April','May','June','July','August','September','October','November','December'][now().month - 1]) if m > 0 else ('general value' if states('input_number.forecast_setting_solar_reliability') | float(0) > 0 else 'not filled in (100%)') }}
   # Grid charging power as the battery really achieves it (> 300 W), only up to 10% below the
   # maximum state of charge: at the end of a charge the power drops (balancing), and that says
   # nothing about what a charge slot yields. Outside grid charging the

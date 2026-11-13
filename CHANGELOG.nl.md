@@ -36,6 +36,7 @@ Versies volgen `jaar.maand.volgnummer`; het volgnummer begint elke maand bij 1. 
 **Betrouwbaarheid zonvoorspelling per maand**
 - 12 maandvelden (0–150%, 0 = niet ingevuld: dan de algemene betrouwbaarheid). Zichtbaar met **Betrouwbaarheid per maand tonen** in Forecasting Configuratie (Basis).
 - Nieuwe `sensor.forecast_zon_maandmeting`: telt elke dag de werkelijke zon (zon-teller) tegen de voorspelling van de dag ervoor ("Zon morgen sensor"). State = verhouding deze maand (%). Na afloop van een maand (minstens 10 dagen en 5 kWh voorspeld) vult een automatisering de gemeten waarde in het veld van die maand in, voor volgend jaar. Uitzetten met **Maandwaarde niet automatisch invullen**.
+- Is er voor de huidige maand een waarde ingevuld, dan toont het dashboard in plaats van het algemene veld de betrouwbaarheid die nu geldt (`sensor.forecast_betrouwbaarheid_nu`, met `binary_sensor.forecast_betrouwbaarheid_maand_ingevuld`). Het algemene veld geldt alleen voor maanden op 0.
 - **Zonkrediet vervalt** (Forecasting Configuratie (Negatieve Prijs)). Vooraf ontladen telt het zon-overschot nu volledig als er een betrouwbaarheid is ingevuld (per maand of algemeen; die zit dan al in de voorspelling), en anders voor 75%.
 
 **Kalibratieladen**

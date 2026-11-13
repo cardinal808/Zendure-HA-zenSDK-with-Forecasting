@@ -36,6 +36,7 @@ Versions follow `year.month.sequence`; the sequence restarts at 1 every month. E
 **Solar forecast reliability per month**
 - 12 month fields (0–150%, 0 = not filled in: then the general reliability). Shown with **Show reliability per month** in Forecasting Configuration (Basic).
 - New `sensor.forecast_solar_month_measurement`: every day it counts actual solar (solar counter) against the previous day's forecast ("Solar tomorrow sensor"). State = ratio this month (%). After a month ends (at least 10 days and 5 kWh forecast) an automation fills the measured value into that month's field, for next year. Turn off with **Do not fill in the monthly value automatically**.
+- If a value is filled in for the current month, the dashboard shows the reliability that applies now instead of the general field (`sensor.forecast_reliability_now`, with `binary_sensor.forecast_reliability_month_set`). The general field only applies to months set to 0.
 - **Solar credit is gone** (Forecasting Configuration (Negative Price)). Pre-discharge now counts the solar surplus fully when a reliability is filled in (per month or general; it is then already in the forecast), and otherwise for 75%.
 
 **Calibration charging**
