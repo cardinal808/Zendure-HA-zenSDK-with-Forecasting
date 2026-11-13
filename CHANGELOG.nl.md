@@ -54,6 +54,7 @@ Versies volgen `jaar.maand.volgnummer`; het volgnummer begint elke maand bij 1. 
 - Prijs: gepland laden uit het net is nu **blauw** (was groen), net als in de rij Accu.
 - Accu: het laadpercentage staat op een eigen as waarvan 0% op de nullijn van de kW-kolommen valt; de lijn komt er niet meer onder.
 - Net: **blauw** = accu laden uit het net, **paars** = huis uit het net, **grijs** = teruglevering.
+- Tijdas: labels elke 3 uur op hele uren (03:00, 06:00, 09:00 …), middernacht als dagnaam, en een stippellijn bij elke middernacht in alle vier de rijen.
 
 **Pad-check heet nu "Tekort tot de zon"**
 - Nieuwe tekst, bijvoorbeeld: *Tekort tot de zon: zonder bijladen is de accu vandaag rond 08:21 leeg. Tot morgen 01:45 zou het huis dan 9,5 kWh inkopen, waarvan 7,9 kWh duur (gem. €0,428). Daarom 5,5 kWh laden 02:30–05:00 (10 kwartieren); 3,7 kWh ruimte blijft vrij voor de zon.* Duidelijk dat de inkoop zónder bijladen is, en waarom niet alles wordt bijgeladen (ruimte voor de zon).

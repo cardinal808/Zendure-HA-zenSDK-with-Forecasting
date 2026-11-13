@@ -830,6 +830,17 @@ views:
                     dataLabels:
                       enabled: false
                     annotations:
+                      # Dotted line at midnight (today, tomorrow, the day after)
+                      xaxis:
+                        - x: 'EVAL:(() => { const d = new Date(); d.setHours(0, 0, 0, 0); return d.getTime(); })()'
+                          borderColor: 'rgba(160,160,160,0.7)'
+                          strokeDashArray: 3
+                        - x: 'EVAL:(() => { const d = new Date(); d.setHours(24, 0, 0, 0); return d.getTime(); })()'
+                          borderColor: 'rgba(160,160,160,0.7)'
+                          strokeDashArray: 3
+                        - x: 'EVAL:(() => { const d = new Date(); d.setHours(48, 0, 0, 0); return d.getTime(); })()'
+                          borderColor: 'rgba(160,160,160,0.7)'
+                          strokeDashArray: 3
                       texts:
                         - x: 4
                           'y': 11
@@ -941,6 +952,17 @@ views:
                     dataLabels:
                       enabled: false
                     annotations:
+                      # Dotted line at midnight (today, tomorrow, the day after)
+                      xaxis:
+                        - x: 'EVAL:(() => { const d = new Date(); d.setHours(0, 0, 0, 0); return d.getTime(); })()'
+                          borderColor: 'rgba(160,160,160,0.7)'
+                          strokeDashArray: 3
+                        - x: 'EVAL:(() => { const d = new Date(); d.setHours(24, 0, 0, 0); return d.getTime(); })()'
+                          borderColor: 'rgba(160,160,160,0.7)'
+                          strokeDashArray: 3
+                        - x: 'EVAL:(() => { const d = new Date(); d.setHours(48, 0, 0, 0); return d.getTime(); })()'
+                          borderColor: 'rgba(160,160,160,0.7)'
+                          strokeDashArray: 3
                       texts:
                         - x: 4
                           'y': 11
@@ -1061,6 +1083,17 @@ views:
                     dataLabels:
                       enabled: false
                     annotations:
+                      # Dotted line at midnight (today, tomorrow, the day after)
+                      xaxis:
+                        - x: 'EVAL:(() => { const d = new Date(); d.setHours(0, 0, 0, 0); return d.getTime(); })()'
+                          borderColor: 'rgba(160,160,160,0.7)'
+                          strokeDashArray: 3
+                        - x: 'EVAL:(() => { const d = new Date(); d.setHours(24, 0, 0, 0); return d.getTime(); })()'
+                          borderColor: 'rgba(160,160,160,0.7)'
+                          strokeDashArray: 3
+                        - x: 'EVAL:(() => { const d = new Date(); d.setHours(48, 0, 0, 0); return d.getTime(); })()'
+                          borderColor: 'rgba(160,160,160,0.7)'
+                          strokeDashArray: 3
                       texts:
                         - x: 4
                           'y': 11
@@ -1175,6 +1208,17 @@ views:
                     dataLabels:
                       enabled: false
                     annotations:
+                      # Dotted line at midnight (today, tomorrow, the day after)
+                      xaxis:
+                        - x: 'EVAL:(() => { const d = new Date(); d.setHours(0, 0, 0, 0); return d.getTime(); })()'
+                          borderColor: 'rgba(160,160,160,0.7)'
+                          strokeDashArray: 3
+                        - x: 'EVAL:(() => { const d = new Date(); d.setHours(24, 0, 0, 0); return d.getTime(); })()'
+                          borderColor: 'rgba(160,160,160,0.7)'
+                          strokeDashArray: 3
+                        - x: 'EVAL:(() => { const d = new Date(); d.setHours(48, 0, 0, 0); return d.getTime(); })()'
+                          borderColor: 'rgba(160,160,160,0.7)'
+                          strokeDashArray: 3
                       texts:
                         - x: 4
                           'y': 11
@@ -1211,13 +1255,25 @@ views:
                           });
                           return '<div style="padding:1px 6px;font-size:11px;line-height:16px;white-space:nowrap;background:var(--card-background-color,#1c1f26);color:var(--primary-text-color,#e1e1e1);border:1px solid var(--divider-color,#444);border-radius:4px">' + tijd + ' · ' + delen.join(' · ') + '</div>';
                         }
+                    # Labels every 3 hours on whole hours (03, 06, 09 …); midnight as day name
                     xaxis:
+                      type: numeric
+                      tickAmount: 36
+                      tickPlacement: 'on'
                       tooltip:
                         enabled: false
                       labels:
                         show: true
-                        datetimeUTC: false
-                        format: HH:mm
+                        rotate: 0
+                        hideOverlappingLabels: false
+                        formatter: >-
+                          EVAL:function(value) {
+                            const d = new Date(value);
+                            const h = d.getHours();
+                            if (d.getMinutes() !== 0 || h % 3 !== 0) return '';
+                            if (h === 0) return d.toLocaleDateString(navigator.language, { weekday: 'short' });
+                            return String(h).padStart(2, '0') + ':00';
+                          }
                         style:
                           fontSize: 10px
                           colors: grey

@@ -54,6 +54,7 @@ Versions follow `year.month.sequence`; the sequence restarts at 1 every month. E
 - Price: planned grid charging is now **blue** (was green), like in the Battery row.
 - Battery: the state of charge is on its own axis with 0% on the zero line of the kW columns; the line no longer drops below it.
 - Grid: **blue** = battery charging from the grid, **purple** = house from the grid, **grey** = export.
+- Time axis: labels every 3 hours on whole hours (03:00, 06:00, 09:00 …), midnight as day name, and a dotted line at every midnight in all four rows.
 
 **Path check is now "Shortfall until the sun"**
 - New text, for example: *Shortfall until the sun: without topping up, the battery is empty today around 08:21. Until tomorrow 01:45 the house would then buy 9.5 kWh, of which 7.9 kWh expensive (avg. €0.428). So 5.5 kWh charging 02:30–05:00 (10 quarter hours); 3.7 kWh of room stays free for the sun.* Makes clear that the purchase is without topping up, and why not everything is topped up (room for the sun).
