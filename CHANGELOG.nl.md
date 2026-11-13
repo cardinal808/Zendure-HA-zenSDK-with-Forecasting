@@ -58,8 +58,8 @@ Versies volgen `jaar.maand.volgnummer`; het volgnummer begint elke maand bij 1. 
 - Net: **blauw** = accu laden uit het net, **paars** = huis uit het net, **grijs** = teruglevering.
 - Tijdas: labels elke 3 uur op hele uren (03:00, 06:00, 09:00 …), middernacht als dagnaam, en een stippellijn bij elke middernacht in alle vier de rijen.
 
-**Pad-check heet nu "Tekort tot de zon"**
-- Nieuwe tekst, bijvoorbeeld: *Tekort tot de zon: zonder bijladen is de accu vandaag rond 08:21 leeg. Tot morgen 01:45 zou het huis dan 9,5 kWh inkopen, waarvan 7,9 kWh duur (gem. €0,428). Daarom 5,5 kWh laden 02:30–05:00 (10 kwartieren); 3,7 kWh ruimte blijft vrij voor de zon.* Duidelijk dat de inkoop zónder bijladen is, en waarom niet alles wordt bijgeladen (ruimte voor de zon).
+**Pad-check heet nu "Planning"**
+- Nieuwe tekst, bijvoorbeeld: *Planning: zonder bijladen is de accu vandaag rond 08:21 leeg. Tot morgen 01:45 zou het huis dan 9,5 kWh inkopen, waarvan 7,9 kWh duur (gem. €0,428). Daarom 5,5 kWh laden 02:30–05:00 (10 kwartieren); 3,7 kWh ruimte blijft vrij voor de zon.* Duidelijk dat de inkoop zónder bijladen is, en waarom niet alles wordt bijgeladen (ruimte voor de zon).
 - Het tijdstip *leeg* is het begin van het tekort (nieuw attribuut `padcheck_gat_start`). Eerder stond hier het leeg-moment mét slim vasthouden, dat ná het einde van het tekort kon liggen (*morgen rond 22:34 leeg … tot morgen 09:00 0,2 kWh inkopen*).
 - Getallen in het plan en bij *Verzamelde gegevens* met een komma (NL).
 

@@ -58,8 +58,8 @@ Versions follow `year.month.sequence`; the sequence restarts at 1 every month. E
 - Grid: **blue** = battery charging from the grid, **purple** = house from the grid, **grey** = export.
 - Time axis: labels every 3 hours on whole hours (03:00, 06:00, 09:00 …), midnight as day name, and a dotted line at every midnight in all four rows.
 
-**Path check is now "Shortfall until the sun"**
-- New text, for example: *Shortfall until the sun: without topping up, the battery is empty today around 08:21. Until tomorrow 01:45 the house would then buy 9.5 kWh, of which 7.9 kWh expensive (avg. €0.428). So 5.5 kWh charging 02:30–05:00 (10 quarter hours); 3.7 kWh of room stays free for the sun.* Makes clear that the purchase is without topping up, and why not everything is topped up (room for the sun).
+**Path check is now "Planning"**
+- New text, for example: *Planning: without topping up, the battery is empty today around 08:21. Until tomorrow 01:45 the house would then buy 9.5 kWh, of which 7.9 kWh expensive (avg. €0.428). So 5.5 kWh charging 02:30–05:00 (10 quarter hours); 3.7 kWh of room stays free for the sun.* Makes clear that the purchase is without topping up, and why not everything is topped up (room for the sun).
 - The *empty* time is the start of the shortfall (new attribute `pathcheck_gap_start`). Before, it showed the empty time with smart hold, which could fall after the end of the shortfall (*empty tomorrow around 22:34 … until tomorrow 09:00 buy 0.2 kWh*).
 
 **Upgrading**

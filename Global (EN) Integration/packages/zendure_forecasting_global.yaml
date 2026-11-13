@@ -2513,7 +2513,7 @@ template:
           pathcheck_battery_empty_at: "{{ (t_empty_show_ts | timestamp_custom('%Y-%m-%d %H:%M', true)) if t_empty_show_ts < now_ts + 172800 else none }}"
           pathcheck_solar_covers_from: "{{ t_cover_ts | timestamp_custom('%Y-%m-%d %H:%M', true) }}"
           pathcheck_solar_source: "{{ cover_source }}"
-          # Start of the shortfall (battery empty without topping up) for the line "Shortfall until the sun".
+          # Start of the shortfall (battery empty without topping up) for the line "Planning".
           # pathcheck_battery_empty_at includes holding (dip, smart hold) and can therefore fall after the gap.
           pathcheck_gap_start: "{{ t_gap_start_ts | timestamp_custom('%Y-%m-%d %H:%M', true) }}"
           pathcheck_gap_end: "{{ t_gap_end_ts | timestamp_custom('%Y-%m-%d %H:%M', true) }}"
@@ -2529,7 +2529,7 @@ template:
           pathcheck_grid_charge_kwh: "{{ path_grid_ac }}"
           pathcheck_extra_slots: "{{ extra_slots | length }}"
           pathcheck_dip_hold: "{{ dip_hold_plan }}"
-          # For the "Shortfall until the sun" line: first and last charge slot for it, and the room kept free for the sun
+          # For the "Planning" line: first and last charge slot for it, and the room kept free for the sun
           pathcheck_charge_from: "{{ ((extra_slots | map(attribute='s') | min) | timestamp_custom('%Y-%m-%d %H:%M', true)) if extra_slots | length > 0 else none }}"
           pathcheck_charge_until: "{{ ((extra_slots | map(attribute='e') | max) | timestamp_custom('%Y-%m-%d %H:%M', true)) if extra_slots | length > 0 else none }}"
           pathcheck_solar_room_kwh: "{{ solar_dc if path_day else 0 }}"

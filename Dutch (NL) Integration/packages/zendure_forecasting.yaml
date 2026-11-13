@@ -2512,7 +2512,7 @@ template:
           padcheck_accu_leeg_om: "{{ (t_leeg_toon_ts | timestamp_custom('%Y-%m-%d %H:%M', true)) if t_leeg_toon_ts < nu_ts + 172800 else none }}"
           padcheck_zon_dekt_vanaf: "{{ t_zon_dek_ts | timestamp_custom('%Y-%m-%d %H:%M', true) }}"
           padcheck_zon_bron: "{{ zon_dek_bron }}"
-          # Begin van het tekort (accu leeg zonder bijladen) voor de regel "Tekort tot de zon". padcheck_accu_leeg_om
+          # Begin van het tekort (accu leeg zonder bijladen) voor de regel "Planning". padcheck_accu_leeg_om
           # rekent met vasthouden (dal, slim vasthouden) en kan daardoor na het einde van het gat liggen.
           padcheck_gat_start: "{{ t_gap_start_ts | timestamp_custom('%Y-%m-%d %H:%M', true) }}"
           padcheck_gat_eind: "{{ t_gap_eind_ts | timestamp_custom('%Y-%m-%d %H:%M', true) }}"
@@ -2528,7 +2528,7 @@ template:
           padcheck_netladen_kwh: "{{ pad_netladen_ac }}"
           padcheck_extra_slots: "{{ extra_slots | length }}"
           padcheck_dal_blokkade: "{{ dal_blokkade_plan }}"
-          # Voor de regel "Tekort tot de zon": eerste en laatste laadslot daarvoor, en de ruimte die vrij blijft voor de zon
+          # Voor de regel "Planning": eerste en laatste laadslot daarvoor, en de ruimte die vrij blijft voor de zon
           padcheck_laden_van: "{{ ((extra_slots | map(attribute='s') | min) | timestamp_custom('%Y-%m-%d %H:%M', true)) if extra_slots | length > 0 else none }}"
           padcheck_laden_tot: "{{ ((extra_slots | map(attribute='e') | max) | timestamp_custom('%Y-%m-%d %H:%M', true)) if extra_slots | length > 0 else none }}"
           padcheck_zon_ruimte_kwh: "{{ zon_dc if pad_dag else 0 }}"
