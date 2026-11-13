@@ -778,7 +778,7 @@ views:
                 state: 'on'
           - type: markdown
             content: >-
-              <ha-alert alert-type="info">Help</ha-alert>Forecast per price slot for the next 36 hours. Price (colours as in Gielz): green = planned charging, red = expensive (Gielz's most expensive periods), grey = other, light grey = price not known yet. Tomorrow's charging is indicative; the cheap-dip hold is not part of this forecast. Solar only with a Solcast detailed forecast.
+              <ha-alert alert-type="info">Help</ha-alert>Forecast per price slot for the next 36 hours. Price (colours as in Gielz): blue = planned grid charging, red = expensive (Gielz's most expensive periods), grey = other, light grey = price not known yet. Battery: blue = charging from the grid, yellow = charging from solar, orange = discharging; white line = state of charge (0–100%). Grid: blue = battery charging from the grid, purple = house from the grid, grey = export. Tomorrow's charging is indicative; the cheap-dip hold is not part of this forecast. Solar only with a Solcast detailed forecast.
 
 
               Note: needs mod-card (card-mod, HACS).
@@ -891,7 +891,7 @@ views:
                       data_generator: |
                         const d = entity.attributes.timeline;
                         if (!d || !d.t) return [];
-                        // Colours as in Gielz (Dynamic Today/Tomorrow): green = charging (here: planned
+                        // Colours as in Gielz (Dynamic Today/Tomorrow): blue = grid charging (planned
                         // by the planner), red = expensive (Gielz's most expensive periods), grey = other.
                         // Light grey = price not known yet (today's pattern assumed).
                         const g = hass.states['sensor.dynamic_lowest_price_period'];
@@ -905,7 +905,7 @@ views:
                           let c = 'rgba(162,162,163,1)';
                           if (exp.has(t * 1000)) c = 'rgba(197,59,44,1)';
                           if (!d.known[i]) c = 'rgba(162,162,163,0.4)';
-                          if (d.charge[i]) c = 'rgba(1,161,128,1)';
+                          if (d.charge[i]) c = 'rgba(46,125,215,1)';
                           return { x: t * 1000, y: v, fillColor: c };
                         });
                   card_mod:
@@ -1036,15 +1036,16 @@ views:
                   update_interval: 5min
                   header:
                     show: false
+                  # Separate axes: battery in kW (around 0), state of charge always 0–100%
+                  yaxis:
+                    - id: kw
+                      show: false
+                    - id: soc
+                      show: false
+                      opposite: true
+                      min: 0
+                      max: 100
                   apex_config:
-                    yaxis:
-                      - seriesName: Battery
-                        show: false
-                      - seriesName: State of charge
-                        opposite: true
-                        min: 0
-                        max: 100
-                        show: false
                     chart:
                       height: 80px
                       sparkline:
@@ -1111,6 +1112,7 @@ views:
                     - entity: sensor.zendure_forecast_chart
                       name: Battery
                       type: column
+                      yaxis_id: kw
                       color: '#01a180'
                       float_precision: 2
                       show:
@@ -1126,6 +1128,7 @@ views:
                     - entity: sensor.zendure_forecast_chart
                       name: State of charge
                       type: line
+                      yaxis_id: soc
                       color: '#e1e1e1'
                       stroke_width: 1.5
                       curve: straight
@@ -1234,7 +1237,9 @@ views:
                         if (!d || !d.t) return [];
                         return d.t.map((t, i) => {
                           const v = d.grid_kw[i];
-                          return { x: t * 1000, y: v, fillColor: v >= 0 ? '#8e7cc3' : '#a2a2a3' };
+                          // blue = battery charging from the grid, purple = house from the grid, grey = export
+                          const c = v < 0 ? '#a2a2a3' : (d.charge[i] ? '#2e7dd7' : '#8e7cc3');
+                          return { x: t * 1000, y: v, fillColor: c };
                         });
                   card_mod:
                     style: |

@@ -50,6 +50,11 @@ Versions follow `year.month.sequence`; the sequence restarts at 1 every month. E
 - From half the threshold (day 7) the planner waits for a sunny day (if the sun fills the battery today or tomorrow, it does nothing). At the threshold (day 14) it charges the battery to 100% from the grid in the cheapest quarter hours of today and tomorrow, outside the efficiency filter (it is maintenance). Turns off by itself once Gielz's *Last Calibration* sees a new calibration.
 - *Plan today* shows a **Calibration** line with the number of days and what the planner does. If *Max. State Of Charge* is below 100%, it says so (calibration only happens at 100%).
 
+**Plan Timeline**
+- Price: planned grid charging is now **blue** (was green), like in the Battery row.
+- Battery: the state of charge has its own axis (0–100%) and no longer drops below the zero line of the kW columns.
+- Grid: **blue** = battery charging from the grid, **purple** = house from the grid, **grey** = export.
+
 **Path check is now "Shortfall until the sun"**
 - New text, for example: *Shortfall until the sun: without topping up, the battery is empty today around 08:21. Until tomorrow 01:45 the house would then buy 9.5 kWh, of which 7.9 kWh expensive (avg. €0.428). So 5.5 kWh charging 02:30–05:00 (10 quarter hours); 3.7 kWh of room stays free for the sun.* Makes clear that the purchase is without topping up, and why not everything is topped up (room for the sun).
 

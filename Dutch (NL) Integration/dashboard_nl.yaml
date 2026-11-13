@@ -778,7 +778,7 @@ views:
                 state: 'on'
           - type: markdown
             content: >-
-              <ha-alert alert-type="info">Helptekst</ha-alert>Voorspelling per prijsslot voor de komende 36 uur. Prijs (kleuren zoals Gielz): groen = gepland laden, rood = duur (duurste periodes van Gielz), grijs = overig, lichtgrijs = prijs nog onbekend. Het laden van morgen is indicatief; de dal-blokkade zit niet in deze voorspelling. Zon alleen met een Solcast-detailvoorspelling.
+              <ha-alert alert-type="info">Helptekst</ha-alert>Voorspelling per prijsslot voor de komende 36 uur. Prijs (kleuren zoals Gielz): blauw = gepland laden uit het net, rood = duur (duurste periodes van Gielz), grijs = overig, lichtgrijs = prijs nog onbekend. Accu: blauw = laden uit het net, geel = laden uit zon, oranje = ontladen; witte lijn = laadpercentage (0–100%). Net: blauw = accu laden uit het net, paars = huis uit het net, grijs = teruglevering. Het laden van morgen is indicatief; de dal-blokkade zit niet in deze voorspelling. Zon alleen met een Solcast-detailvoorspelling.
 
 
               Let op: mod-card (card-mod, HACS) benodigd.
@@ -891,7 +891,7 @@ views:
                       data_generator: |
                         const d = entity.attributes.tijdlijn;
                         if (!d || !d.t) return [];
-                        // Kleuren zoals Gielz (Dynamisch Vandaag/Morgen): groen = laden (hier: gepland
+                        // Kleuren zoals Gielz (Dynamisch Vandaag/Morgen): blauw = laden uit het net (gepland
                         // door de planner), rood = duur (de duurste periodes van Gielz), grijs = overig.
                         // Lichtgrijs = prijs nog onbekend (patroon van vandaag aangehouden).
                         const g = hass.states['sensor.dynamisch_goedkoopste_periode'];
@@ -905,7 +905,7 @@ views:
                           let c = 'rgba(162,162,163,1)';
                           if (duur.has(t * 1000)) c = 'rgba(197,59,44,1)';
                           if (!d.bekend[i]) c = 'rgba(162,162,163,0.4)';
-                          if (d.laden[i]) c = 'rgba(1,161,128,1)';
+                          if (d.laden[i]) c = 'rgba(46,125,215,1)';
                           return { x: t * 1000, y: v, fillColor: c };
                         });
                   card_mod:
@@ -1036,15 +1036,16 @@ views:
                   update_interval: 5min
                   header:
                     show: false
+                  # Aparte assen: accu in kW (rond 0), laadpercentage altijd 0–100%
+                  yaxis:
+                    - id: kw
+                      show: false
+                    - id: soc
+                      show: false
+                      opposite: true
+                      min: 0
+                      max: 100
                   apex_config:
-                    yaxis:
-                      - seriesName: Accu
-                        show: false
-                      - seriesName: Laadpercentage
-                        opposite: true
-                        min: 0
-                        max: 100
-                        show: false
                     chart:
                       height: 80px
                       sparkline:
@@ -1111,6 +1112,7 @@ views:
                     - entity: sensor.zendure_forecast_grafiek
                       name: Accu
                       type: column
+                      yaxis_id: kw
                       color: '#01a180'
                       float_precision: 2
                       show:
@@ -1126,6 +1128,7 @@ views:
                     - entity: sensor.zendure_forecast_grafiek
                       name: Laadpercentage
                       type: line
+                      yaxis_id: soc
                       color: '#e1e1e1'
                       stroke_width: 1.5
                       curve: straight
@@ -1234,7 +1237,9 @@ views:
                         if (!d || !d.t) return [];
                         return d.t.map((t, i) => {
                           const v = d.net_kw[i];
-                          return { x: t * 1000, y: v, fillColor: v >= 0 ? '#8e7cc3' : '#a2a2a3' };
+                          // blauw = accu laden uit het net, paars = huis uit het net, grijs = teruglevering
+                          const c = v < 0 ? '#a2a2a3' : (d.laden[i] ? '#2e7dd7' : '#8e7cc3');
+                          return { x: t * 1000, y: v, fillColor: c };
                         });
                   card_mod:
                     style: |

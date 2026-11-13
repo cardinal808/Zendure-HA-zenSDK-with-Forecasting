@@ -50,6 +50,11 @@ Versies volgen `jaar.maand.volgnummer`; het volgnummer begint elke maand bij 1. 
 - Vanaf de helft van de drempel (dag 7) wacht de planner op een zonnige dag (vult de zon de accu vandaag of morgen, dan doet hij niets). Op de drempel (dag 14) laadt hij de accu tot 100% uit het net in de goedkoopste kwartieren van vandaag en morgen, buiten het rendementsfilter (het is onderhoud). Gaat vanzelf uit zodra Gielz' *Laatste Kalibratie* een nieuwe kalibratie ziet.
 - *Plan vandaag* toont een regel **Kalibratie** met het aantal dagen en wat de planner doet. Staat *Max. Laadpercentage* onder 100%, dan meldt hij dat (kalibratie gebeurt alleen bij 100%).
 
+**Plan Tijdlijn**
+- Prijs: gepland laden uit het net is nu **blauw** (was groen), net als in de rij Accu.
+- Accu: het laadpercentage heeft een eigen as (0–100%) en zakt niet meer onder de nullijn van de kW-kolommen.
+- Net: **blauw** = accu laden uit het net, **paars** = huis uit het net, **grijs** = teruglevering.
+
 **Pad-check heet nu "Tekort tot de zon"**
 - Nieuwe tekst, bijvoorbeeld: *Tekort tot de zon: zonder bijladen is de accu vandaag rond 08:21 leeg. Tot morgen 01:45 zou het huis dan 9,5 kWh inkopen, waarvan 7,9 kWh duur (gem. €0,428). Daarom 5,5 kWh laden 02:30–05:00 (10 kwartieren); 3,7 kWh ruimte blijft vrij voor de zon.* Duidelijk dat de inkoop zónder bijladen is, en waarom niet alles wordt bijgeladen (ruimte voor de zon).
 - Getallen in het plan en bij *Verzamelde gegevens* met een komma (NL).
