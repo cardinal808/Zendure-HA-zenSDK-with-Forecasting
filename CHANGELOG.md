@@ -2,6 +2,14 @@
 
 Versions follow `year.month.sequence`; the sequence restarts at 1 every month. Each version states which Gielz version it is based on. [Nederlands](CHANGELOG.nl.md)
 
+## 2026.11.6 — based on Gielz v20261113
+
+**Dashboard fix: Forecasting Configuration (Negative Price) always visible**
+- The block only appeared when *Show PV On Dashboard* was on. On a Zendure without solar inputs (e.g. 2400 AC+) that is usually off, and then the whole block was missing, including the part for the external inverter. Now it only depends on the negative price package. The row *Disable PV export at negative prices* (Zendure Pro) stays visible only on a Zendure with solar inputs.
+
+**Upgrading**
+- Only the dashboard changed in content (the other files have a new version number). Paste the dashboard again via the Raw configuration editor; replace the other files and restart for the correct version number.
+
 ## 2026.11.5 — based on Gielz v20261113
 
 **Updated to Gielz v20261113**

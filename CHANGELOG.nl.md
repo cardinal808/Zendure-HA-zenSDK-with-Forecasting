@@ -2,6 +2,14 @@
 
 Versies volgen `jaar.maand.volgnummer`; het volgnummer begint elke maand bij 1. Elke versie vermeldt op welke Gielz-versie hij is gebaseerd. [English](CHANGELOG.md)
 
+## 2026.11.6 — gebaseerd op Gielz v20261113
+
+**Fix dashboard: Forecasting Configuratie (Negatieve Prijs) altijd zichtbaar**
+- Het blok verscheen alleen als *PV Tonen Op Dashboard* aan stond. Bij een Zendure zonder zon-ingangen (bv. 2400 AC+) staat die meestal uit, en dan ontbrak het hele blok, ook het deel voor de externe omvormer. Nu hangt het alleen af van het negatieve-prijspakket. De regel *PV-export uitschakelen bij negatieve prijzen* (Zendure Pro) blijft alleen zichtbaar bij een Zendure met zon-ingangen.
+
+**Upgraden**
+- Alleen het dashboard is in inhoud gewijzigd (de andere bestanden hebben een nieuw versienummer). Plak het dashboard opnieuw via de Raw configuratie-editor; vervang de andere bestanden en herstart voor het juiste versienummer.
+
 ## 2026.11.5 — gebaseerd op Gielz v20261113
 
 **Bijgewerkt naar Gielz v20261113**

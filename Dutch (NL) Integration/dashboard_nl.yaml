@@ -1,4 +1,4 @@
-# Zendure zenSDK (Gielz) + Forecasting 2026.11.5 | gebaseerd op Gielz v20261113
+# Zendure zenSDK (Gielz) + Forecasting 2026.11.6 | gebaseerd op Gielz v20261113
 # Gebaseerd op Gielz1986/Zendure-HA-zenSDK (Michiel Hofker). Zie README.md voor licentie en wijzigingen.
 views:
   - type: sections
@@ -4240,9 +4240,6 @@ views:
               - condition: state
                 entity: input_boolean.negatieve_prijs_export_blokkeren
                 state_not: unavailable
-              - condition: state
-                entity: input_boolean.pv_tonen_op_dashboard
-                state: 'on'
           - type: heading
             icon: ''
             heading: Terugleverprijs nu
@@ -4272,9 +4269,6 @@ views:
               - condition: state
                 entity: input_boolean.negatieve_prijs_export_blokkeren
                 state_not: unavailable
-              - condition: state
-                entity: input_boolean.pv_tonen_op_dashboard
-                state: 'on'
           - type: markdown
             content: >-
               <ha-alert alert-type="info">Helptekst</ha-alert>Is de
@@ -4349,9 +4343,6 @@ views:
               - condition: state
                 entity: input_boolean.help_tonen_op_dashboard
                 state: 'on'
-              - condition: state
-                entity: input_boolean.pv_tonen_op_dashboard
-                state: 'on'
           - type: markdown
             content: >-
               <ha-alert alert-type="warning">Opslag teruglevering staat op {{ states('input_number.besparing_dyn_opslag_teruglevering') | float(0) | round(3) }} €/kWh. Dat is ongebruikelijk veel (meestal tussen −0,05 en 0). Bij een grote negatieve opslag is de terugleverprijs bijna altijd negatief en wordt teruglevering steeds geblokkeerd. Bedoelde je bv. −0,01?</ha-alert>
@@ -4365,9 +4356,6 @@ views:
                   - condition: numeric_state
                     entity: input_number.besparing_dyn_opslag_teruglevering
                     above: 0.1
-              - condition: state
-                entity: input_boolean.pv_tonen_op_dashboard
-                state: 'on'
           - type: entities
             entities:
               - entity: input_boolean.negatieve_prijs_export_blokkeren
@@ -4450,9 +4438,6 @@ views:
               - condition: state
                 entity: input_boolean.negatieve_prijs_export_blokkeren
                 state_not: unavailable
-              - condition: state
-                entity: input_boolean.pv_tonen_op_dashboard
-                state: 'on'
           - type: heading
             icon: ''
             heading: Forecasting Configuratie (Nordpool)

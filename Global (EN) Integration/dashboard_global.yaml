@@ -1,4 +1,4 @@
-# Zendure zenSDK (Gielz) + Forecasting 2026.11.5 | based on Gielz v20261113
+# Zendure zenSDK (Gielz) + Forecasting 2026.11.6 | based on Gielz v20261113
 # Based on Gielz1986/Zendure-HA-zenSDK (Michiel Hofker). See README.md for license and changes.
 views:
   - type: sections
@@ -4234,9 +4234,6 @@ views:
               - condition: state
                 entity: input_boolean.negative_price_block_export
                 state_not: unavailable
-              - condition: state
-                entity: input_boolean.dashboard_setting_show_pv
-                state: 'on'
           - type: heading
             icon: ''
             heading: Feed-in price now
@@ -4266,9 +4263,6 @@ views:
               - condition: state
                 entity: input_boolean.negative_price_block_export
                 state_not: unavailable
-              - condition: state
-                entity: input_boolean.dashboard_setting_show_pv
-                state: 'on'
           - type: markdown
             content: >-
               <ha-alert alert-type="info">Help text</ha-alert>When the feed-in
@@ -4342,9 +4336,6 @@ views:
               - condition: state
                 entity: input_boolean.dashboard_setting_show_help
                 state: 'on'
-              - condition: state
-                entity: input_boolean.dashboard_setting_show_pv
-                state: 'on'
           - type: markdown
             content: >-
               <ha-alert alert-type="warning">Feed-in markup is set to {{ states('input_number.savings_setting_dynamic_feedin_markup') | float(0) | round(3) }} €/kWh. That is unusually large (usually between −0.05 and 0). With a large negative markup the feed-in price is almost always negative and export is blocked all the time. Did you mean e.g. −0.01?</ha-alert>
@@ -4358,9 +4349,6 @@ views:
                   - condition: numeric_state
                     entity: input_number.savings_setting_dynamic_feedin_markup
                     above: 0.1
-              - condition: state
-                entity: input_boolean.dashboard_setting_show_pv
-                state: 'on'
           - type: entities
             entities:
               - entity: input_boolean.negative_price_block_export
@@ -4443,9 +4431,6 @@ views:
               - condition: state
                 entity: input_boolean.negative_price_block_export
                 state_not: unavailable
-              - condition: state
-                entity: input_boolean.dashboard_setting_show_pv
-                state: 'on'
           - type: heading
             icon: ''
             heading: Forecasting Configuration (Nordpool)
