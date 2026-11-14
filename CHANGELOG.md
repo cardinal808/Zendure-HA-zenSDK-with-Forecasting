@@ -2,6 +2,21 @@
 
 Versions follow `year.month.sequence`; the sequence restarts at 1 every month. Each version states which Gielz version it is based on. [Nederlands](CHANGELOG.nl.md)
 
+## 2026.11.7 (in development) — based on Gielz v20261113
+
+**Feed-in price: Dutch net metering (salderingsregeling) until the end of 2026, then without VAT (switches by itself on 1 January 2027)**
+- New setting **Net metering** (`input_select.negative_price_net_metering`) in Forecasting Configuration (Negative Price): *Automatic (NL, until 31-12-2026)* (default), *Net metering* or *No net metering*. Outside the Netherlands choose *No net metering* (or *Net metering* if your country has it).
+- While net metering applies: feed-in price = market price **with** VAT + energy tax (incl. VAT) + bonus + markup. Through net metering you get the energy tax back; it did not count before. As a result *no export at negative price* now only steps in when the market price drops below about −€0.11 (before already below €0, while exporting still earned money), and the savings value export higher.
+- From 1 January 2027 (per quarter hour, so pre-discharge for quarters after midnight too): market price **without** VAT (private households pay and receive no VAT on export) + bonus + markup, no energy tax.
+- New setting **Market price sensor is** (`input_select.negative_price_market_price_vat`): *Including VAT* (default, like the sensor of the Nordpool package) or *Excluding VAT*.
+- Energy tax and VAT % come from the Nordpool package. Without that package: new field **Energy tax under net metering (incl. VAT)** (`input_number.negative_price_net_metering_energy_tax`).
+- `sensor.zendure_feedin_price_now` has new attributes `net_metering_active`, `net_metering_until`, `net_metering_until_ts`, `vat_pct`, `market_vat_factor`, `energy_tax_net_metering`; the savings and the planner (pre-discharge) use them per quarter hour.
+- **Savings, fixed contract:** while net metering applies, export counts at the supply tariff. The field is now called **Fixed contract feed-in tariff (without net metering)**: enter your contract's feed-in tariff for 2027.
+- Net metering only covers your annual consumption. If you export more than you import over the year, choose *No net metering*.
+
+**Upgrading**
+- Replace all files, restart and paste the dashboard again. Check at Negative Price: *Net metering* = Automatic (or No net metering outside the Netherlands), *Market price sensor is* = Including VAT (with the Nordpool sensor `_5_10_021`). Enter the fixed feed-in tariff for 2027 at Savings.
+
 ## 2026.11.6 — based on Gielz v20261113
 
 **Dashboard fix: Forecasting Configuration (Negative Price) always visible**

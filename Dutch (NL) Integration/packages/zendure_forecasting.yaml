@@ -2005,6 +2005,12 @@ template:
       vo_venster: >
         {%- set opslag = states('input_number.besparing_dyn_opslag_teruglevering') | float(0) -%}
         {%- set bonus = states('input_number.besparing_dyn_bonus_teruglevering') | float(0) / 100 -%}
+        {#- Saldering en btw (attributen van de terugleverprijs): per kwartier, dus op 1 januari wisselt hij -#}
+        {%- set tp = 'sensor.zendure_terugleverprijs_nu' -%}
+        {%- set sal_tot = state_attr(tp, 'saldering_tot_ts') | float(as_timestamp('2027-01-01T00:00:00+01:00')) -%}
+        {%- set btw_f = 1 + state_attr(tp, 'btw_pct') | float(21) / 100 -%}
+        {%- set markt_f = state_attr(tp, 'markt_btw_factor') | float(btw_f) -%}
+        {%- set eb_sal = state_attr(tp, 'eb_saldering') | float(0) -%}
         {#- Marktprijs per kwartier (teruglevering): uit de marktprijs-sensor als die is ingevuld, anders de prijs van het slot -#}
         {%- set msens = states('input_text.dynamisch_marktprijs_sensor') | trim | lower -%}
         {%- set mk = namespace(d={}) -%}
@@ -2021,8 +2027,10 @@ template:
               {%- set key = ((x.s | int) + k * 900) | string -%}
               {%- if key in mk.d -%}{%- set mq.s = mq.s + mk.d[key] -%}{%- set mq.n = mq.n + 1 -%}{%- endif -%}
             {%- endfor -%}
-            {%- set mp = (mq.s / mq.n) if mq.n > 0 else x.v -%}
-            {%- set neg = (mp + bonus * ([mp, 0] | max) + opslag) < 0 -%}
+            {%- set mp0 = (mq.s / mq.n) if mq.n > 0 else x.v -%}
+            {%- set sal = x.s < sal_tot -%}
+            {%- set mp = (mp0 / markt_f) * (btw_f if sal else 1) -%}
+            {%- set neg = (mp + bonus * ([mp, 0] | max) + opslag + (eb_sal if sal else 0)) < 0 -%}
             {%- if neg and ns.cur is not none and ns.cur.e == x.s -%}
               {%- set ns.cur = {'s': ns.cur.s, 'e': x.e} -%}
             {%- elif neg -%}

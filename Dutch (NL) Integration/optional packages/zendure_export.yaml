@@ -187,7 +187,7 @@ script:
               {%- endif -%}
             {%- endmacro -%}
             {%- set masker = '(?i)ip_adres|ip_address|serienummer|serial' -%}
-            {%- set re_helper = '^(zendure_|dynamisch_|forecast_|besparing_|ev_|hvac_|negatieve_prijs_|help_tonen|pv_tonen|afwijkende_p1|homewizard_p1)' -%}
+            {%- set re_helper = '^(zendure_|dynamisch_|forecast_|besparing_|ev_|hvac_|negatieve_prijs_|teruglevering_|help_tonen|pv_tonen|afwijkende_p1|homewizard_p1)' -%}
             {%- set re_sensor = '^(zendure_|forecast|dynamisch_|p1_|homewizard_|hvac_|ev_|github_zendure)' -%}
             {%- set ns = namespace(inst=[], sens=[], det=[], ext=[], aut=[], ent_ext=[]) -%}
             {#- Instellingen: alle invoervelden van de set -#}

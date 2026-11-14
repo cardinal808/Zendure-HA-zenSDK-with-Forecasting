@@ -45,7 +45,10 @@
 #
 # Teruglevering heeft een eigen prijs (vast: terugleverprijs; dynamisch: marktprijs
 # + bonus-% over een positieve marktprijs + opslag teruglevering; de opslag kan negatief zijn
-# als de leverancier iets inhoudt). Bij saldering: terugleverprijs = leveringsprijs.
+# als de leverancier iets inhoudt). Saldering (instelling Teruglevering Saldering in het
+# negatieve-prijspakket, standaard t/m 31-12-2026) per kwartier: vast = leveringsprijs,
+# dynamisch = marktprijs incl. btw + energiebelasting incl. btw. Zonder saldering: vast = het
+# ingevulde Vast Contract Tarief Teruglevering, dynamisch = marktprijs zonder btw.
 # Marktprijs = Dynamisch Marktprijs Sensor (Teruglevering) als die is ingevuld, anders de
 # Nordpool-prijs (levering = Nordpool-prijs + opslag levering; is de Nordpool-sensor all-in,
 # dan opslag levering 0 en de kale marktprijs-sensor invullen).
@@ -193,6 +196,13 @@ template:
       opsl_uit: "{{ states('input_number.besparing_dyn_opslag_teruglevering') | float(0) }}"
       # Bonus (%) over de marktprijs bij teruglevering, alleen als die prijs positief is
       bonus_uit: "{{ states('input_number.besparing_dyn_bonus_teruglevering') | float(0) / 100 }}"
+      # Saldering en btw (instellingen uit het negatieve-prijspakket, attributen van de terugleverprijs).
+      # Het kwartier telt mee onder de regels van het moment waarop het begon.
+      sal_tot: "{{ state_attr('sensor.zendure_terugleverprijs_nu', 'saldering_tot_ts') | float(as_timestamp('2027-01-01T00:00:00+01:00')) }}"
+      sal_kw: "{{ ((vorig.ts | float(nu_ts)) if vorig is mapping else nu_ts) < sal_tot }}"
+      btw_f: "{{ 1 + state_attr('sensor.zendure_terugleverprijs_nu', 'btw_pct') | float(21) / 100 }}"
+      markt_f: "{{ state_attr('sensor.zendure_terugleverprijs_nu', 'markt_btw_factor') | float(btw_f) }}"
+      eb_sal: "{{ state_attr('sensor.zendure_terugleverprijs_nu', 'eb_saldering') | float(0) }}"
 
       # ---- Zonnestroom in de accu ----
       # Inhoud van de accu nu (kWh boven het minimum; -1 = onbekend) en het aandeel zonnestroom
@@ -208,7 +218,11 @@ template:
       # ---- Toename voor dit kwartier (kWh en €) ----
       inc: >
         {%- if delta is mapping and p_dyn is number -%}
-          {%- set din = p_dyn + opsl_in -%}{%- set duit = p_markt + bonus_uit * ([p_markt, 0] | max) + opsl_uit -%}{%- set d = delta -%}
+          {%- set din = p_dyn + opsl_in -%}
+          {#- Teruglevering: bij saldering marktprijs incl. btw + energiebelasting, anders zonder btw -#}
+          {%- set mk = (p_markt / markt_f) * (btw_f if sal_kw else 1) -%}
+          {%- set duit = mk + bonus_uit * ([mk, 0] | max) + opsl_uit + (eb_sal if sal_kw else 0) -%}
+          {%- set vuit = vast_in if sal_kw else vast_uit -%}{%- set d = delta -%}
           {#- Zonnestroom de accu in: het overschot (zon min direct verbruik), hooguit wat er geladen is -#}
           {%- set zin = [d.zon - [d.zon, d.verbruik] | min, d.laden] | min -%}
           {#- Ontladen: eerst het tekort van het huis (spaart inkoop uit), de rest gaat het net op -#}
@@ -216,8 +230,8 @@ template:
           {%- set waarde_uit = naar_huis * din + (d.ontl - naar_huis) * duit -%}
           {{ {'verbruik': d.verbruik, 'zon': d.zon, 'imp': d.imp, 'exp': d.exp, 'imp0': d.imp0, 'exp0': d.exp0,
               'geen_vast': d.verbruik * vast_in, 'geen_dyn': d.verbruik * din,
-              'zon_vast': d.imp0 * vast_in - d.exp0 * vast_uit, 'zon_dyn': d.imp0 * din - d.exp0 * duit,
-              'nu_vast': d.imp * vast_in - d.exp * vast_uit, 'nu_dyn': d.imp * din - d.exp * duit,
+              'zon_vast': d.imp0 * vast_in - d.exp0 * vuit, 'zon_dyn': d.imp0 * din - d.exp0 * duit,
+              'nu_vast': d.imp * vast_in - d.exp * vuit, 'nu_dyn': d.imp * din - d.exp * duit,
               'zon_accu': zon_aandeel_vorig * waarde_uit - zin * duit,
               'zon_in_accu': zin, 'zon_uit_accu': zon_aandeel_vorig * d.ontl} }}
         {%- else -%}{{ none }}{%- endif -%}

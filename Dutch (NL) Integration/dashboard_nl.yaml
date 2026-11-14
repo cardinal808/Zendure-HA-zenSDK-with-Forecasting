@@ -4275,11 +4275,27 @@ views:
               terugleverprijs negatief, dan levert de installatie niet terug.
               Terugleverprijs = marktprijs + bonus % (alleen bij een positieve
               marktprijs) + opslag teruglevering, met de velden onder
-              **Terugleverprijs** hieronder (ook gebruikt door de besparing).
+              **Terugleverprijs** hieronder (ook gebruikt door de besparing en
+              vooraf ontladen).
               Vul bij **Marktprijs sensor** een sensor met de kale marktprijs
               in (met het Nordpool-pakket gebeurt dat vanzelf:
-              sensor.nordpool_kwh_nl_eur_5_10_021). Leeg = de Nordpool-sensor
-              van Gielz; die klopt niet als hij all-in is.
+              sensor.nordpool_kwh_nl_eur_5_10_021, *Inclusief btw*). Leeg = de
+              Nordpool-sensor van Gielz; die klopt niet als hij all-in is.
+
+
+              **Saldering** (*Automatisch* = tot en met 31-12-2026): zolang
+              saldering geldt krijg je voor teruggeleverde stroom de marktprijs
+              met btw én de energiebelasting terug. De energiebelasting (incl.
+              btw) telt dan mee, dus teruglevering blokkeert pas als de
+              marktprijs onder ongeveer −€ 0,11 zakt. Vanaf 1 januari 2027
+              rekent hij vanzelf met de marktprijs zonder btw (als particulier
+              betaal en krijg je geen btw over teruglevering) en zonder
+              energiebelasting. Saldering geldt alleen tot je jaarverbruik: lever
+              je over het jaar meer terug dan je afneemt, kies dan *Geen
+              saldering*. De energiebelasting komt uit het Nordpool-pakket;
+              zonder dat pakket vul je hem hier zelf in. **Opslag
+              teruglevering**: wat je leverancier per kWh bijtelt (positief) of
+              inhoudt (negatief).
 
 
               **Zendure Pro** (alleen zichtbaar bij een Zendure met zon-ingangen: Pro, Plus of Hyper): staat **PV-export uitschakelen bij negatieve prijzen** aan,
@@ -4381,9 +4397,22 @@ views:
               - type: section
                 label: Terugleverprijs
               - entity: input_text.dynamisch_marktprijs_sensor
-                name: Marktprijs sensor (kale marktprijs incl. btw)
+                name: Marktprijs sensor (kale marktprijs)
+              - entity: input_select.teruglevering_marktprijs_btw
+                name: Marktprijs sensor is
+              - entity: input_select.teruglevering_saldering
+                name: Saldering
+              - type: conditional
+                conditions:
+                  - entity: input_number.nordpool_energiebelasting
+                    state: unavailable
+                  - entity: input_select.teruglevering_saldering
+                    state_not: Geen saldering
+                row:
+                  entity: input_number.teruglevering_energiebelasting
+                  name: Energiebelasting bij saldering (incl. btw)
               - entity: input_number.besparing_dyn_opslag_teruglevering
-                name: Opslag teruglevering (incl. btw)
+                name: Opslag teruglevering
               - entity: input_number.besparing_dyn_bonus_teruglevering
                 name: Bonus teruglevering % (over marktprijs)
               - type: section
@@ -4502,8 +4531,11 @@ views:
               all-in prijzen per kWh in (inclusief energiebelasting en btw).
               **Vast contract tarief levering** en **teruglevering**: wat je
               met een vast of variabel contract zou betalen en krijgen, alleen
-              voor de vergelijking; bij volledige saldering is teruglevering
-              gelijk aan levering. Bij dynamisch wordt de prijs
+              voor de vergelijking. Vul bij teruglevering de
+              terugleververgoeding zónder saldering in (die van 2027): zolang
+              saldering geldt (zie Saldering bij Negatieve Prijs) rekent de
+              besparing teruglevering vanzelf tegen het leveringstarief. Bij
+              dynamisch wordt de prijs
               uit de Nordpool-sensor gebruikt plus de **opslag levering**: is je
               sensor al all-in, laat die op 0 staan (met het Nordpool-pakket is
               het veld verborgen, want die sensor is al all-in). De
@@ -4533,7 +4565,7 @@ views:
               - entity: input_number.besparing_vast_leveringsprijs
                 name: Vast contract tarief levering
               - entity: input_number.besparing_vast_terugleverprijs
-                name: Vast contract tarief teruglevering
+                name: Vast contract tarief teruglevering (zonder saldering)
               - type: conditional
                 conditions:
                   - entity: input_number.nordpool_energiebelasting

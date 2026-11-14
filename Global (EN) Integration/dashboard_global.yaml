@@ -4269,11 +4269,27 @@ views:
               price is negative, the installation does not export. Feed-in
               price = market price + bonus % (only when the market price is
               positive) + feed-in markup, using the fields under **Feed-in
-              price** below (also used by the savings). Enter a sensor with the
-              bare market price at **Market price sensor** (with the Nordpool
-              package that happens automatically:
-              sensor.nordpool_kwh_nl_eur_5_10_021). Empty = Gielz' Nordpool
-              sensor, which is wrong if it is all-in.
+              price** below (also used by the savings and pre-discharge). Enter
+              a sensor with the bare market price at **Market price sensor**
+              (with the Nordpool package that happens automatically:
+              sensor.nordpool_kwh_nl_eur_5_10_021, *Including VAT*). Empty =
+              Gielz' Nordpool sensor, which is wrong if it is all-in.
+
+
+              **Net metering** (*Automatic* = the Dutch salderingsregeling, until
+              31-12-2026): while net metering applies you get the market price
+              with VAT and the energy tax back for exported power. The energy
+              tax (incl. VAT) then counts, so export is only blocked when the
+              market price drops below about −€0.11. From 1 January 2027 it
+              automatically uses the market price without VAT (a private
+              household pays and receives no VAT on export) and no energy tax.
+              Net metering only covers your annual consumption: if you export
+              more than you import over the year, choose *No net metering*.
+              Outside the Netherlands: choose *No net metering* (or *Net
+              metering* if your country has it). The energy tax comes from the
+              Nordpool package; without it you enter it here. **Feed-in
+              markup**: what your supplier adds (positive) or deducts
+              (negative) per kWh.
 
 
               **Zendure Pro** (only shown for a Zendure with solar inputs: Pro, Plus or Hyper): when **Disable PV export at negative prices** is on, PV
@@ -4374,9 +4390,22 @@ views:
               - type: section
                 label: Feed-in price
               - entity: input_text.dynamic_setting_market_price_sensor
-                name: Market price sensor (bare market price incl. VAT)
+                name: Market price sensor (bare market price)
+              - entity: input_select.negative_price_market_price_vat
+                name: Market price sensor is
+              - entity: input_select.negative_price_net_metering
+                name: Net metering
+              - type: conditional
+                conditions:
+                  - entity: input_number.nordpool_setting_energy_tax
+                    state: unavailable
+                  - entity: input_select.negative_price_net_metering
+                    state_not: No net metering
+                row:
+                  entity: input_number.negative_price_net_metering_energy_tax
+                  name: Energy tax under net metering (incl. VAT)
               - entity: input_number.savings_setting_dynamic_feedin_markup
-                name: Feed-in markup (incl. VAT)
+                name: Feed-in markup
               - entity: input_number.savings_setting_dynamic_feedin_bonus
                 name: Feed-in bonus % (of market price)
               - type: section
@@ -4494,8 +4523,10 @@ views:
               all-in prices per kWh (including energy tax and VAT).
               **Fixed contract supply tariff** and **feed-in tariff**: what you
               would pay and receive with a fixed or variable contract, only for
-              the comparison; with full net metering the feed-in price equals
-              the supply price. For dynamic, the price from the Nordpool
+              the comparison. Enter the feed-in tariff without net metering
+              (the 2027 one): while net metering applies (see Net metering at
+              Negative Price) the savings value export at the supply tariff
+              automatically. For dynamic, the price from the Nordpool
               sensor is used plus the **supply markup**: if your sensor is
               already all-in, leave it at 0 (with the Nordpool package the field
               is hidden, because that sensor is all-in). The feed-in price
@@ -4525,7 +4556,7 @@ views:
               - entity: input_number.savings_setting_fixed_supply_price
                 name: Fixed contract supply tariff
               - entity: input_number.savings_setting_fixed_feedin_price
-                name: Fixed contract feed-in tariff
+                name: Fixed contract feed-in tariff (without net metering)
               - type: conditional
                 conditions:
                   - entity: input_number.nordpool_setting_energy_tax

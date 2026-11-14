@@ -2,6 +2,21 @@
 
 Versies volgen `jaar.maand.volgnummer`; het volgnummer begint elke maand bij 1. Elke versie vermeldt op welke Gielz-versie hij is gebaseerd. [English](CHANGELOG.md)
 
+## 2026.11.7 (in ontwikkeling) — gebaseerd op Gielz v20261113
+
+**Terugleverprijs: saldering tot en met 2026, daarna zonder btw (schakelt vanzelf om op 1 januari 2027)**
+- Nieuwe instelling **Saldering** (`input_select.teruglevering_saldering`) in Forecasting Configuratie (Negatieve Prijs): *Automatisch (t/m 31-12-2026)* (standaard), *Saldering* of *Geen saldering*.
+- Zolang saldering geldt: terugleverprijs = marktprijs **met** btw + energiebelasting (incl. btw) + bonus + opslag. Via saldering krijg je de energiebelasting terug; die telde eerst niet mee. Gevolg: *niet terugleveren bij negatieve prijs* grijpt nu pas in als de marktprijs onder ongeveer −€ 0,11 zakt (eerst al onder € 0, terwijl terugleveren dan nog geld opleverde), en de besparing waardeert teruglevering hoger.
+- Vanaf 1 januari 2027 (per kwartier, dus ook vooraf ontladen voor kwartieren ná middernacht): marktprijs **zonder** btw (particulieren betalen en krijgen geen btw over teruglevering) + bonus + opslag, zonder energiebelasting.
+- Nieuwe instelling **Marktprijs sensor is** (`input_select.teruglevering_marktprijs_btw`): *Inclusief btw* (standaard, zoals de sensor van het Nordpool-pakket) of *Zonder btw*.
+- Energiebelasting en btw-% komen uit het Nordpool-pakket. Zonder dat pakket: nieuw veld **Energiebelasting bij saldering (incl. btw)** (`input_number.teruglevering_energiebelasting`).
+- `sensor.zendure_terugleverprijs_nu` heeft nieuwe attributen `saldering_actief`, `saldering_tot`, `saldering_tot_ts`, `btw_pct`, `markt_btw_factor`, `eb_saldering`; de besparing en de planner (vooraf ontladen) rekenen daarmee per kwartier.
+- **Besparing, vast contract:** zolang saldering geldt telt teruglevering tegen het leveringstarief. Het veld heet nu **Vast contract tarief teruglevering (zonder saldering)**: vul de terugleververgoeding van je contract voor 2027 in.
+- Saldering geldt tot je jaarverbruik. Lever je over het jaar meer terug dan je afneemt, kies dan *Geen saldering*.
+
+**Upgraden**
+- Vervang alle bestanden, herstart en plak het dashboard opnieuw. Controleer in Negatieve Prijs: *Saldering* = Automatisch, *Marktprijs sensor is* = Inclusief btw (bij de Nordpool-sensor `_5_10_021`). Vul bij Besparing het vaste terugleveringstarief voor 2027 in.
+
 ## 2026.11.6 — gebaseerd op Gielz v20261113
 
 **Fix dashboard: Forecasting Configuratie (Negatieve Prijs) altijd zichtbaar**

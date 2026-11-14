@@ -16,8 +16,10 @@
 #    Wordt automatisch ingevuld bij Forecasting Configuratie (Negatieve Prijs), veld Marktprijs sensor
 #    (als dat leeg is; zie de automatisering onderaan).
 #    Energiebelasting en opslag betaal je alleen bij levering, niet bij teruglevering.
-#    Vergoedt je leverancier de marktprijs zonder btw, zet dan VAT: False bij sensor 2
-#    (de entiteit heet dan sensor.nordpool_kwh_nl_eur_5_10_0).
+#    De btw hoeft er niet uit: de terugleverprijs (negatieve-prijspakket) haalt hem er zelf uit
+#    zodra de saldering stopt (1-1-2027) en telt tot dan de energiebelasting van dit pakket mee.
+#    Zet je toch VAT: False bij sensor 2 (entiteit sensor.nordpool_kwh_nl_eur_5_10_0), kies dan
+#    bij Negatieve Prijs: Marktprijs sensor is Zonder btw.
 #
 # Controleer de namen na een herstart bij Ontwikkelhulpmiddelen > Statussen.
 # Vul in Forecasting Configuratie (Nordpool) de bedragen in, zonder btw (de btw rekent de sensor erbij):

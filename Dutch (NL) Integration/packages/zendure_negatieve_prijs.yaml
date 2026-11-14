@@ -8,6 +8,12 @@
 #
 # Terugleverprijs (sensor.zendure_terugleverprijs_nu), per kwartier:
 #   marktprijs + bonus % (alleen bij positieve marktprijs) + opslag teruglevering
+#   Saldering (Teruglevering Saldering, standaard Automatisch = t/m 31-12-2026): zolang saldering
+#   geldt is de marktprijs inclusief btw en komt de energiebelasting (incl. btw) erbij, want die
+#   krijg je via saldering terug. Daarna: marktprijs zonder btw, geen energiebelasting (particulier).
+#   Btw in de marktprijs-sensor: Teruglevering Marktprijs Btw (de sensor van het Nordpool-pakket is
+#   inclusief btw). Andere pakketten (besparing, planner) lezen de instellingen uit de attributen
+#   saldering_tot_ts, btw_pct, markt_btw_factor en eb_saldering en rekenen per kwartier zelf.
 #   Marktprijs uit Dynamisch Marktprijs Sensor (Teruglevering) als die is ingevuld, anders uit de
 #   Nordpool-sensor van Gielz (die kan all-in zijn: energiebelasting en opslag horen niet bij teruglevering). Opslag en bonus teruglevering staan in dit pakket
 #   (zodat ze er ook zonder het besparingspakket zijn); op het dashboard in Forecasting Configuratie
@@ -120,6 +126,23 @@ input_select:
       - Productielimiet (SolarEdge, Hoymiles, APsystems, Fronius)
       - Exportlimiet (GoodWe, Growatt)
 
+  # Saldering: Automatisch = tot 1 januari 2027 (einde salderingsregeling in Nederland)
+  teruglevering_saldering:
+    name: Teruglevering Saldering
+    icon: mdi:scale-balance
+    options:
+      - Automatisch (t/m 31-12-2026)
+      - Saldering
+      - Geen saldering
+
+  # Bevat de marktprijs-sensor btw? (sensor.nordpool_kwh_nl_eur_5_10_021 van het Nordpool-pakket: ja)
+  teruglevering_marktprijs_btw:
+    name: Teruglevering Marktprijs Btw
+    icon: mdi:percent-circle
+    options:
+      - Inclusief btw
+      - Zonder btw
+
 input_number:
   # Tarieven teruglevering (ook gebruikt door het besparingspakket). Stonden tot 2026.11.3 in
   # zendure_besparing.yaml; zelfde entiteit-id, dus ingestelde waarden blijven bewaard.
@@ -160,6 +183,17 @@ input_number:
     step: 0.1
     mode: box
 
+  # Energiebelasting per kWh inclusief btw, alleen voor de saldering. Met het Nordpool-pakket
+  # wordt die daaruit berekend en is dit veld verborgen.
+  teruglevering_energiebelasting:
+    name: Teruglevering Energiebelasting
+    icon: mdi:bank
+    min: 0
+    max: 0.5
+    step: 0.00001
+    mode: box
+    unit_of_measurement: "€/kWh"
+
 input_text:
   # Optioneel: sensor met de kale marktprijs (zoals je leverancier die bij teruglevering betaalt).
   # Leeg = de Nordpool-sensor van Gielz. Vul hem in als die sensor all-in is (met energiebelasting,
@@ -194,12 +228,15 @@ template:
         unique_id: zendure_terugleverprijs_nu
         icon: mdi:transmission-tower-export
         unit_of_measurement: "€/kWh"
+        # Terugleverprijs = markt + bonus % x max(markt, 0) + opslag (+ energiebelasting bij saldering)
+        #   markt = kale prijs zonder btw; bij saldering x (1 + btw)
+        # Dezelfde rekenregel staat in de besparing (duit) en de planner (vo_venster), per kwartier.
         state: >
           {%- set m = states('input_text.dynamisch_marktprijs_sensor') | trim | lower -%}
           {%- set bron = m if m.startswith('sensor.') and has_value(m) else (states('input_text.dynamisch_nordpool_sensor') | trim) -%}
           {%- set ns = namespace(p=none) -%}
+          {%- set nu = as_timestamp(now()) -%}
           {%- if bron.startswith('sensor.') -%}
-            {%- set nu = as_timestamp(now()) -%}
             {%- for x in (state_attr(bron, 'raw_today') or []) -%}
               {%- if x.value is number and as_timestamp(x.start, 0) <= nu < as_timestamp(x.end, 0) -%}
                 {%- set ns.p = x.value -%}
@@ -210,9 +247,18 @@ template:
             {%- set ns.p = states('sensor.dynamisch_nordpool') | float(none) -%}
           {%- endif -%}
           {%- if ns.p is number -%}
+            {#- Zelfde instellingen als in de attributen hieronder (hier herhaald: geen afhankelijkheid van this) -#}
+            {%- set k = states('input_select.teruglevering_saldering') -%}
+            {%- set sal = k == 'Saldering' or (k != 'Geen saldering' and nu < as_timestamp('2027-01-01T00:00:00+01:00')) -%}
+            {%- set v = states('input_number.nordpool_btw_percentage') | float(-1) -%}
+            {%- set btw = (v if v >= 0 else 21) / 100 -%}
+            {%- set fm = 1 if is_state('input_select.teruglevering_marktprijs_btw', 'Zonder btw') else 1 + btw -%}
+            {%- set ebx = states('input_number.nordpool_energiebelasting') | float(-1) -%}
+            {%- set eb = ebx * (1 + btw) if ebx >= 0 else states('input_number.teruglevering_energiebelasting') | float(0) -%}
+            {%- set markt = (ns.p / fm) * ((1 + btw) if sal else 1) -%}
             {%- set opslag = states('input_number.besparing_dyn_opslag_teruglevering') | float(0) -%}
             {%- set bonus = states('input_number.besparing_dyn_bonus_teruglevering') | float(0) / 100 -%}
-            {{ (ns.p + bonus * ([ns.p, 0] | max) + opslag) | round(5) }}
+            {{ (markt + bonus * ([markt, 0] | max) + opslag + (eb if sal else 0)) | round(5) }}
           {%- else -%}
             {{ none }}
           {%- endif -%}
@@ -233,6 +279,34 @@ template:
           marktprijs_bron: "{{ states('input_text.dynamisch_marktprijs_sensor') | trim if (states('input_text.dynamisch_marktprijs_sensor') | trim | lower).startswith('sensor.') else states('input_text.dynamisch_nordpool_sensor') | trim }}"
           opslag_teruglevering: "{{ states('input_number.besparing_dyn_opslag_teruglevering') | float(0) }}"
           bonus_teruglevering_pct: "{{ states('input_number.besparing_dyn_bonus_teruglevering') | float(0) }}"
+          # Saldering geldt voor kwartieren die beginnen vóór dit moment (0 = geen saldering).
+          # Automatisch: 1 januari 2027 00:00 (Nederlandse tijd).
+          saldering_tot_ts: >
+            {%- set k = states('input_select.teruglevering_saldering') -%}
+            {%- if k == 'Saldering' -%}9999999999
+            {%- elif k == 'Geen saldering' -%}0
+            {%- else -%}{{ as_timestamp('2027-01-01T00:00:00+01:00') | int }}{%- endif -%}
+          saldering_actief: >
+            {%- set k = states('input_select.teruglevering_saldering') -%}
+            {{ k == 'Saldering' or (k != 'Geen saldering' and now() < as_datetime('2027-01-01T00:00:00+01:00')) }}
+          saldering_tot: >
+            {%- set k = states('input_select.teruglevering_saldering') -%}
+            {{ 'altijd' if k == 'Saldering' else ('geen' if k == 'Geen saldering' else '2027-01-01') }}
+          # Btw %: uit het Nordpool-pakket als dat geladen is, anders 21
+          btw_pct: >
+            {%- set v = states('input_number.nordpool_btw_percentage') | float(-1) -%}
+            {{ v if v >= 0 else 21 }}
+          # Deelfactor om de btw uit de marktprijs-sensor te halen (1 = sensor zonder btw)
+          markt_btw_factor: >
+            {%- set v = states('input_number.nordpool_btw_percentage') | float(-1) -%}
+            {%- set b = (v if v >= 0 else 21) / 100 -%}
+            {{ 1 if is_state('input_select.teruglevering_marktprijs_btw', 'Zonder btw') else (1 + b) | round(4) }}
+          # Energiebelasting incl. btw die je via saldering terugkrijgt (Nordpool-pakket of eigen veld)
+          eb_saldering: >
+            {%- set eb = states('input_number.nordpool_energiebelasting') | float(-1) -%}
+            {%- set v = states('input_number.nordpool_btw_percentage') | float(-1) -%}
+            {%- if eb >= 0 -%}{{ (eb * (1 + (v if v >= 0 else 21) / 100)) | round(5) }}
+            {%- else -%}{{ states('input_number.teruglevering_energiebelasting') | float(0) }}{%- endif -%}
 
   - binary_sensor:
       # Heeft de Zendure eigen zon-ingangen (Pro, Plus, Hyper)? Uit Gielz' Productserie. Onbekend = aan,

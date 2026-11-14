@@ -16,8 +16,10 @@
 #    Filled in automatically in Forecasting Configuration (Negative Price), field Market price sensor
 #    (when that is empty; see the automation at the bottom).
 #    You only pay energy tax and markup for supply, not for export.
-#    If your supplier pays the market price without VAT, set VAT: False on sensor 2
-#    (the entity is then sensor.nordpool_kwh_nl_eur_5_10_0).
+#    The VAT does not need to come out: the feed-in price (negative price package) removes it
+#    itself when net metering ends (1-1-2027) and until then adds the energy tax of this package.
+#    If you set VAT: False on sensor 2 anyway (entity sensor.nordpool_kwh_nl_eur_5_10_0), choose
+#    at Negative Price: Market price sensor is Excluding VAT.
 #
 # Check the names after a restart in Developer tools > States.
 # Enter the amounts in Forecasting Configuration (Nordpool) excluding VAT (the sensor adds the VAT).

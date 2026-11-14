@@ -2006,6 +2006,12 @@ template:
       pd_window: >
         {%- set markup = states('input_number.savings_setting_dynamic_feedin_markup') | float(0) -%}
         {%- set bonus = states('input_number.savings_setting_dynamic_feedin_bonus') | float(0) / 100 -%}
+        {#- Net metering and VAT (attributes of the feed-in price): per quarter hour, so it switches on 1 January -#}
+        {%- set fp = 'sensor.zendure_feedin_price_now' -%}
+        {%- set nm_until = state_attr(fp, 'net_metering_until_ts') | float(as_timestamp('2027-01-01T00:00:00+01:00')) -%}
+        {%- set vat_f = 1 + state_attr(fp, 'vat_pct') | float(21) / 100 -%}
+        {%- set market_f = state_attr(fp, 'market_vat_factor') | float(vat_f) -%}
+        {%- set tax_nm = state_attr(fp, 'energy_tax_net_metering') | float(0) -%}
         {#- Market price per quarter hour (export): from the market price sensor when filled in, otherwise the slot price -#}
         {%- set msens = states('input_text.dynamic_setting_market_price_sensor') | trim | lower -%}
         {%- set mk = namespace(d={}) -%}
@@ -2022,8 +2028,10 @@ template:
               {%- set key = ((x.s | int) + k * 900) | string -%}
               {%- if key in mk.d -%}{%- set mq.s = mq.s + mk.d[key] -%}{%- set mq.n = mq.n + 1 -%}{%- endif -%}
             {%- endfor -%}
-            {%- set mp = (mq.s / mq.n) if mq.n > 0 else x.v -%}
-            {%- set neg = (mp + bonus * ([mp, 0] | max) + markup) < 0 -%}
+            {%- set mp0 = (mq.s / mq.n) if mq.n > 0 else x.v -%}
+            {%- set nm = x.s < nm_until -%}
+            {%- set mp = (mp0 / market_f) * (vat_f if nm else 1) -%}
+            {%- set neg = (mp + bonus * ([mp, 0] | max) + markup + (tax_nm if nm else 0)) < 0 -%}
             {%- if neg and ns.cur is not none and ns.cur.e == x.s -%}
               {%- set ns.cur = {'s': ns.cur.s, 'e': x.e} -%}
             {%- elif neg -%}
