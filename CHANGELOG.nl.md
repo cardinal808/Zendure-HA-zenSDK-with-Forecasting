@@ -53,6 +53,7 @@ Versies volgen `jaar.maand.volgnummer`; het volgnummer begint elke maand bij 1. 
 **Plan op het dashboard duidelijker**
 - *Plan van vandaag loopt tot* zonder de vaste uitleg erachter.
 - *Verwacht verbruik tot einde overbrugging*: nu met de opsplitsing accu nu + zon naar de accu + gepland laden (na verlies), en hoeveel het huis direct inkoopt.
+- Laadblokken van vannacht ná middernacht staan bij *Vandaag* als *voorlopig* als er een indicatie voor morgen is (na middernacht plant hij opnieuw); bij *Morgen* heten ze *Verwacht laden morgen*. Schakelaar *Negatieve prijzen* heet nu *Negatieve prijzen (terugleveren voordat)*.
 - *Prijs nu* weg (staat al in de grafiek en de badges); houdt de accu vast, dan staat de reden in de regel **Accu houdt nu vast**.
 - **Planning** en **Morgen**: duidelijk dat na middernacht opnieuw gepland wordt voor de dure uren van morgen, en dat de indicatie voor morgen het laden van vannacht vervangt.
 - **Verzamelde gegevens:** nieuwe regel **Verbruik per dag** (kWh per weekdag uit het profiel). Het eigen profiel per weekdag toont hoeveel weken gemeten zijn (*ma 1/3*) in plaats van *0 van 24 geleerd*.
