@@ -4502,8 +4502,8 @@ views:
               zon-detailvoorspelling nodig): vult de zon de accu straks toch vol, dan levert de
               accu wat het huis tot de zon niet nodig heeft vóór de zon terug aan het net, in de
               kwartieren met de hoogste terugleverprijs en met het maximale ontlaadvermogen. Alleen
-              als de terugleverprijs dan hoger is dan tijdens de zon gedeeld door het rendement, en
-              niet als PV-export uitgeschakeld is. Zonder ingevulde betrouwbaarheid telt 75% van
+              als de terugleverprijs dan hoger is dan tijdens de zon gedeeld door het rendement.
+              Zonder ingevulde betrouwbaarheid telt 75% van
               het verwachte overschot.
             text_only: true
             visibility:

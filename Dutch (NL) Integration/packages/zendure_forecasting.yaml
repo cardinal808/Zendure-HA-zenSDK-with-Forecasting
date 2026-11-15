@@ -2216,8 +2216,7 @@ template:
       # terugleverprijs vóór de zon terug naar het net, met het maximale ontlaadvermogen. Loont alleen
       # als de terugleverprijs nu hoger is dan die tijdens de zon gedeeld door het rendement.
       zo_aan: >
-        {{ is_state('input_boolean.zonoverschot_ontladen', 'on') and prijzen_ok and eff_rt > 0
-           and not is_state('input_boolean.zendure_2400_ac_pv_export_uitgeschakeld', 'on') }}
+        {{ is_state('input_boolean.zonoverschot_ontladen', 'on') and prijzen_ok and eff_rt > 0 }}
       # Begin en einde van het eerstvolgende zon-overschot (detailvoorspelling), en het overschot (kWh AC)
       zo_zon: >
         {%- set ns = namespace(s=none, e=none, o=0) -%}

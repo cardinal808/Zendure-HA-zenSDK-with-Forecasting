@@ -2217,8 +2217,7 @@ template:
       # the highest feed-in price before the sun, at maximum discharge power. Only pays off when the
       # feed-in price now is higher than the one during the sun divided by the efficiency.
       sx_on: >
-        {{ is_state('input_boolean.solar_surplus_discharge', 'on') and prices_ok and eff_rt > 0
-           and not is_state('input_boolean.zendure_setting_pv_export_disabled', 'on') }}
+        {{ is_state('input_boolean.solar_surplus_discharge', 'on') and prices_ok and eff_rt > 0 }}
       # Start and end of the next solar surplus (detailed forecast), and the surplus (kWh AC)
       sx_solar: >
         {%- set ns = namespace(s=none, e=none, o=0) -%}

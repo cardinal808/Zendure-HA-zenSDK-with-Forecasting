@@ -4496,7 +4496,7 @@ views:
               anyway, the battery exports what the house does not need until the sun to the grid
               before the sun, in the quarter hours with the highest feed-in price and at maximum
               discharge power. Only when the feed-in price then is higher than during the sun
-              divided by the efficiency, and not when PV export is disabled. Without a filled-in
+              divided by the efficiency. Without a filled-in
               reliability, 75% of the expected surplus counts.
             text_only: true
             visibility:
