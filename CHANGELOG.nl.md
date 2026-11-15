@@ -13,6 +13,12 @@ Versies volgen `jaar.maand.volgnummer`; het volgnummer begint elke maand bij 1. 
 - `sensor.zendure_terugleverprijs_nu` heeft nieuwe attributen `saldering_actief`, `saldering_tot`, `saldering_tot_ts`, `btw_pct`, `markt_btw_factor`, `eb_saldering`; de besparing en de planner (vooraf ontladen) rekenen daarmee per kwartier.
 - **Besparing, vast contract:** zolang saldering geldt telt teruglevering tegen het leveringstarief. Het veld heet nu **Vast contract tarief teruglevering (zonder saldering)**: vul de terugleververgoeding van je contract voor 2027 in.
 
+**Fix: controle van alle bestanden (15-11)**
+- EN-dashboard: Gielz' grafiek *Import | Export* was beschadigd bij het toevoegen van het verbruiksprofiel (de Export-reeks miste statistiek, kolom en kleur; de tellerkaart stond onderaan). Hersteld zoals bij Gielz.
+- Dashboard: in drie helpteksten van Gielz waren de harde regeleinden (twee spaties) weggevallen, waardoor regels aan elkaar liepen. Hersteld.
+- Plan-kaart en *Verzamelde gegevens*: geen templatefout meer als de planner nog niet bestaat (dashboard geplakt vóór de herstart); het plan toont dan een melding.
+- Gecontroleerd: alle verwijzingen naar entiteiten en attributen tussen de bestanden, NL = EN, en de Gielz-bestanden wijken alleen af op de bedoelde plekken (modus *Dynamisch NOM + Forecasting*, `pv_active` zonder pvStatus, EV/HVAC-correctie en dal-blokkade in NOM, controles niet in Forecasting-modus).
+
 **Fix: zonnebonus alleen overdag, over kale marktprijs + opslag (zoals Zonneplan)**
 - De bonus teruglevering (nu **Zonnebonus % (overdag)**) telde over de marktprijs **inclusief** btw en de hele dag. Zonneplan geeft de zonnebonus over de kale marktprijs (zonder btw) plus de verkoopvergoeding, alleen tussen zonsopkomst en zonsondergang en alleen als dat bedrag positief is.
 - Nu: zonnebonus = bonus % × max(kale marktprijs + opslag teruglevering, 0), alleen als de zon op is (`sun.sun`; voor kwartieren in de planning en de besparing het midden van het kwartier tussen zonsopkomst en zonsondergang).

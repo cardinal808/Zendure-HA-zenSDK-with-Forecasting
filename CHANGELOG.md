@@ -13,6 +13,12 @@ Versions follow `year.month.sequence`; the sequence restarts at 1 every month. E
 - `sensor.zendure_feedin_price_now` has new attributes `net_metering_active`, `net_metering_until`, `net_metering_until_ts`, `vat_pct`, `market_vat_factor`, `energy_tax_net_metering`; the savings and the planner (pre-discharge) use them per quarter hour.
 - **Savings, fixed contract:** while net metering applies, export counts at the supply tariff. The field is now called **Fixed contract feed-in tariff (without net metering)**: enter your contract's feed-in tariff for 2027.
 
+**Fix: review of all files (15-11)**
+- EN dashboard: Gielz's *Import | Export* chart was damaged when the usage profile was added (the Export series lacked statistics, column and colour; the counter card was at the bottom). Restored as in Gielz.
+- Dashboard: in three of Gielz's help texts the hard line breaks (two spaces) were lost, so lines ran together. Restored.
+- Plan card and *Collected data*: no template error any more when the planner does not exist yet (dashboard pasted before the restart); the plan then shows a notice.
+- Checked: all references to entities and attributes between the files, NL = EN, and the Gielz files only differ in the intended places (mode *Dynamic Smart Matching + Forecasting*, `pv_active` without pvStatus, EV/HVAC correction and dip block in Smart Matching, checks not in Forecasting mode).
+
 **Fix: solar bonus only in daylight, on bare market price + markup (like Zonneplan)**
 - The feed-in bonus (now **Solar bonus % (daytime)**) counted on the market price **including** VAT, all day. Zonneplan gives the solar bonus on the bare market price (without VAT) plus the sales fee, only between sunrise and sunset and only when that amount is positive.
 - Now: solar bonus = bonus % × max(bare market price + feed-in markup, 0), only while the sun is up (`sun.sun`; for quarter hours in the plan and the savings the middle of the quarter between sunrise and sunset).
