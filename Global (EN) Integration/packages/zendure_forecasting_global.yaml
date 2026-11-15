@@ -2817,6 +2817,37 @@ automation:
             - input_boolean.forecast_setting_calibration_charging
             - input_boolean.forecast_setting_calibration_charging_set
 
+  # Fields that used to have "0 = default": if one is 0, fill in the default value (visible in the field).
+  - id: forecast_default_values
+    alias: Forecast Default Values
+    description: >-
+      Forecasting 2026.11.7 - Fills in the default value when a field is 0 (Calibration after days = 14).
+    mode: queued
+    max: 5
+    triggers:
+      - trigger: homeassistant
+        event: start
+      - trigger: state
+        entity_id:
+          - input_number.forecast_setting_calibration_days
+    conditions: []
+    actions:
+      - delay:
+          seconds: 10
+      - repeat:
+          for_each:
+              - {e: input_number.forecast_setting_calibration_days, v: 14}
+          sequence:
+            - if:
+                - condition: template
+                  value_template: "{{ states(repeat.item.e) | float(-1) == 0 }}"
+              then:
+                - action: input_number.set_value
+                  target:
+                    entity_id: "{{ repeat.item.e }}"
+                  data:
+                    value: "{{ repeat.item.v }}"
+
   # Fill in the solar forecast sensors automatically when the field is empty: Solcast (solcast_solar),
   # otherwise Forecast.Solar. Only with exactly one candidate (remaining today / tomorrow, in kWh); a
   # field you filled in yourself is kept. That way a new installation works without filling in.

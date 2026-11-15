@@ -348,6 +348,49 @@ template:
             {{ uit.l }}
 
 automation:
+  # Velden die vroeger "0 = standaard" hadden: staat er 0, dan de standaardwaarde invullen (zichtbaar in het veld).
+  - id: ev_standaardwaarden
+    alias: EV Standaardwaarden
+    description: >-
+      Forecasting 2026.11.7 - Vult de standaardwaarde in als een veld op 0 staat (laadvermogen 2,3 kW, drempel 300 W, klaar om 07:00).
+    mode: queued
+    max: 5
+    triggers:
+      - trigger: homeassistant
+        event: start
+      - trigger: state
+        entity_id:
+          - input_number.ev_laadvermogen_kw
+          - input_number.ev_drempel_vermogen
+          - input_datetime.ev_klaar_om
+    conditions: []
+    actions:
+      - delay:
+          seconds: 10
+      - repeat:
+          for_each:
+              - {e: input_number.ev_laadvermogen_kw, v: 2.3}
+              - {e: input_number.ev_drempel_vermogen, v: 300}
+          sequence:
+            - if:
+                - condition: template
+                  value_template: "{{ states(repeat.item.e) | float(-1) == 0 }}"
+              then:
+                - action: input_number.set_value
+                  target:
+                    entity_id: "{{ repeat.item.e }}"
+                  data:
+                    value: "{{ repeat.item.v }}"
+      - if:
+          - condition: template
+            value_template: "{{ states('input_datetime.ev_klaar_om') in ['00:00:00', 'unknown'] }}"
+        then:
+          - action: input_datetime.set_datetime
+            target:
+              entity_id: input_datetime.ev_klaar_om
+            data:
+              time: "07:00:00"
+
   # -------------------------------------------------------------------
   # Sessie starten, wijzigen en afsluiten
   # -------------------------------------------------------------------

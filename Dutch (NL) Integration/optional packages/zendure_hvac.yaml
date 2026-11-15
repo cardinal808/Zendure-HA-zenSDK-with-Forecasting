@@ -381,3 +381,35 @@ template:
             {% else %}
               {{ m }}: alleen laden
             {% endif %}
+
+automation:
+  # Velden die vroeger "0 = standaard" hadden: staat er 0, dan de standaardwaarde invullen (zichtbaar in het veld).
+  - id: hvac_standaardwaarden
+    alias: HVAC Standaardwaarden
+    description: >-
+      Forecasting 2026.11.7 - Vult de standaardwaarde in als Drempel vermogen op 0 staat (50 W).
+    mode: queued
+    max: 5
+    triggers:
+      - trigger: homeassistant
+        event: start
+      - trigger: state
+        entity_id:
+          - input_number.hvac_drempel_vermogen
+    conditions: []
+    actions:
+      - delay:
+          seconds: 10
+      - repeat:
+          for_each:
+              - {e: input_number.hvac_drempel_vermogen, v: 50}
+          sequence:
+            - if:
+                - condition: template
+                  value_template: "{{ states(repeat.item.e) | float(-1) == 0 }}"
+              then:
+                - action: input_number.set_value
+                  target:
+                    entity_id: "{{ repeat.item.e }}"
+                  data:
+                    value: "{{ repeat.item.v }}"

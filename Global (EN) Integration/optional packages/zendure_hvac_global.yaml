@@ -380,3 +380,35 @@ template:
             {% else %}
               {{ m }}: charging only
             {% endif %}
+
+automation:
+  # Fields that used to have "0 = default": if one is 0, fill in the default value (visible in the field).
+  - id: hvac_default_values
+    alias: HVAC Default Values
+    description: >-
+      Forecasting 2026.11.7 - Fills in the default value when Threshold power is 0 (50 W).
+    mode: queued
+    max: 5
+    triggers:
+      - trigger: homeassistant
+        event: start
+      - trigger: state
+        entity_id:
+          - input_number.hvac_threshold_power
+    conditions: []
+    actions:
+      - delay:
+          seconds: 10
+      - repeat:
+          for_each:
+              - {e: input_number.hvac_threshold_power, v: 50}
+          sequence:
+            - if:
+                - condition: template
+                  value_template: "{{ states(repeat.item.e) | float(-1) == 0 }}"
+              then:
+                - action: input_number.set_value
+                  target:
+                    entity_id: "{{ repeat.item.e }}"
+                  data:
+                    value: "{{ repeat.item.v }}"

@@ -22,6 +22,7 @@ Versies volgen `jaar.maand.volgnummer`; het volgnummer begint elke maand bij 1. 
 - **Net-tellers:** worden ze automatisch herkend (HomeWizard, SlimmeLezer, DSMR), dan verbergt het dashboard de invoervelden en toont het welke sensor gebruikt wordt (*Net import teller (automatisch herkend)*). Nieuwe `binary_sensor.forecast_net_import_teller_automatisch` en `..._export_...` (attribuut `sensoren`).
 - **Geen "unknown" meer in lege invoervelden:** een veld dat nooit is ingevuld wordt leeg gemaakt (niet bij Gielz' eigen velden). Zon-velden en net-tellers die nog leeg zijn, tonen **(graag invullen)**.
 - **Extra planner laadmarge %** heette *Batterij laadmarge %*.
+- **Geen "(0 = …)" meer:** de standaardwaarde staat nu echt in het veld: *Kalibratie na dagen* 14, EV *Laadvermogen kW* 2,3, *Drempel W* 300, *Klaar om* 07:00, HVAC *Drempel vermogen W* 50. Zet je een veld op 0, dan komt de standaardwaarde terug (automatiseringen `forecast_standaardwaarden`, `ev_standaardwaarden`, `hvac_standaardwaarden`).
 - **Kalibratieladen** is nu een aan-schakelaar (was *Kalibratieladen uit*) en staat standaard aan, ook als je hem eerder uit had gezet: zet hem na de upgrade zo nodig opnieuw uit.
 - **Melding ontbrekende kaarten:** mist apexcharts-card, card-mod of button-card (herkend via HACS), dan zegt het dashboard welke je moet installeren.
 - **Upgrade-melding:** past het dashboard niet bij de versie van de pakketten, dan zegt het plan wat je moet vervangen (dashboard plakken of pakketten vervangen). Staat er een nieuwe versie op GitHub, dan staat dat er ook.

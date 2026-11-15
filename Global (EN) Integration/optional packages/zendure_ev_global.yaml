@@ -346,6 +346,49 @@ template:
             {{ out.l }}
 
 automation:
+  # Fields that used to have "0 = default": if one is 0, fill in the default value (visible in the field).
+  - id: ev_default_values
+    alias: EV Default Values
+    description: >-
+      Forecasting 2026.11.7 - Fills in the default value when a field is 0 (charging power 2.3 kW, threshold 300 W, ready by 07:00).
+    mode: queued
+    max: 5
+    triggers:
+      - trigger: homeassistant
+        event: start
+      - trigger: state
+        entity_id:
+          - input_number.ev_charger_power
+          - input_number.ev_threshold_power
+          - input_datetime.ev_ready_by
+    conditions: []
+    actions:
+      - delay:
+          seconds: 10
+      - repeat:
+          for_each:
+              - {e: input_number.ev_charger_power, v: 2.3}
+              - {e: input_number.ev_threshold_power, v: 300}
+          sequence:
+            - if:
+                - condition: template
+                  value_template: "{{ states(repeat.item.e) | float(-1) == 0 }}"
+              then:
+                - action: input_number.set_value
+                  target:
+                    entity_id: "{{ repeat.item.e }}"
+                  data:
+                    value: "{{ repeat.item.v }}"
+      - if:
+          - condition: template
+            value_template: "{{ states('input_datetime.ev_ready_by') in ['00:00:00', 'unknown'] }}"
+        then:
+          - action: input_datetime.set_datetime
+            target:
+              entity_id: input_datetime.ev_ready_by
+            data:
+              time: "07:00:00"
+
   # -------------------------------------------------------------------
   # Start, change and end the session
   # -------------------------------------------------------------------

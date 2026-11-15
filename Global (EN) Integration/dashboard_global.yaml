@@ -4282,7 +4282,7 @@ views:
               - entity: input_boolean.forecast_setting_smart_hold
                 name: Smart hold (keep the charge for the most expensive quarter hours)
               - entity: input_number.forecast_setting_calibration_days
-                name: Calibration after days (0 = 14)
+                name: Calibration after days
               - entity: input_boolean.forecast_setting_calibration_charging
                 name: Calibration charging
             visibility:
@@ -4690,7 +4690,7 @@ views:
               **Charging session** (only with a configured **switch**): choose
               the **charge moment** and the **required energy** (kWh at the
               socket). *Night* charges in the cheapest price slots until **Ready
-              by** (00:00 = 07:00). *Daytime* charges while the sun is up; the
+              by** (default 07:00). *Daytime* charges while the sun is up; the
               planner subtracts those kWh from the solar surplus for the battery
               and charges the shortfall from the grid at the cheapest moment.
               Once the energy is charged or the time has passed, the charge
@@ -4716,7 +4716,7 @@ views:
                     state: Night (cheapest hours)
                 row:
                   entity: input_datetime.ev_ready_by
-                  name: Ready by (00:00 = 07:00)
+                  name: Ready by
               - type: section
                 label: Charger
               - entity: input_text.ev_power_sensor
@@ -4724,9 +4724,9 @@ views:
               - entity: input_text.ev_charger_switch
                 name: Charger switch (optional, e.g. switch.shelly_charger)
               - entity: input_number.ev_charger_power
-                name: Charging power kW (0 = 2.3 kW)
+                name: Charging power kW
               - entity: input_number.ev_threshold_power
-                name: Threshold W (0 = 300 W)
+                name: Threshold W
             visibility:
               - condition: state
                 entity: input_select.ev_charge_moment
@@ -4799,7 +4799,7 @@ views:
               - entity: input_text.hvac_sensor
                 name: HVAC sensor (e.g. climate.living_room)
               - entity: input_number.hvac_threshold_power
-                name: Threshold power W (power sensor only, 0 = 50 W)
+                name: Threshold power W (power sensor only)
               - entity: input_text.hvac_power_sensor
                 name: Power sensor (W/kW or kWh counter, empty = HVAC sensor)
               - entity: input_select.hvac_approach

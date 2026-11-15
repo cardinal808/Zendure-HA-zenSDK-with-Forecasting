@@ -2817,6 +2817,37 @@ automation:
             - input_boolean.forecast_kalibratieladen
             - input_boolean.forecast_kalibratieladen_ingesteld
 
+  # Velden die vroeger "0 = standaard" hadden: staat er 0, dan de standaardwaarde invullen (zichtbaar in het veld).
+  - id: forecast_standaardwaarden
+    alias: Forecast Standaardwaarden
+    description: >-
+      Forecasting 2026.11.7 - Vult de standaardwaarde in als een veld op 0 staat (Kalibratie na dagen = 14).
+    mode: queued
+    max: 5
+    triggers:
+      - trigger: homeassistant
+        event: start
+      - trigger: state
+        entity_id:
+          - input_number.forecast_kalibratie_dagen
+    conditions: []
+    actions:
+      - delay:
+          seconds: 10
+      - repeat:
+          for_each:
+              - {e: input_number.forecast_kalibratie_dagen, v: 14}
+          sequence:
+            - if:
+                - condition: template
+                  value_template: "{{ states(repeat.item.e) | float(-1) == 0 }}"
+              then:
+                - action: input_number.set_value
+                  target:
+                    entity_id: "{{ repeat.item.e }}"
+                  data:
+                    value: "{{ repeat.item.v }}"
+
   # Zon-forecast sensoren automatisch invullen als het veld leeg is: Solcast (solcast_solar), anders
   # Forecast.Solar. Alleen bij precies één kandidaat (resterend vandaag / morgen, in kWh); een veld
   # dat je zelf hebt ingevuld blijft staan. Zo werkt een nieuwe installatie zonder invullen.

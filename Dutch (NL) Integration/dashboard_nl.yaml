@@ -4288,7 +4288,7 @@ views:
               - entity: input_boolean.forecast_slim_vasthouden
                 name: Slim vasthouden (lading bewaren voor de duurste kwartieren)
               - entity: input_number.forecast_kalibratie_dagen
-                name: Kalibratie na dagen (0 = 14)
+                name: Kalibratie na dagen
               - entity: input_boolean.forecast_kalibratieladen
                 name: Kalibratieladen
             visibility:
@@ -4699,7 +4699,7 @@ views:
               **Laadsessie** (alleen met een ingevulde **schakelaar**): kies het
               **laadmoment** en de **benodigde energie** (kWh aan het
               stopcontact). *Nacht* laadt in de goedkoopste prijsslots tot
-              **Klaar om** (00:00 = 07:00). *Overdag* laadt zolang de zon op is;
+              **Klaar om** (standaard 07:00). *Overdag* laadt zolang de zon op is;
               de planner haalt die kWh van het zon-overschot voor de accu af en
               laadt het tekort op het goedkoopste moment uit het net. Is de
               energie geladen of de tijd voorbij, dan gaat het laadmoment terug
@@ -4725,7 +4725,7 @@ views:
                     state: Nacht (goedkoopste uren)
                 row:
                   entity: input_datetime.ev_klaar_om
-                  name: Klaar om (00:00 = 07:00)
+                  name: Klaar om
               - type: section
                 label: Lader
               - entity: input_text.ev_vermogen_sensor
@@ -4733,9 +4733,9 @@ views:
               - entity: input_text.ev_schakelaar
                 name: Schakelaar lader (optioneel, bv. switch.shelly_lader)
               - entity: input_number.ev_laadvermogen_kw
-                name: Laadvermogen kW (0 = 2,3 kW)
+                name: Laadvermogen kW
               - entity: input_number.ev_drempel_vermogen
-                name: Drempel W (0 = 300 W)
+                name: Drempel W
             visibility:
               - condition: state
                 entity: input_select.ev_laadmoment
@@ -4807,7 +4807,7 @@ views:
               - entity: input_text.hvac_sensor
                 name: HVAC sensor (bv. climate.airco_woonkamer)
               - entity: input_number.hvac_drempel_vermogen
-                name: Drempel vermogen W (alleen bij vermogenssensor, 0 = 50 W)
+                name: Drempel vermogen W (alleen bij vermogenssensor)
               - entity: input_text.hvac_vermogen_sensor
                 name: Vermogen sensor (W/kW of kWh-teller, leeg = HVAC sensor)
               - entity: input_select.hvac_aanpak
