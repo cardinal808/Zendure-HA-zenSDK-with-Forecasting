@@ -58,7 +58,7 @@ Versions follow `year.month.sequence`; the sequence restarts at 1 every month. E
 **Clearer plan on the dashboard**
 - *Today's plan runs until* without the fixed explanation after it.
 - *Expected usage until end of bridge*: now split into battery now + solar to the battery + planned charging (after losses), and how much the house buys directly.
-- Charge blocks of tonight after midnight no longer show under *Today* when there is an indication for tomorrow (it plans again at 00:00); instead *Charging after midnight: see the provisional plan under Tomorrow*. Under *Tomorrow* the charge lines are called *Provisional plan: charge tomorrow …*.
+- Charge blocks of tonight after midnight no longer show under *Today* when there is an indication for tomorrow (it plans again at 00:00). Under *Tomorrow* the charge lines are called *Provisional plan: charge tomorrow …*.
 - *Price now* removed (already in the chart and badges); when the battery holds, the reason is in the line **Battery is holding now**.
 - **Planning** and **Tomorrow**: clear that it plans again after midnight for tomorrow's expensive hours, and that tomorrow's estimate replaces tonight's charging.
 - **Collected data:** new line **Usage per day** (kWh per weekday from the profile). The own profile per weekday shows how many weeks have been measured (*Mon 1/3*) instead of *0 of 24 learned*.
