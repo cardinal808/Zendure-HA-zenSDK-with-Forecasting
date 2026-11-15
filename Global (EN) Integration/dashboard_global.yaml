@@ -4481,7 +4481,7 @@ views:
               power from the grid is free or even pays.
 
 
-              **Pre-discharge** (mode Dynamic Smart Matching + Forecasting, needs a
+              **Discharge battery at negative prices** (mode Dynamic Smart Matching + Forecasting, needs a
               detailed solar forecast): if a window with a negative feed-in price and
               expected solar surplus is coming, the planner makes sure the battery is
               empty enough at its start for 75% of that surplus, or for 100% if you filled in a solar forecast reliability (per month or general), since that is already in the forecast. For this it discharges
@@ -4528,9 +4528,9 @@ views:
                   entity: input_boolean.negative_price_zendure_pv_export
                   name: Disable PV export at negative prices
               - type: section
-                label: Discharge battery ahead of negative prices
+                label: Discharge battery at
               - entity: input_boolean.negative_price_pre_discharge
-                name: Pre-discharge
+                name: Negative prices
               - type: section
                 label: Feed-in price
               - entity: input_text.dynamic_setting_market_price_sensor

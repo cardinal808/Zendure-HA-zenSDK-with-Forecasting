@@ -4488,7 +4488,7 @@ views:
               op.
 
 
-              **Vooraf ontladen** (modus Dynamisch NOM + Forecasting, zon-detailvoorspelling
+              **Accu ontladen bij negatieve prijzen** (modus Dynamisch NOM + Forecasting, zon-detailvoorspelling
               nodig): komt er een venster met een negatieve terugleverprijs en verwacht
               zon-overschot, dan zorgt de planner dat de accu bij het begin leeg genoeg is
               voor 75% van dat overschot, of voor 100% als je een betrouwbaarheid zonvoorspelling (per maand of algemeen) hebt ingevuld (die zit dan al in de voorspelling). Hij ontlaadt daarvoor (alleen voor het huis) in de
@@ -4535,9 +4535,9 @@ views:
                   entity: input_boolean.negatieve_prijs_zendure_pv_export
                   name: PV-export uitschakelen bij negatieve prijzen
               - type: section
-                label: Accu ontladen voor negatieve prijzen
+                label: Accu ontladen bij
               - entity: input_boolean.negatieve_prijs_vooraf_ontladen
-                name: Vooraf ontladen
+                name: Negatieve prijzen
               - type: section
                 label: Terugleverprijs
               - entity: input_text.dynamisch_marktprijs_sensor
