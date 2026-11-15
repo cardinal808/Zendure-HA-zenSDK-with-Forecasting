@@ -217,7 +217,7 @@ script:
                  'sensor.zendure_2400_ac_indicatie_beschikbare_energie', 'sensor.zendure_terugleverprijs_nu',
                  'sensor.zendure_besparing', 'sensor.ev_laadplan', 'sensor.hvac_modus',
                  'binary_sensor.hvac_ontladen_geblokkeerd', 'binary_sensor.zendure_export_geblokkeerd_negatieve_prijs',
-                 'sensor.zendure_forecast_grafiek', 'sensor.dynamisch_spread_indicatie', 'sensor.dynamisch_spread_indicatie_nom',
+                 'sensor.zendure_forecast_grafiek', 'sensor.forecast_sensor_kandidaten', 'sensor.dynamisch_spread_indicatie', 'sensor.dynamisch_spread_indicatie_nom',
                  'sensor.dynamisch_spread_indicatie_morgen', 'sensor.dynamisch_spread_indicatie_nom_morgen'] -%}
             {#- Verzamelde gegevens: alle tellers en 7-dagen-statistieken met hun attributen
                 (age_coverage_ratio, bron, laatste_sprong, ...) -#}

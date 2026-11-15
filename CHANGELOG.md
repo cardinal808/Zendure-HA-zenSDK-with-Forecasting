@@ -30,12 +30,19 @@ Versions follow `year.month.sequence`; the sequence restarts at 1 every month. E
 - Plan today: line **Export before the sun** with kWh, times, price and estimated revenue. The Plan Timeline does not show the export yet.
 
 **Easier configuration**
-- **Solar forecast sensors filled in automatically:** if *Solar remaining today sensor* or *Solar tomorrow sensor* is empty, the set fills in Solcast (otherwise Forecast.Solar), when there is exactly one matching sensor. A field you filled in yourself is kept; every fill-in is in the logbook.
+- **Sensors detected automatically:** the set looks for the sensors for the five sensor fields in Forecasting Configuration (Basic) itself:
+  - *Solar remaining today* and *Solar tomorrow*: Solcast, otherwise Forecast.Solar.
+  - *Solar production sensor*: the total counter (kWh) of an inverter integration (SolarEdge, Enphase, Growatt, SMA, Huawei, Fronius, GoodWe, Solax, Solarman, APsystems, Hoymiles and others), then HomeWizard or Shelly meters with solar/pv/inverter in the name.
+  - *Grid import/export counter*: HomeWizard P1, DSMR integration, P1 Monitor, SlimmeLezer (ESPHome), DSMR Reader; then Shelly energy meters (Pro 3EM, 3EM, EM). Tariff 1 + 2 or per phase as a comma list.
+  - **One candidate:** an empty field is filled in with the full sensor (a Shelly only when its name points to the grid, e.g. *Main meter*). A field you filled in yourself is kept; every fill-in is in the logbook.
+  - **More candidates:** a dropdown **↳ Choose from the sensors found** appears below the field; choosing writes the sensor into the field.
+  - New: `sensor.forecast_sensor_candidates` (candidates per field, also in the diagnostics export), `select.forecast_choose_…` (5 dropdowns), automation `forecast_sensors_fill` (replaces filling in only the solar sensors from the test version).
 - **Grid counters:** when they are detected automatically (HomeWizard, SlimmeLezer, DSMR), the dashboard hides the input fields and shows which sensor is used (*Grid import counter (detected automatically)*). New `binary_sensor.forecast_grid_import_counter_automatic` and `..._export_...` (attribute `sensors`).
 - **No more "unknown" in empty input fields:** a field that was never filled in is emptied (not Gielz's own fields). Solar fields and grid counters that are still empty show **(please fill in)**.
 - **Extra planner charge margin %** was called *Battery charge margin %*.
 - The block is now called **Forecasting Configuration (Battery discharge and Negative Price)**. At the top **Discharge battery at** with the switches **Negative prices** (was *Pre-discharge*, same entity) and **Solar surplus**; below it **Negative price** with *No export at negative price*.
 - **No more "(0 = …)":** the default value is now really in the field: *Calibration after days* 14, EV *Charging power kW* 2.3, *Threshold W* 300, *Ready by* 07:00, HVAC *Threshold power W* 50, *Solar forecast reliability %* 100. That 100 does not count as *filled in*: without a value of your own, pre-discharge still uses 75% of the solar surplus. The month fields are now called *January %* etc.; 0 still means *the general value* there. If you set a field to 0, the default comes back (automations `forecast_default_values`, `ev_default_values`, `hvac_default_values`).
+- **Fill in the monthly value automatically** (was *Do not fill in the monthly value automatically*, `input_boolean.forecast_setting_reliability_auto_fill`) is on by default. Had you turned the old switch on (do not fill in), turn the new one off after the upgrade.
 - **Calibration charging** is now an on switch (was *Calibration charging off*) and is on by default, also if you turned it off before: turn it off again after the upgrade if needed.
 - **Missing cards notice:** if apexcharts-card, card-mod or button-card is missing (detected via HACS), the dashboard says which to install.
 - **Upgrade notice:** if the dashboard does not match the version of the packages, the plan says what to replace (paste the dashboard or replace the packages). If a new version is on GitHub, it says so too.
@@ -51,6 +58,7 @@ Versions follow `year.month.sequence`; the sequence restarts at 1 every month. E
 - **Collected data:** new line **Usage per day** (kWh per weekday from the profile). The own profile per weekday shows how many weeks have been measured (*Mon 1/3*) instead of *0 of 24 learned*.
 
 **Charts**
+- **Fix (EN):** the planner attribute for exporting at solar surplus is now `solar_surplus_export_kwh`; as `solar_surplus_kwh` it overwrote the existing attribute of the same name.
 - **Plan Timeline:** the columns now sit in their own quarter hour (before they were centred on the start, half a column early compared with the usage line and the time). The time labels at the bottom are annotations at the exact time (03:00, 06:00 …, day name at midnight); before, the bottom row could shift (e.g. around 12:00).
 - **Usage Profile:** the column of an hour sits between that hour and the next. The legend no longer shows *0.6 hours* (that was the last bar with the unit of the profile sensor). New second chart **usage per day**: expected usage per weekday in kWh (green workday, grey weekend).
 

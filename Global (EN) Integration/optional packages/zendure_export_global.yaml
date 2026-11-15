@@ -218,7 +218,7 @@ script:
                  'sensor.zendure_indication_available_energy', 'sensor.zendure_feedin_price_now',
                  'sensor.zendure_savings', 'sensor.ev_charge_plan', 'sensor.hvac_mode',
                  'binary_sensor.hvac_discharge_blocked', 'binary_sensor.zendure_export_blocked_negative_price',
-                 'sensor.zendure_forecast_chart', 'sensor.dynamic_spread_indication', 'sensor.dynamic_spread_indication_dsc',
+                 'sensor.zendure_forecast_chart', 'sensor.forecast_sensor_candidates', 'sensor.dynamic_spread_indication', 'sensor.dynamic_spread_indication_dsc',
                  'sensor.dynamic_spread_indication_tomorrow', 'sensor.dynamic_spread_indication_dsc_tomorrow'] -%}
             {#- Collected data: all counters and 7-day statistics with their attributes
                 (age_coverage_ratio, source, last_jump, ...) -#}

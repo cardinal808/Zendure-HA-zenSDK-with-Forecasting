@@ -86,7 +86,7 @@ input_number:
 
   # Betrouwbaarheid per maand (%). 0 = niet ingevuld: dan geldt de algemene betrouwbaarheid hierboven.
   # Aan het eind van elke maand vult de set de gemeten verhouding (werkelijke zon / voorspelling) in
-  # voor die maand, zodat hij volgend jaar klopt. Uitzetten met "Niet automatisch invullen".
+  # voor die maand, zodat hij volgend jaar klopt. Uitzetten met "Maandwaarde automatisch invullen".
   forecast_betrouwbaarheid_jan:
     name: Forecast Betrouwbaarheid Januari
     icon: mdi:weather-partly-cloudy
@@ -210,10 +210,15 @@ input_boolean:
   forecast_betrouwbaarheid_per_maand_tonen:
     name: Forecast Betrouwbaarheid Per Maand Tonen
     icon: mdi:calendar-month
-  # Aan = de gemeten maandwaarde niet automatisch invullen
-  forecast_betrouwbaarheid_niet_automatisch:
-    name: Forecast Betrouwbaarheid Niet Automatisch Invullen
-    icon: mdi:calendar-lock
+  # Aan = de gemeten maandwaarde automatisch invullen. Staat standaard aan (eenmalig gezet door de
+  # automatisering onderaan). Was t/m 2026.11.6: Betrouwbaarheid Niet Automatisch Invullen.
+  forecast_betrouwbaarheid_automatisch:
+    name: Forecast Betrouwbaarheid Automatisch Invullen
+    icon: mdi:calendar-sync
+  # Intern: automatisch invullen is al eens standaard aangezet
+  forecast_betrouwbaarheid_automatisch_ingesteld:
+    name: Forecast Betrouwbaarheid Automatisch Ingesteld
+    icon: mdi:robot
   forecast_tonen_op_dashboard:
     name: Forecasting Tonen Op Dashboard
     icon: mdi:calendar-clock
@@ -388,6 +393,227 @@ sensor:
     precision: 2
 
 template:
+  # ---- Sensor-herkenning ----
+  # Zoekt sensoren die bij de invoervelden van Forecasting Configuratie (Basis) passen:
+  #   zon resterend vandaag / zon morgen: Solcast (solcast_solar), daarna Forecast.Solar
+  #   zonnepanelen-teller: omvormer-integraties (SolarEdge, Enphase, Growatt, SMA, Huawei, Fronius,
+  #     GoodWe, ...) met een totaal-teller in kWh; daarna HomeWizard/Shelly-meters met zon/pv in de naam
+  #   net-tellers: HomeWizard P1, DSMR, P1 Monitor, SlimmeLezer (ESPHome), DSMR Reader; daarna
+  #     Shelly-energiemeters (Pro 3EM, 3EM, EM). Tarief 1 + 2 of per fase als komma-lijst.
+  # Per veld een attribuut met 'opties' (alle kandidaten, de voorkeur eerst) en 'invullen' (de
+  # kandidaat die automatisch in een leeg veld mag: precies één in de voorkeursgroep; een Shelly
+  # alleen als zijn naam op het net wijst). Zijn er meer kandidaten, dan toont het dashboard een
+  # keuzelijst (select.forecast_kies_...) die het veld invult. State = aantal velden met een keuze.
+  - trigger:
+      - trigger: homeassistant
+        event: start
+      - trigger: event
+        event_type: entity_registry_updated
+      - trigger: time_pattern
+        minutes: "/10"
+    variables:
+      zn: "(zon|pv|solar|omvormer|inverter|panel|paneel)"
+      # Zon-forecast: Solcast, anders Forecast.Solar (kWh-sensoren)
+      zf: >
+        {%- set ns = namespace(sc=[], fs=[]) -%}
+        {%- for e in integration_entities('solcast_solar') | select('match', 'sensor\\.') -%}
+          {%- if state_attr(e, 'unit_of_measurement') in ['kWh', 'Wh', 'MWh'] -%}{%- set ns.sc = ns.sc + [e] -%}{%- endif -%}
+        {%- endfor -%}
+        {%- for e in integration_entities('forecast_solar') | select('match', 'sensor\\.') -%}
+          {%- if state_attr(e, 'unit_of_measurement') in ['kWh', 'Wh', 'MWh'] -%}{%- set ns.fs = ns.fs + [e] -%}{%- endif -%}
+        {%- endfor -%}
+        {{ {'sc': ns.sc | sort, 'fs': ns.fs | sort} }}
+      k_zon_resterend: >
+        {%- set x = '(peak|piek|power|vermogen)' -%}
+        {%- set a = zf.sc | select('search', '(remaining|resterend|rest_)') | reject('search', x) | list -%}
+        {%- set b = zf.fs | select('search', '(remaining|resterend|rest_)') | reject('search', x) | list -%}
+        {{ {'opties': a + b, 'invullen': (a[0] if a | length == 1 else '') if a | length > 0 else (b[0] if b | length == 1 else '')} }}
+      k_zon_morgen: >
+        {%- set x = '(peak|piek|power|vermogen)' -%}
+        {%- set a = zf.sc | select('search', '(tomorrow|morgen)') | reject('search', x) | list -%}
+        {%- set b = zf.fs | select('search', '(tomorrow|morgen)') | reject('search', x) | list -%}
+        {{ {'opties': a + b, 'invullen': (a[0] if a | length == 1 else '') if a | length > 0 else (b[0] if b | length == 1 else '')} }}
+      # Zonnepanelen-teller: totaal-teller (kWh, total/total_increasing) van een omvormer-integratie
+      k_zon_productie: >
+        {%- set ja = '(lifetime|total|totaal|yield|opbrengst|productie|production|e_total|energy_total|ac_energy)' -%}
+        {%- set nee = '(today|vandaag|daily|_dag|week|month|maand|year|jaar|consum|verbruik|import|batter|charg|laden|grid|purchas|feed|tari|phase|fase)' -%}
+        {%- set ns = namespace(a=[], b=[]) -%}
+        {%- for m in ['solaredge', 'solaredge_modbus_multi', 'enphase_envoy', 'growatt_server', 'sma', 'huawei_solar', 'fusion_solar', 'fronius', 'goodwe', 'solax', 'solarman', 'solis', 'sungrow', 'sunsynk', 'deye', 'apsystems', 'hoymiles_wifi', 'omnik_inverter', 'enphase_envoy_custom'] -%}
+          {%- for e in integration_entities(m) | select('match', 'sensor\\.') -%}
+            {%- if state_attr(e, 'unit_of_measurement') in ['kWh', 'Wh', 'MWh'] and state_attr(e, 'state_class') in ['total', 'total_increasing'] and e is search(ja) and not e is search(nee) -%}
+              {%- set ns.a = ns.a + [e] -%}
+            {%- endif -%}
+          {%- endfor -%}
+        {%- endfor -%}
+        {%- for m in ['homewizard', 'shelly'] -%}
+          {%- for e in integration_entities(m) | select('match', 'sensor\\.') -%}
+            {%- set dn = (device_attr(device_id(e), 'name_by_user') or device_attr(device_id(e), 'name') or '') ~ '' -%}
+            {%- if state_attr(e, 'unit_of_measurement') in ['kWh', 'Wh', 'MWh'] and state_attr(e, 'state_class') in ['total', 'total_increasing'] and (e ~ ' ' ~ dn) | lower is search(zn) and not e is search('(tari|phase|fase|today|vandaag)') -%}
+              {%- set ns.b = ns.b + [e] -%}
+            {%- endif -%}
+          {%- endfor -%}
+        {%- endfor -%}
+        {%- set a = ns.a | unique | sort -%}{%- set b = ns.b | unique | sort | reject('in', a) | list -%}
+        {{ {'opties': a + b, 'invullen': (a[0] if a | length == 1 else '') if a | length > 0 else ''} }}
+      # Net-tellers: P1-integraties (voorkeur), daarna Shelly-energiemeters
+      k_net: >
+        {%- set ns = namespace(ia=[], ea=[], ib=[], eb=[], inet=[], enet=[]) -%}
+        {%- set kwh = ['kWh', 'Wh', 'MWh'] -%}
+        {#- HomeWizard P1 (totaal import/export; geen kWh-meters of stekkers) -#}
+        {%- for e in integration_entities('homewizard') | select('match', 'sensor\\..*_(energy|energie)_(import|export)$') -%}
+          {%- set mdl = (device_attr(device_id(e), 'model') or '') ~ '' -%}
+          {%- set dn = (device_attr(device_id(e), 'name_by_user') or device_attr(device_id(e), 'name') or '') ~ '' -%}
+          {%- if (mdl == '' or mdl | lower is search('p1')) and not (e ~ ' ' ~ dn) | lower is search(zn) -%}
+            {%- if e is search('import$') -%}{%- set ns.ia = ns.ia + [e] -%}{%- else -%}{%- set ns.ea = ns.ea + [e] -%}{%- endif -%}
+          {%- endif -%}
+        {%- endfor -%}
+        {#- DSMR-integratie en P1 Monitor: tarief 1 + 2 / hoog + laag -#}
+        {%- for m in [['dsmr', 'tari'], ['p1_monitor', '(high|low|hoog|laag)$']] -%}
+          {%- set g = namespace(i=[], e=[]) -%}
+          {%- for e in integration_entities(m[0]) | select('match', 'sensor\\.') | select('search', m[1]) | sort -%}
+            {%- if state_attr(e, 'unit_of_measurement') in kwh -%}
+              {%- if e is search('(consum|verbruik|afgenom)') -%}{%- set g.i = g.i + [e] -%}
+              {%- elif e is search('(produc|terug|levering)') -%}{%- set g.e = g.e + [e] -%}{%- endif -%}
+            {%- endif -%}
+          {%- endfor -%}
+          {%- if g.i | length > 0 -%}{%- set ns.ia = ns.ia + [g.i | join(',')] -%}{%- endif -%}
+          {%- if g.e | length > 0 -%}{%- set ns.ea = ns.ea + [g.e | join(',')] -%}{%- endif -%}
+        {%- endfor -%}
+        {#- SlimmeLezer / ESPHome DSMR en DSMR Reader (MQTT): op naam, tarief 1 + 2 -#}
+        {%- set ids = states.sensor | map(attribute='entity_id') | list -%}
+        {%- for p in [['energy_consumed_tariff_1', 'i'], ['energy_produced_tariff_1', 'e'], ['dsmr_reading_electricity_delivered_1', 'i'], ['dsmr_reading_electricity_returned_1', 'e']] -%}
+          {%- for e in ids | select('search', p[0] ~ '$') -%}
+            {%- set grp = [e, e[:-1] ~ '2'] | select('in', ids) | join(',') -%}
+            {%- if p[1] == 'i' -%}{%- set ns.ia = ns.ia + [grp] -%}{%- else -%}{%- set ns.ea = ns.ea + [grp] -%}{%- endif -%}
+          {%- endfor -%}
+        {%- endfor -%}
+        {#- Shelly-energiemeters (Pro 3EM, 3EM, EM), per apparaat: totaal als dat er is, anders per fase -#}
+        {%- set dv = namespace(d={}) -%}
+        {%- for e in integration_entities('shelly') | select('match', 'sensor\\.') -%}
+          {%- set d = device_id(e) -%}
+          {%- if d and ((device_attr(d, 'model') or '') ~ '') is search('EM') and state_attr(e, 'unit_of_measurement') in kwh -%}
+            {%- set dv.d = dict(dv.d, **{d: (dv.d[d] if d in dv.d else []) + [e]}) -%}
+          {%- endif -%}
+        {%- endfor -%}
+        {%- for d in dv.d -%}
+          {%- set dn = ((device_attr(d, 'name_by_user') or device_attr(d, 'name') or '') ~ '') | lower -%}
+          {%- set l = dv.d[d] | sort -%}
+          {%- if not (dn ~ ' ' ~ l | join(' ')) is search(zn) -%}
+            {%- set imp = l | reject('search', '(return|terug)') | list -%}
+            {%- set exp = l | select('search', '(return|terug)') | list -%}
+            {%- set ti = imp | select('search', 'total') | reject('search', '(phase|fase|_[abc]_)') | list -%}
+            {%- set te = exp | select('search', 'total') | reject('search', '(phase|fase|_[abc]_)') | list -%}
+            {%- set imp = (ti if ti | length > 0 else imp) | join(',') -%}
+            {%- set exp = (te if te | length > 0 else exp) | join(',') -%}
+            {%- set net = dn is search('(net|grid|meter|p1|hoofd|main)') -%}
+            {%- if imp != '' -%}{%- set ns.ib = ns.ib + [imp] -%}{%- if net -%}{%- set ns.inet = ns.inet + [imp] -%}{%- endif -%}{%- endif -%}
+            {%- if exp != '' -%}{%- set ns.eb = ns.eb + [exp] -%}{%- if net -%}{%- set ns.enet = ns.enet + [exp] -%}{%- endif -%}{%- endif -%}
+          {%- endif -%}
+        {%- endfor -%}
+        {%- set ia = ns.ia | unique | list -%}{%- set ea = ns.ea | unique | list -%}
+        {%- set ib = ns.ib | unique | reject('in', ia) | list -%}{%- set eb = ns.eb | unique | reject('in', ea) | list -%}
+        {{ {'i': {'opties': ia + ib, 'invullen': (ia[0] if ia | length == 1 else '') if ia | length > 0 else (ns.inet[0] if ib | length == 1 and ns.inet | length == 1 else '')},
+            'e': {'opties': ea + eb, 'invullen': (ea[0] if ea | length == 1 else '') if ea | length > 0 else (ns.enet[0] if eb | length == 1 and ns.enet | length == 1 else '')}} }}
+    sensor:
+      - name: "Forecast Sensor Kandidaten"
+        unique_id: forecast_sensor_kandidaten
+        icon: mdi:magnify-scan
+        state: >
+          {{ [k_zon_resterend.opties | count, k_zon_morgen.opties | count, k_zon_productie.opties | count, k_net.i.opties | count, k_net.e.opties | count] | select('gt', 1) | list | length }}
+        attributes:
+          zon_resterend: "{{ k_zon_resterend }}"
+          zon_morgen: "{{ k_zon_morgen }}"
+          zon_productie: "{{ k_zon_productie }}"
+          net_import: "{{ k_net.i }}"
+          net_export: "{{ k_net.e }}"
+  # Keuzelijsten bij meer dan één gevonden sensor: kiezen schrijft de sensor in het invoerveld
+  # (het veld blijft gewoon met de hand te wijzigen). Alleen beschikbaar bij meer dan één kandidaat.
+  - select:
+      - name: "Forecast Kies Zon Resterend Vandaag Sensor"
+        unique_id: forecast_kies_zon_resterend_vandaag_sensor
+        icon: mdi:form-dropdown
+        availability: "{{ ((state_attr('sensor.forecast_sensor_kandidaten', 'zon_resterend') or {}).opties or []) | length > 1 }}"
+        state: >
+          {%- set v = states('input_text.forecast_zon_resterend_vandaag_sensor') | trim | lower | replace(' ', '') -%}
+          {{ v if v not in ['', 'unknown', 'unavailable'] else none }}
+        options: >
+          {%- set l = (state_attr('sensor.forecast_sensor_kandidaten', 'zon_resterend') or {}).opties or [] -%}
+          {%- set v = states('input_text.forecast_zon_resterend_vandaag_sensor') | trim | lower | replace(' ', '') -%}
+          {{ l + ([v] if v not in l and v not in ['', 'unknown', 'unavailable'] else []) }}
+        select_option:
+          - action: input_text.set_value
+            target:
+              entity_id: input_text.forecast_zon_resterend_vandaag_sensor
+            data:
+              value: "{{ option }}"
+      - name: "Forecast Kies Zon Morgen Sensor"
+        unique_id: forecast_kies_zon_morgen_sensor
+        icon: mdi:form-dropdown
+        availability: "{{ ((state_attr('sensor.forecast_sensor_kandidaten', 'zon_morgen') or {}).opties or []) | length > 1 }}"
+        state: >
+          {%- set v = states('input_text.forecast_zon_morgen_sensor') | trim | lower | replace(' ', '') -%}
+          {{ v if v not in ['', 'unknown', 'unavailable'] else none }}
+        options: >
+          {%- set l = (state_attr('sensor.forecast_sensor_kandidaten', 'zon_morgen') or {}).opties or [] -%}
+          {%- set v = states('input_text.forecast_zon_morgen_sensor') | trim | lower | replace(' ', '') -%}
+          {{ l + ([v] if v not in l and v not in ['', 'unknown', 'unavailable'] else []) }}
+        select_option:
+          - action: input_text.set_value
+            target:
+              entity_id: input_text.forecast_zon_morgen_sensor
+            data:
+              value: "{{ option }}"
+      - name: "Forecast Kies Zonnepanelen Productie Sensor"
+        unique_id: forecast_kies_zonnepanelen_productie_sensor
+        icon: mdi:form-dropdown
+        availability: "{{ ((state_attr('sensor.forecast_sensor_kandidaten', 'zon_productie') or {}).opties or []) | length > 1 }}"
+        state: >
+          {%- set v = states('input_text.forecast_zon_productie_sensor') | trim | lower | replace(' ', '') -%}
+          {{ v if v not in ['', 'unknown', 'unavailable'] else none }}
+        options: >
+          {%- set l = (state_attr('sensor.forecast_sensor_kandidaten', 'zon_productie') or {}).opties or [] -%}
+          {%- set v = states('input_text.forecast_zon_productie_sensor') | trim | lower | replace(' ', '') -%}
+          {{ l + ([v] if v not in l and v not in ['', 'unknown', 'unavailable'] else []) }}
+        select_option:
+          - action: input_text.set_value
+            target:
+              entity_id: input_text.forecast_zon_productie_sensor
+            data:
+              value: "{{ option }}"
+      - name: "Forecast Kies Net Import Teller"
+        unique_id: forecast_kies_net_import_teller
+        icon: mdi:form-dropdown
+        availability: "{{ ((state_attr('sensor.forecast_sensor_kandidaten', 'net_import') or {}).opties or []) | length > 1 }}"
+        state: >
+          {%- set v = states('input_text.forecast_net_import_teller_sensor') | trim | lower | replace(' ', '') -%}
+          {{ v if v not in ['', 'unknown', 'unavailable'] else none }}
+        options: >
+          {%- set l = (state_attr('sensor.forecast_sensor_kandidaten', 'net_import') or {}).opties or [] -%}
+          {%- set v = states('input_text.forecast_net_import_teller_sensor') | trim | lower | replace(' ', '') -%}
+          {{ l + ([v] if v not in l and v not in ['', 'unknown', 'unavailable'] else []) }}
+        select_option:
+          - action: input_text.set_value
+            target:
+              entity_id: input_text.forecast_net_import_teller_sensor
+            data:
+              value: "{{ option }}"
+      - name: "Forecast Kies Net Export Teller"
+        unique_id: forecast_kies_net_export_teller
+        icon: mdi:form-dropdown
+        availability: "{{ ((state_attr('sensor.forecast_sensor_kandidaten', 'net_export') or {}).opties or []) | length > 1 }}"
+        state: >
+          {%- set v = states('input_text.forecast_net_export_teller_sensor') | trim | lower | replace(' ', '') -%}
+          {{ v if v not in ['', 'unknown', 'unavailable'] else none }}
+        options: >
+          {%- set l = (state_attr('sensor.forecast_sensor_kandidaten', 'net_export') or {}).opties or [] -%}
+          {%- set v = states('input_text.forecast_net_export_teller_sensor') | trim | lower | replace(' ', '') -%}
+          {{ l + ([v] if v not in l and v not in ['', 'unknown', 'unavailable'] else []) }}
+        select_option:
+          - action: input_text.set_value
+            target:
+              entity_id: input_text.forecast_net_export_teller_sensor
+            data:
+              value: "{{ option }}"
   # Net-tellers automatisch herkend (veld leeg, P1-meter gevonden): het dashboard verbergt dan het
   # invoerveld en toont welke sensor gebruikt wordt (attribuut sensoren).
   # Nu terugleveren bij zonoverschot (uit de planner); de automation gebruikt de toestand met 'for'
@@ -2957,6 +3183,30 @@ automation:
             - input_boolean.forecast_kalibratieladen
             - input_boolean.forecast_kalibratieladen_ingesteld
 
+  - id: forecast_betrouwbaarheid_automatisch_standaard
+    alias: Forecast Betrouwbaarheid Automatisch Standaard Aan
+    description: >-
+      Forecasting 2026.11.7 - Zet Maandwaarde automatisch invullen eenmalig aan (na installatie of upgrade).
+    mode: single
+    triggers:
+      - trigger: homeassistant
+        event: start
+      - trigger: state
+        entity_id: input_boolean.forecast_betrouwbaarheid_automatisch_ingesteld
+        to: 'off'
+    conditions:
+      - condition: state
+        entity_id: input_boolean.forecast_betrouwbaarheid_automatisch_ingesteld
+        state: 'off'
+    actions:
+      - delay:
+          seconds: 5
+      - action: input_boolean.turn_on
+        target:
+          entity_id:
+            - input_boolean.forecast_betrouwbaarheid_automatisch
+            - input_boolean.forecast_betrouwbaarheid_automatisch_ingesteld
+
   # Velden die vroeger "0 = standaard" hadden: staat er 0, dan de standaardwaarde invullen (zichtbaar in het veld).
   - id: forecast_standaardwaarden
     alias: Forecast Standaardwaarden
@@ -2990,76 +3240,53 @@ automation:
                   data:
                     value: "{{ repeat.item.v }}"
 
-  # Zon-forecast sensoren automatisch invullen als het veld leeg is: Solcast (solcast_solar), anders
-  # Forecast.Solar. Alleen bij precies één kandidaat (resterend vandaag / morgen, in kWh); een veld
-  # dat je zelf hebt ingevuld blijft staan. Zo werkt een nieuwe installatie zonder invullen.
-  - id: forecast_zon_sensoren_invullen
-    alias: Forecast Zon Sensoren Invullen
+  # Lege sensorvelden automatisch invullen met de gevonden sensor (zie Sensor-herkenning bij de
+  # template-sensoren): alleen als er precies één duidelijke kandidaat is, en nooit over iets heen dat
+  # je zelf hebt ingevuld. Zo werkt een nieuwe installatie zonder invullen. Logboekregel per veld.
+  - id: forecast_sensoren_invullen
+    alias: Forecast Sensoren Automatisch Invullen
     description: >-
-      Forecasting 2026.11.7 - Vult de zon-forecast sensoren in (Solcast of Forecast.Solar) als het veld leeg is.
-    mode: single
+      Forecasting 2026.11.7 - Vult lege sensorvelden in (zon-forecast, zonnepanelen-teller, net-tellers) als er precies één duidelijke kandidaat is.
+    mode: queued
+    max: 3
     triggers:
-      - trigger: homeassistant
-        event: start
+      - trigger: state
+        entity_id: sensor.forecast_sensor_kandidaten
       - trigger: state
         entity_id:
           - input_text.forecast_zon_resterend_vandaag_sensor
           - input_text.forecast_zon_morgen_sensor
+          - input_text.forecast_zon_productie_sensor
+          - input_text.forecast_net_import_teller_sensor
+          - input_text.forecast_net_export_teller_sensor
         to: ''
-      - trigger: time_pattern
-        hours: "/1"
-        minutes: 7
-    conditions:
-      - condition: template
-        value_template: "{{ states('input_text.forecast_zon_resterend_vandaag_sensor') | trim in ['', 'unknown'] or states('input_text.forecast_zon_morgen_sensor') | trim in ['', 'unknown'] }}"
     actions:
       - delay:
-          seconds: 30
-      - variables:
-          # Solcast eerst; zonder Solcast Forecast.Solar (geen detail per half uur)
-          kandidaten: >
-            {%- set ns = namespace(sc=[], fs=[]) -%}
-            {%- for e in integration_entities('solcast_solar') | select('match', 'sensor\\.') -%}
-              {%- if state_attr(e, 'unit_of_measurement') in ['kWh', 'Wh', 'MWh'] -%}{%- set ns.sc = ns.sc + [e] -%}{%- endif -%}
-            {%- endfor -%}
-            {%- for e in integration_entities('forecast_solar') | select('match', 'sensor\\.') -%}
-              {%- if state_attr(e, 'unit_of_measurement') in ['kWh', 'Wh', 'MWh'] -%}{%- set ns.fs = ns.fs + [e] -%}{%- endif -%}
-            {%- endfor -%}
-            {{ ns.sc if ns.sc | length > 0 else ns.fs }}
-          rest: >
-            {%- set l = kandidaten | select('search', '(remaining|resterend|rest_)') | reject('search', '(peak|piek|power|vermogen)') | list -%}
-            {{ l[0] if l | length == 1 else '' }}
-          morgen: >
-            {%- set l = kandidaten | select('search', '(tomorrow|morgen)') | reject('search', '(peak|piek|power|vermogen)') | list -%}
-            {{ l[0] if l | length == 1 else '' }}
-      - if:
-          - condition: template
-            value_template: "{{ rest != '' and states('input_text.forecast_zon_resterend_vandaag_sensor') | trim in ['', 'unknown'] }}"
-        then:
-          - action: input_text.set_value
-            target:
-              entity_id: input_text.forecast_zon_resterend_vandaag_sensor
-            data:
-              value: "{{ rest }}"
-          - action: logbook.log
-            data:
-              name: Zendure Forecasting
-              message: "Zon resterend vandaag sensor automatisch ingevuld: {{ rest }}"
-              entity_id: input_text.forecast_zon_resterend_vandaag_sensor
-      - if:
-          - condition: template
-            value_template: "{{ morgen != '' and states('input_text.forecast_zon_morgen_sensor') | trim in ['', 'unknown'] }}"
-        then:
-          - action: input_text.set_value
-            target:
-              entity_id: input_text.forecast_zon_morgen_sensor
-            data:
-              value: "{{ morgen }}"
-          - action: logbook.log
-            data:
-              name: Zendure Forecasting
-              message: "Zon morgen sensor automatisch ingevuld: {{ morgen }}"
-              entity_id: input_text.forecast_zon_morgen_sensor
+          seconds: 5
+      - repeat:
+          for_each:
+            - {key: zon_resterend, field: input_text.forecast_zon_resterend_vandaag_sensor, label: "Zon resterend vandaag sensor"}
+            - {key: zon_morgen, field: input_text.forecast_zon_morgen_sensor, label: "Zon morgen sensor"}
+            - {key: zon_productie, field: input_text.forecast_zon_productie_sensor, label: "Zonnepanelen productie sensor"}
+            - {key: net_import, field: input_text.forecast_net_import_teller_sensor, label: "Net import teller"}
+            - {key: net_export, field: input_text.forecast_net_export_teller_sensor, label: "Net export teller"}
+          sequence:
+            - variables:
+                w: "{{ (state_attr('sensor.forecast_sensor_kandidaten', repeat.item.key) or {}).invullen | default('', true) }}"
+            - if:
+                - condition: template
+                  value_template: "{{ w != '' and states(repeat.item.field) | trim in ['', 'unknown'] }}"
+              then:
+                - action: input_text.set_value
+                  target:
+                    entity_id: "{{ repeat.item.field }}"
+                  data:
+                    value: "{{ w }}"
+                - action: logbook.log
+                  data:
+                    name: Zendure Forecasting
+                    message: "{{ repeat.item.label }} automatisch ingevuld: {{ w }}"
+                    entity_id: "{{ repeat.item.field }}"
 
   # Invoervelden met een entiteit opschonen: op een telefoon maakt autocorrectie er snel
   # "Sensor .solcast_..." van (hoofdletter, spatie). Zo'n veld wordt dan niet herkend. Deze
@@ -3141,7 +3368,7 @@ automation:
       - condition: template
         value_template: >-
           {{ trigger.to_state.attributes.afgerond is mapping and (trigger.to_state.attributes.afgerond.pct | int(0)) > 0
-             and not is_state('input_boolean.forecast_betrouwbaarheid_niet_automatisch', 'on') }}
+             and not is_state('input_boolean.forecast_betrouwbaarheid_automatisch', 'off') }}
     actions:
       - variables:
           a: "{{ trigger.to_state.attributes.afgerond }}"

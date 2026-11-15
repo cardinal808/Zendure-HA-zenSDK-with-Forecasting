@@ -4146,7 +4146,12 @@ views:
               in voor volgend jaar. **Kalibratie na dagen**: de Zendure kalibreert bij
               100%. Vanaf de helft van dit aantal dagen wacht de planner op een
               zonnige dag; daarna laadt hij de accu vol uit het net (goedkoopste
-              kwartieren). **Kalibratieladen** staat standaard aan.
+              kwartieren). **Kalibratieladen** staat standaard aan. **Sensoren**: de set zoekt
+              zelf naar Solcast / Forecast.Solar, de teller van je omvormer en je P1-meter
+              (HomeWizard, DSMR, P1 Monitor, SlimmeLezer, DSMR Reader, Shelly). Vindt hij er
+              precies één, dan vult hij een leeg veld zelf in; vindt hij er meer, kies dan in de
+              keuzelijst **↳ Kies uit de gevonden sensoren** onder het veld. Je kunt het veld
+              altijd zelf aanpassen.
             text_only: true
             visibility:
               - condition: state
@@ -4173,6 +4178,13 @@ views:
                   name: Zon resterend vandaag sensor (graag invullen)
               - type: conditional
                 conditions:
+                  - entity: select.forecast_kies_zon_resterend_vandaag_sensor
+                    state_not: unavailable
+                row:
+                  entity: select.forecast_kies_zon_resterend_vandaag_sensor
+                  name: ↳ Kies uit de gevonden sensoren
+              - type: conditional
+                conditions:
                   - entity: input_text.forecast_zon_morgen_sensor
                     state_not: ['', 'unknown']
                 row:
@@ -4187,6 +4199,13 @@ views:
                   name: Zon morgen sensor (graag invullen)
               - type: conditional
                 conditions:
+                  - entity: select.forecast_kies_zon_morgen_sensor
+                    state_not: unavailable
+                row:
+                  entity: select.forecast_kies_zon_morgen_sensor
+                  name: ↳ Kies uit de gevonden sensoren
+              - type: conditional
+                conditions:
                   - entity: input_text.forecast_zon_productie_sensor
                     state_not: ['', 'unknown']
                 row:
@@ -4199,6 +4218,13 @@ views:
                 row:
                   entity: input_text.forecast_zon_productie_sensor
                   name: Zonnepanelen productie sensor (totaal kWh) (graag invullen)
+              - type: conditional
+                conditions:
+                  - entity: select.forecast_kies_zonnepanelen_productie_sensor
+                    state_not: unavailable
+                row:
+                  entity: select.forecast_kies_zonnepanelen_productie_sensor
+                  name: ↳ Kies uit de gevonden sensoren
               - type: conditional
                 conditions:
                   - entity: input_text.forecast_net_import_teller_sensor
@@ -4226,6 +4252,13 @@ views:
                   name: Net import teller (kWh) (graag invullen)
               - type: conditional
                 conditions:
+                  - entity: select.forecast_kies_net_import_teller
+                    state_not: unavailable
+                row:
+                  entity: select.forecast_kies_net_import_teller
+                  name: ↳ Kies uit de gevonden sensoren
+              - type: conditional
+                conditions:
                   - entity: input_text.forecast_net_export_teller_sensor
                     state_not: ['', 'unknown']
                 row:
@@ -4249,6 +4282,13 @@ views:
                 row:
                   entity: input_text.forecast_net_export_teller_sensor
                   name: Net export teller (kWh) (graag invullen)
+              - type: conditional
+                conditions:
+                  - entity: select.forecast_kies_net_export_teller
+                    state_not: unavailable
+                row:
+                  entity: select.forecast_kies_net_export_teller
+                  name: ↳ Kies uit de gevonden sensoren
               - entity: input_number.forecast_laad_marge
                 name: Extra planner laadmarge %
               - type: conditional
@@ -4279,8 +4319,8 @@ views:
                   - entity: input_boolean.forecast_betrouwbaarheid_per_maand_tonen
                     state: 'on'
                 row:
-                  entity: input_boolean.forecast_betrouwbaarheid_niet_automatisch
-                  name: Maandwaarde niet automatisch invullen
+                  entity: input_boolean.forecast_betrouwbaarheid_automatisch
+                  name: Maandwaarde automatisch invullen
               - type: conditional
                 conditions:
                   - entity: input_boolean.forecast_betrouwbaarheid_per_maand_tonen

@@ -86,7 +86,7 @@ input_number:
 
   # Reliability per month (%). 0 = not filled in: then the general reliability above applies.
   # At the end of each month the set fills in the measured ratio (actual solar / forecast) for
-  # that month, so it is right next year. Turn off with "Do not fill in automatically".
+  # that month, so it is right next year. Turn off with "Fill in the monthly value automatically".
   forecast_setting_solar_reliability_jan:
     name: Forecast Solar Reliability January
     icon: mdi:weather-partly-cloudy
@@ -210,10 +210,15 @@ input_boolean:
   forecast_setting_show_reliability_per_month:
     name: Forecast Show Reliability Per Month
     icon: mdi:calendar-month
-  # On = do not fill in the measured monthly value automatically
-  forecast_setting_reliability_no_auto_fill:
-    name: Forecast Reliability No Auto Fill
-    icon: mdi:calendar-lock
+  # On = fill in the measured monthly value automatically. On by default (set once by the
+  # automation at the bottom). Was up to 2026.11.6: Reliability No Auto Fill.
+  forecast_setting_reliability_auto_fill:
+    name: Forecast Reliability Auto Fill
+    icon: mdi:calendar-sync
+  # Internal: auto fill has been turned on by default once
+  forecast_setting_reliability_auto_fill_set:
+    name: Forecast Reliability Auto Fill Set
+    icon: mdi:robot
   dashboard_setting_show_forecasting:
     name: Show Forecasting On Dashboard
     icon: mdi:calendar-clock
@@ -388,6 +393,227 @@ sensor:
     precision: 2
 
 template:
+  # ---- Sensor detection ----
+  # Looks for sensors that fit the input fields of Forecasting Configuration (Basic):
+  #   solar remaining today / solar tomorrow: Solcast (solcast_solar), then Forecast.Solar
+  #   solar production counter: inverter integrations (SolarEdge, Enphase, Growatt, SMA, Huawei, Fronius,
+  #     GoodWe, ...) with a total counter in kWh; then HomeWizard/Shelly meters with solar/pv in the name
+  #   grid counters: HomeWizard P1, DSMR, P1 Monitor, SlimmeLezer (ESPHome), DSMR Reader; then
+  #     Shelly energy meters (Pro 3EM, 3EM, EM). Tariff 1 + 2 or per phase as a comma list.
+  # Per field an attribute with 'options' (all candidates, preferred first) and 'fill' (the
+  # candidate that may go into an empty field automatically: exactly one in the preferred group; a
+  # Shelly only when its name points to the grid). With more candidates the dashboard shows a
+  # dropdown (select.forecast_choose_...) that fills the field. State = number of fields with a choice.
+  - trigger:
+      - trigger: homeassistant
+        event: start
+      - trigger: event
+        event_type: entity_registry_updated
+      - trigger: time_pattern
+        minutes: "/10"
+    variables:
+      zn: "(zon|pv|solar|omvormer|inverter|panel|paneel)"
+      # Solar forecast: Solcast, otherwise Forecast.Solar (kWh sensors)
+      zf: >
+        {%- set ns = namespace(sc=[], fs=[]) -%}
+        {%- for e in integration_entities('solcast_solar') | select('match', 'sensor\\.') -%}
+          {%- if state_attr(e, 'unit_of_measurement') in ['kWh', 'Wh', 'MWh'] -%}{%- set ns.sc = ns.sc + [e] -%}{%- endif -%}
+        {%- endfor -%}
+        {%- for e in integration_entities('forecast_solar') | select('match', 'sensor\\.') -%}
+          {%- if state_attr(e, 'unit_of_measurement') in ['kWh', 'Wh', 'MWh'] -%}{%- set ns.fs = ns.fs + [e] -%}{%- endif -%}
+        {%- endfor -%}
+        {{ {'sc': ns.sc | sort, 'fs': ns.fs | sort} }}
+      k_solar_remaining: >
+        {%- set x = '(peak|piek|power|vermogen)' -%}
+        {%- set a = zf.sc | select('search', '(remaining|resterend|rest_)') | reject('search', x) | list -%}
+        {%- set b = zf.fs | select('search', '(remaining|resterend|rest_)') | reject('search', x) | list -%}
+        {{ {'options': a + b, 'fill': (a[0] if a | length == 1 else '') if a | length > 0 else (b[0] if b | length == 1 else '')} }}
+      k_solar_tomorrow: >
+        {%- set x = '(peak|piek|power|vermogen)' -%}
+        {%- set a = zf.sc | select('search', '(tomorrow|morgen)') | reject('search', x) | list -%}
+        {%- set b = zf.fs | select('search', '(tomorrow|morgen)') | reject('search', x) | list -%}
+        {{ {'options': a + b, 'fill': (a[0] if a | length == 1 else '') if a | length > 0 else (b[0] if b | length == 1 else '')} }}
+      # Solar production counter: total counter (kWh, total/total_increasing) of an inverter integration
+      k_solar_production: >
+        {%- set ja = '(lifetime|total|totaal|yield|opbrengst|productie|production|e_total|energy_total|ac_energy)' -%}
+        {%- set nee = '(today|vandaag|daily|_dag|week|month|maand|year|jaar|consum|verbruik|import|batter|charg|laden|grid|purchas|feed|tari|phase|fase)' -%}
+        {%- set ns = namespace(a=[], b=[]) -%}
+        {%- for m in ['solaredge', 'solaredge_modbus_multi', 'enphase_envoy', 'growatt_server', 'sma', 'huawei_solar', 'fusion_solar', 'fronius', 'goodwe', 'solax', 'solarman', 'solis', 'sungrow', 'sunsynk', 'deye', 'apsystems', 'hoymiles_wifi', 'omnik_inverter', 'enphase_envoy_custom'] -%}
+          {%- for e in integration_entities(m) | select('match', 'sensor\\.') -%}
+            {%- if state_attr(e, 'unit_of_measurement') in ['kWh', 'Wh', 'MWh'] and state_attr(e, 'state_class') in ['total', 'total_increasing'] and e is search(ja) and not e is search(nee) -%}
+              {%- set ns.a = ns.a + [e] -%}
+            {%- endif -%}
+          {%- endfor -%}
+        {%- endfor -%}
+        {%- for m in ['homewizard', 'shelly'] -%}
+          {%- for e in integration_entities(m) | select('match', 'sensor\\.') -%}
+            {%- set dn = (device_attr(device_id(e), 'name_by_user') or device_attr(device_id(e), 'name') or '') ~ '' -%}
+            {%- if state_attr(e, 'unit_of_measurement') in ['kWh', 'Wh', 'MWh'] and state_attr(e, 'state_class') in ['total', 'total_increasing'] and (e ~ ' ' ~ dn) | lower is search(zn) and not e is search('(tari|phase|fase|today|vandaag)') -%}
+              {%- set ns.b = ns.b + [e] -%}
+            {%- endif -%}
+          {%- endfor -%}
+        {%- endfor -%}
+        {%- set a = ns.a | unique | sort -%}{%- set b = ns.b | unique | sort | reject('in', a) | list -%}
+        {{ {'options': a + b, 'fill': (a[0] if a | length == 1 else '') if a | length > 0 else ''} }}
+      # Grid counters: P1 integrations (preferred), then Shelly energy meters
+      k_net: >
+        {%- set ns = namespace(ia=[], ea=[], ib=[], eb=[], inet=[], enet=[]) -%}
+        {%- set kwh = ['kWh', 'Wh', 'MWh'] -%}
+        {#- HomeWizard P1 (totaal import/export; geen kWh-meters of stekkers) -#}
+        {%- for e in integration_entities('homewizard') | select('match', 'sensor\\..*_(energy|energie)_(import|export)$') -%}
+          {%- set mdl = (device_attr(device_id(e), 'model') or '') ~ '' -%}
+          {%- set dn = (device_attr(device_id(e), 'name_by_user') or device_attr(device_id(e), 'name') or '') ~ '' -%}
+          {%- if (mdl == '' or mdl | lower is search('p1')) and not (e ~ ' ' ~ dn) | lower is search(zn) -%}
+            {%- if e is search('import$') -%}{%- set ns.ia = ns.ia + [e] -%}{%- else -%}{%- set ns.ea = ns.ea + [e] -%}{%- endif -%}
+          {%- endif -%}
+        {%- endfor -%}
+        {#- DSMR-integratie en P1 Monitor: tarief 1 + 2 / hoog + laag -#}
+        {%- for m in [['dsmr', 'tari'], ['p1_monitor', '(high|low|hoog|laag)$']] -%}
+          {%- set g = namespace(i=[], e=[]) -%}
+          {%- for e in integration_entities(m[0]) | select('match', 'sensor\\.') | select('search', m[1]) | sort -%}
+            {%- if state_attr(e, 'unit_of_measurement') in kwh -%}
+              {%- if e is search('(consum|verbruik|afgenom)') -%}{%- set g.i = g.i + [e] -%}
+              {%- elif e is search('(produc|terug|levering)') -%}{%- set g.e = g.e + [e] -%}{%- endif -%}
+            {%- endif -%}
+          {%- endfor -%}
+          {%- if g.i | length > 0 -%}{%- set ns.ia = ns.ia + [g.i | join(',')] -%}{%- endif -%}
+          {%- if g.e | length > 0 -%}{%- set ns.ea = ns.ea + [g.e | join(',')] -%}{%- endif -%}
+        {%- endfor -%}
+        {#- SlimmeLezer / ESPHome DSMR en DSMR Reader (MQTT): op naam, tarief 1 + 2 -#}
+        {%- set ids = states.sensor | map(attribute='entity_id') | list -%}
+        {%- for p in [['energy_consumed_tariff_1', 'i'], ['energy_produced_tariff_1', 'e'], ['dsmr_reading_electricity_delivered_1', 'i'], ['dsmr_reading_electricity_returned_1', 'e']] -%}
+          {%- for e in ids | select('search', p[0] ~ '$') -%}
+            {%- set grp = [e, e[:-1] ~ '2'] | select('in', ids) | join(',') -%}
+            {%- if p[1] == 'i' -%}{%- set ns.ia = ns.ia + [grp] -%}{%- else -%}{%- set ns.ea = ns.ea + [grp] -%}{%- endif -%}
+          {%- endfor -%}
+        {%- endfor -%}
+        {#- Shelly-energiemeters (Pro 3EM, 3EM, EM), per apparaat: totaal als dat er is, anders per fase -#}
+        {%- set dv = namespace(d={}) -%}
+        {%- for e in integration_entities('shelly') | select('match', 'sensor\\.') -%}
+          {%- set d = device_id(e) -%}
+          {%- if d and ((device_attr(d, 'model') or '') ~ '') is search('EM') and state_attr(e, 'unit_of_measurement') in kwh -%}
+            {%- set dv.d = dict(dv.d, **{d: (dv.d[d] if d in dv.d else []) + [e]}) -%}
+          {%- endif -%}
+        {%- endfor -%}
+        {%- for d in dv.d -%}
+          {%- set dn = ((device_attr(d, 'name_by_user') or device_attr(d, 'name') or '') ~ '') | lower -%}
+          {%- set l = dv.d[d] | sort -%}
+          {%- if not (dn ~ ' ' ~ l | join(' ')) is search(zn) -%}
+            {%- set imp = l | reject('search', '(return|terug)') | list -%}
+            {%- set exp = l | select('search', '(return|terug)') | list -%}
+            {%- set ti = imp | select('search', 'total') | reject('search', '(phase|fase|_[abc]_)') | list -%}
+            {%- set te = exp | select('search', 'total') | reject('search', '(phase|fase|_[abc]_)') | list -%}
+            {%- set imp = (ti if ti | length > 0 else imp) | join(',') -%}
+            {%- set exp = (te if te | length > 0 else exp) | join(',') -%}
+            {%- set net = dn is search('(net|grid|meter|p1|hoofd|main)') -%}
+            {%- if imp != '' -%}{%- set ns.ib = ns.ib + [imp] -%}{%- if net -%}{%- set ns.inet = ns.inet + [imp] -%}{%- endif -%}{%- endif -%}
+            {%- if exp != '' -%}{%- set ns.eb = ns.eb + [exp] -%}{%- if net -%}{%- set ns.enet = ns.enet + [exp] -%}{%- endif -%}{%- endif -%}
+          {%- endif -%}
+        {%- endfor -%}
+        {%- set ia = ns.ia | unique | list -%}{%- set ea = ns.ea | unique | list -%}
+        {%- set ib = ns.ib | unique | reject('in', ia) | list -%}{%- set eb = ns.eb | unique | reject('in', ea) | list -%}
+        {{ {'i': {'options': ia + ib, 'fill': (ia[0] if ia | length == 1 else '') if ia | length > 0 else (ns.inet[0] if ib | length == 1 and ns.inet | length == 1 else '')},
+            'e': {'options': ea + eb, 'fill': (ea[0] if ea | length == 1 else '') if ea | length > 0 else (ns.enet[0] if eb | length == 1 and ns.enet | length == 1 else '')}} }}
+    sensor:
+      - name: "Forecast Sensor Candidates"
+        unique_id: forecast_sensor_candidates
+        icon: mdi:magnify-scan
+        state: >
+          {{ [k_solar_remaining.options | count, k_solar_tomorrow.options | count, k_solar_production.options | count, k_net.i.options | count, k_net.e.options | count] | select('gt', 1) | list | length }}
+        attributes:
+          solar_remaining: "{{ k_solar_remaining }}"
+          solar_tomorrow: "{{ k_solar_tomorrow }}"
+          solar_production: "{{ k_solar_production }}"
+          grid_import: "{{ k_net.i }}"
+          grid_export: "{{ k_net.e }}"
+  # Dropdowns when more than one sensor is found: choosing writes the sensor into the input field
+  # (the field can still be changed by hand). Only available with more than one candidate.
+  - select:
+      - name: "Forecast Choose Solar Remaining Today Sensor"
+        unique_id: forecast_choose_solar_remaining_today_sensor
+        icon: mdi:form-dropdown
+        availability: "{{ ((state_attr('sensor.forecast_sensor_candidates', 'solar_remaining') or {}).options or []) | length > 1 }}"
+        state: >
+          {%- set v = states('input_text.forecast_setting_solar_remaining_today_sensor') | trim | lower | replace(' ', '') -%}
+          {{ v if v not in ['', 'unknown', 'unavailable'] else none }}
+        options: >
+          {%- set l = (state_attr('sensor.forecast_sensor_candidates', 'solar_remaining') or {}).options or [] -%}
+          {%- set v = states('input_text.forecast_setting_solar_remaining_today_sensor') | trim | lower | replace(' ', '') -%}
+          {{ l + ([v] if v not in l and v not in ['', 'unknown', 'unavailable'] else []) }}
+        select_option:
+          - action: input_text.set_value
+            target:
+              entity_id: input_text.forecast_setting_solar_remaining_today_sensor
+            data:
+              value: "{{ option }}"
+      - name: "Forecast Choose Solar Tomorrow Sensor"
+        unique_id: forecast_choose_solar_tomorrow_sensor
+        icon: mdi:form-dropdown
+        availability: "{{ ((state_attr('sensor.forecast_sensor_candidates', 'solar_tomorrow') or {}).options or []) | length > 1 }}"
+        state: >
+          {%- set v = states('input_text.forecast_setting_solar_tomorrow_sensor') | trim | lower | replace(' ', '') -%}
+          {{ v if v not in ['', 'unknown', 'unavailable'] else none }}
+        options: >
+          {%- set l = (state_attr('sensor.forecast_sensor_candidates', 'solar_tomorrow') or {}).options or [] -%}
+          {%- set v = states('input_text.forecast_setting_solar_tomorrow_sensor') | trim | lower | replace(' ', '') -%}
+          {{ l + ([v] if v not in l and v not in ['', 'unknown', 'unavailable'] else []) }}
+        select_option:
+          - action: input_text.set_value
+            target:
+              entity_id: input_text.forecast_setting_solar_tomorrow_sensor
+            data:
+              value: "{{ option }}"
+      - name: "Forecast Choose Solar Production Sensor"
+        unique_id: forecast_choose_solar_production_sensor
+        icon: mdi:form-dropdown
+        availability: "{{ ((state_attr('sensor.forecast_sensor_candidates', 'solar_production') or {}).options or []) | length > 1 }}"
+        state: >
+          {%- set v = states('input_text.forecast_setting_solar_production_sensor') | trim | lower | replace(' ', '') -%}
+          {{ v if v not in ['', 'unknown', 'unavailable'] else none }}
+        options: >
+          {%- set l = (state_attr('sensor.forecast_sensor_candidates', 'solar_production') or {}).options or [] -%}
+          {%- set v = states('input_text.forecast_setting_solar_production_sensor') | trim | lower | replace(' ', '') -%}
+          {{ l + ([v] if v not in l and v not in ['', 'unknown', 'unavailable'] else []) }}
+        select_option:
+          - action: input_text.set_value
+            target:
+              entity_id: input_text.forecast_setting_solar_production_sensor
+            data:
+              value: "{{ option }}"
+      - name: "Forecast Choose Grid Import Counter"
+        unique_id: forecast_choose_grid_import_counter
+        icon: mdi:form-dropdown
+        availability: "{{ ((state_attr('sensor.forecast_sensor_candidates', 'grid_import') or {}).options or []) | length > 1 }}"
+        state: >
+          {%- set v = states('input_text.forecast_setting_grid_import_counter_sensor') | trim | lower | replace(' ', '') -%}
+          {{ v if v not in ['', 'unknown', 'unavailable'] else none }}
+        options: >
+          {%- set l = (state_attr('sensor.forecast_sensor_candidates', 'grid_import') or {}).options or [] -%}
+          {%- set v = states('input_text.forecast_setting_grid_import_counter_sensor') | trim | lower | replace(' ', '') -%}
+          {{ l + ([v] if v not in l and v not in ['', 'unknown', 'unavailable'] else []) }}
+        select_option:
+          - action: input_text.set_value
+            target:
+              entity_id: input_text.forecast_setting_grid_import_counter_sensor
+            data:
+              value: "{{ option }}"
+      - name: "Forecast Choose Grid Export Counter"
+        unique_id: forecast_choose_grid_export_counter
+        icon: mdi:form-dropdown
+        availability: "{{ ((state_attr('sensor.forecast_sensor_candidates', 'grid_export') or {}).options or []) | length > 1 }}"
+        state: >
+          {%- set v = states('input_text.forecast_setting_grid_export_counter_sensor') | trim | lower | replace(' ', '') -%}
+          {{ v if v not in ['', 'unknown', 'unavailable'] else none }}
+        options: >
+          {%- set l = (state_attr('sensor.forecast_sensor_candidates', 'grid_export') or {}).options or [] -%}
+          {%- set v = states('input_text.forecast_setting_grid_export_counter_sensor') | trim | lower | replace(' ', '') -%}
+          {{ l + ([v] if v not in l and v not in ['', 'unknown', 'unavailable'] else []) }}
+        select_option:
+          - action: input_text.set_value
+            target:
+              entity_id: input_text.forecast_setting_grid_export_counter_sensor
+            data:
+              value: "{{ option }}"
   # Grid counters recognised automatically (field empty, P1 meter found): the dashboard then hides
   # the input field and shows which sensor is used (attribute sensors).
   # Export now at solar surplus (from the planner); the automation uses the state with 'for'
@@ -2728,7 +2954,7 @@ template:
           pre_discharge_grid_dropped: "{{ pd_grid_dropped }}"
           solar_surplus_on: "{{ sx_on }}"
           solar_surplus_now: "{{ sx_now }}"
-          solar_surplus_kwh: "{{ (sx_slots | map(attribute='kwh') | sum) | round(2) }}"
+          solar_surplus_export_kwh: "{{ (sx_slots | map(attribute='kwh') | sum) | round(2) }}"
           solar_surplus_slots: "{{ sx_slots }}"
           solar_surplus_sun_from: "{{ sx_solar.s | timestamp_custom('%Y-%m-%d %H:%M', true) if sx_solar is mapping else none }}"
           solar_surplus_sun_kwh: "{{ sx_solar.kwh if sx_solar is mapping else none }}"
@@ -2957,6 +3183,30 @@ automation:
             - input_boolean.forecast_setting_calibration_charging
             - input_boolean.forecast_setting_calibration_charging_set
 
+  - id: forecast_reliability_auto_fill_default
+    alias: Forecast Reliability Auto Fill Default On
+    description: >-
+      Forecasting 2026.11.7 - Turns Fill in the monthly value automatically on once (after installation or upgrade).
+    mode: single
+    triggers:
+      - trigger: homeassistant
+        event: start
+      - trigger: state
+        entity_id: input_boolean.forecast_setting_reliability_auto_fill_set
+        to: 'off'
+    conditions:
+      - condition: state
+        entity_id: input_boolean.forecast_setting_reliability_auto_fill_set
+        state: 'off'
+    actions:
+      - delay:
+          seconds: 5
+      - action: input_boolean.turn_on
+        target:
+          entity_id:
+            - input_boolean.forecast_setting_reliability_auto_fill
+            - input_boolean.forecast_setting_reliability_auto_fill_set
+
   # Fields that used to have "0 = default": if one is 0, fill in the default value (visible in the field).
   - id: forecast_default_values
     alias: Forecast Default Values
@@ -2990,76 +3240,53 @@ automation:
                   data:
                     value: "{{ repeat.item.v }}"
 
-  # Fill in the solar forecast sensors automatically when the field is empty: Solcast (solcast_solar),
-  # otherwise Forecast.Solar. Only with exactly one candidate (remaining today / tomorrow, in kWh); a
-  # field you filled in yourself is kept. That way a new installation works without filling in.
-  - id: forecast_solar_sensors_fill
-    alias: Forecast Solar Sensors Fill
+  # Fill empty sensor fields automatically with the sensor found (see Sensor detection at the
+  # template sensors): only when there is exactly one clear candidate, and never over something you
+  # entered yourself. A new installation works without filling in. Logbook line per field.
+  - id: forecast_sensors_fill
+    alias: Forecast Sensors Fill Automatically
     description: >-
-      Forecasting 2026.11.7 - Fills in the solar forecast sensors (Solcast or Forecast.Solar) when the field is empty.
-    mode: single
+      Forecasting 2026.11.7 - Fills empty sensor fields (solar forecast, solar production counter, grid counters) when there is exactly one clear candidate.
+    mode: queued
+    max: 3
     triggers:
-      - trigger: homeassistant
-        event: start
+      - trigger: state
+        entity_id: sensor.forecast_sensor_candidates
       - trigger: state
         entity_id:
           - input_text.forecast_setting_solar_remaining_today_sensor
           - input_text.forecast_setting_solar_tomorrow_sensor
+          - input_text.forecast_setting_solar_production_sensor
+          - input_text.forecast_setting_grid_import_counter_sensor
+          - input_text.forecast_setting_grid_export_counter_sensor
         to: ''
-      - trigger: time_pattern
-        hours: "/1"
-        minutes: 7
-    conditions:
-      - condition: template
-        value_template: "{{ states('input_text.forecast_setting_solar_remaining_today_sensor') | trim in ['', 'unknown'] or states('input_text.forecast_setting_solar_tomorrow_sensor') | trim in ['', 'unknown'] }}"
     actions:
       - delay:
-          seconds: 30
-      - variables:
-          # Solcast first; without Solcast Forecast.Solar (no half-hour detail)
-          candidates: >
-            {%- set ns = namespace(sc=[], fs=[]) -%}
-            {%- for e in integration_entities('solcast_solar') | select('match', 'sensor\\.') -%}
-              {%- if state_attr(e, 'unit_of_measurement') in ['kWh', 'Wh', 'MWh'] -%}{%- set ns.sc = ns.sc + [e] -%}{%- endif -%}
-            {%- endfor -%}
-            {%- for e in integration_entities('forecast_solar') | select('match', 'sensor\\.') -%}
-              {%- if state_attr(e, 'unit_of_measurement') in ['kWh', 'Wh', 'MWh'] -%}{%- set ns.fs = ns.fs + [e] -%}{%- endif -%}
-            {%- endfor -%}
-            {{ ns.sc if ns.sc | length > 0 else ns.fs }}
-          remaining: >
-            {%- set l = candidates | select('search', '(remaining|resterend|rest_)') | reject('search', '(peak|piek|power|vermogen)') | list -%}
-            {{ l[0] if l | length == 1 else '' }}
-          tomorrow: >
-            {%- set l = candidates | select('search', '(tomorrow|morgen)') | reject('search', '(peak|piek|power|vermogen)') | list -%}
-            {{ l[0] if l | length == 1 else '' }}
-      - if:
-          - condition: template
-            value_template: "{{ remaining != '' and states('input_text.forecast_setting_solar_remaining_today_sensor') | trim in ['', 'unknown'] }}"
-        then:
-          - action: input_text.set_value
-            target:
-              entity_id: input_text.forecast_setting_solar_remaining_today_sensor
-            data:
-              value: "{{ remaining }}"
-          - action: logbook.log
-            data:
-              name: Zendure Forecasting
-              message: "Solar remaining today sensor filled in automatically: {{ remaining }}"
-              entity_id: input_text.forecast_setting_solar_remaining_today_sensor
-      - if:
-          - condition: template
-            value_template: "{{ tomorrow != '' and states('input_text.forecast_setting_solar_tomorrow_sensor') | trim in ['', 'unknown'] }}"
-        then:
-          - action: input_text.set_value
-            target:
-              entity_id: input_text.forecast_setting_solar_tomorrow_sensor
-            data:
-              value: "{{ tomorrow }}"
-          - action: logbook.log
-            data:
-              name: Zendure Forecasting
-              message: "Solar tomorrow sensor filled in automatically: {{ tomorrow }}"
-              entity_id: input_text.forecast_setting_solar_tomorrow_sensor
+          seconds: 5
+      - repeat:
+          for_each:
+            - {key: solar_remaining, field: input_text.forecast_setting_solar_remaining_today_sensor, label: "Solar remaining today sensor"}
+            - {key: solar_tomorrow, field: input_text.forecast_setting_solar_tomorrow_sensor, label: "Solar tomorrow sensor"}
+            - {key: solar_production, field: input_text.forecast_setting_solar_production_sensor, label: "Solar production sensor"}
+            - {key: grid_import, field: input_text.forecast_setting_grid_import_counter_sensor, label: "Grid import counter"}
+            - {key: grid_export, field: input_text.forecast_setting_grid_export_counter_sensor, label: "Grid export counter"}
+          sequence:
+            - variables:
+                w: "{{ (state_attr('sensor.forecast_sensor_candidates', repeat.item.key) or {}).fill | default('', true) }}"
+            - if:
+                - condition: template
+                  value_template: "{{ w != '' and states(repeat.item.field) | trim in ['', 'unknown'] }}"
+              then:
+                - action: input_text.set_value
+                  target:
+                    entity_id: "{{ repeat.item.field }}"
+                  data:
+                    value: "{{ w }}"
+                - action: logbook.log
+                  data:
+                    name: Zendure Forecasting
+                    message: "{{ repeat.item.label }} filled in automatically: {{ w }}"
+                    entity_id: "{{ repeat.item.field }}"
 
   # Clean up input fields with an entity: on a phone autocorrect easily turns them into
   # "Sensor .solcast_..." (capital letter, space). Such a field is then not recognised. This
@@ -3141,7 +3368,7 @@ automation:
       - condition: template
         value_template: >-
           {{ trigger.to_state.attributes.finalised is mapping and (trigger.to_state.attributes.finalised.pct | int(0)) > 0
-             and not is_state('input_boolean.forecast_setting_reliability_no_auto_fill', 'on') }}
+             and not is_state('input_boolean.forecast_setting_reliability_auto_fill', 'off') }}
     actions:
       - variables:
           a: "{{ trigger.to_state.attributes.finalised }}"

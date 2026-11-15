@@ -30,12 +30,19 @@ Versies volgen `jaar.maand.volgnummer`; het volgnummer begint elke maand bij 1. 
 - Plan vandaag: regel **Terugleveren vóór de zon** met kWh, tijden, prijs en geschatte opbrengst. De Plan Tijdlijn toont het terugleveren nog niet.
 
 **Configuratie makkelijker**
-- **Zon-forecast sensoren automatisch invullen:** is *Zon resterend vandaag sensor* of *Zon morgen sensor* leeg, dan vult de set Solcast in (anders Forecast.Solar), als er precies één passende sensor is. Een zelf ingevuld veld blijft staan; elke invulling staat in het logboek.
+- **Sensoren automatisch herkennen:** de set zoekt zelf de sensoren voor de vijf sensorvelden in Forecasting Configuratie (Basis):
+  - *Zon resterend vandaag* en *Zon morgen*: Solcast, anders Forecast.Solar.
+  - *Zonnepanelen productie sensor*: de totaal-teller (kWh) van een omvormer-integratie (SolarEdge, Enphase, Growatt, SMA, Huawei, Fronius, GoodWe, Solax, Solarman, APsystems, Hoymiles e.a.), daarna HomeWizard- of Shelly-meters met zon/pv/omvormer in de naam.
+  - *Net import/export teller*: HomeWizard P1, DSMR-integratie, P1 Monitor, SlimmeLezer (ESPHome), DSMR Reader; daarna Shelly-energiemeters (Pro 3EM, 3EM, EM). Tarief 1 + 2 of per fase als komma-lijst.
+  - **Eén kandidaat:** een leeg veld wordt ingevuld met de volledige sensor (een Shelly alleen als de naam op het net wijst, bv. *Hoofdmeter*). Een zelf ingevuld veld blijft staan; elke invulling staat in het logboek.
+  - **Meer kandidaten:** onder het veld verschijnt een keuzelijst **↳ Kies uit de gevonden sensoren**; kiezen schrijft de sensor in het veld.
+  - Nieuw: `sensor.forecast_sensor_kandidaten` (per veld de kandidaten, ook in de diagnose-export), `select.forecast_kies_…` (5 keuzelijsten), automatisering `forecast_sensoren_invullen` (vervangt het invullen van alleen de zon-sensoren uit de testversie).
 - **Net-tellers:** worden ze automatisch herkend (HomeWizard, SlimmeLezer, DSMR), dan verbergt het dashboard de invoervelden en toont het welke sensor gebruikt wordt (*Net import teller (automatisch herkend)*). Nieuwe `binary_sensor.forecast_net_import_teller_automatisch` en `..._export_...` (attribuut `sensoren`).
 - **Geen "unknown" meer in lege invoervelden:** een veld dat nooit is ingevuld wordt leeg gemaakt (niet bij Gielz' eigen velden). Zon-velden en net-tellers die nog leeg zijn, tonen **(graag invullen)**.
 - **Extra planner laadmarge %** heette *Batterij laadmarge %*.
 - Het blok heet nu **Forecasting Configuratie (Accu ontladen en Negatieve Prijs)**. Bovenaan staat **Accu ontladen bij** met de schakelaars **Negatieve prijzen** (was *Vooraf ontladen*, zelfde entiteit) en **Zonoverschot**; daaronder **Negatieve prijs** met *Niet terugleveren bij negatieve prijs*.
 - **Geen "(0 = …)" meer:** de standaardwaarde staat nu echt in het veld: *Kalibratie na dagen* 14, EV *Laadvermogen kW* 2,3, *Drempel W* 300, *Klaar om* 07:00, HVAC *Drempel vermogen W* 50, *Betrouwbaarheid zonvoorspelling %* 100. Die 100 telt niet als *ingevuld*: zonder eigen waarde rekent vooraf ontladen nog met 75% van het zon-overschot. De maandvelden heten nu *Januari %* enz.; 0 blijft daar *de algemene waarde*. Zet je een veld op 0, dan komt de standaardwaarde terug (automatiseringen `forecast_standaardwaarden`, `ev_standaardwaarden`, `hvac_standaardwaarden`).
+- **Maandwaarde automatisch invullen** (was *Maandwaarde niet automatisch invullen*, `input_boolean.forecast_betrouwbaarheid_automatisch`) staat standaard aan. Had je de oude schakelaar aan (niet invullen), zet de nieuwe dan na de upgrade uit.
 - **Kalibratieladen** is nu een aan-schakelaar (was *Kalibratieladen uit*) en staat standaard aan, ook als je hem eerder uit had gezet: zet hem na de upgrade zo nodig opnieuw uit.
 - **Melding ontbrekende kaarten:** mist apexcharts-card, card-mod of button-card (herkend via HACS), dan zegt het dashboard welke je moet installeren.
 - **Upgrade-melding:** past het dashboard niet bij de versie van de pakketten, dan zegt het plan wat je moet vervangen (dashboard plakken of pakketten vervangen). Staat er een nieuwe versie op GitHub, dan staat dat er ook.

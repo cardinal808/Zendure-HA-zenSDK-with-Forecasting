@@ -1980,7 +1980,7 @@ actions:
           - action: logbook.log
             data:
               message: >-
-                ☀️Dynamic Smart Matching + Forecasting export started (solar surplus) — {{ state_attr('sensor.zendure_forecast_plan', 'solar_surplus_kwh') }} kWh planned before the sun
+                ☀️Dynamic Smart Matching + Forecasting export started (solar surplus) — {{ state_attr('sensor.zendure_forecast_plan', 'solar_surplus_export_kwh') }} kWh planned before the sun
               entity_id: input_select.zendure_operation_mode
               name: " "
           - wait_for_trigger:
