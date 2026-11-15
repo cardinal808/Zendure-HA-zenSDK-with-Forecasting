@@ -14,6 +14,29 @@ Versions follow `year.month.sequence`; the sequence restarts at 1 every month. E
 - **Savings, fixed contract:** while net metering applies, export counts at the supply tariff. The field is now called **Fixed contract feed-in tariff (without net metering)**: enter your contract's feed-in tariff for 2027.
 - Net metering only covers your annual consumption. If you export more than you import over the year, choose *No net metering*.
 
+**Easier configuration**
+- **Solar forecast sensors filled in automatically:** if *Solar remaining today sensor* or *Solar tomorrow sensor* is empty, the set fills in Solcast (otherwise Forecast.Solar), when there is exactly one matching sensor. A field you filled in yourself is kept; every fill-in is in the logbook.
+- **Grid counters:** when they are detected automatically (HomeWizard, SlimmeLezer, DSMR), the dashboard hides the input fields and shows which sensor is used (*Grid import counter (detected automatically)*). New `binary_sensor.forecast_grid_import_counter_automatic` and `..._export_...` (attribute `sensors`).
+- **No more "unknown" in empty input fields:** a field that was never filled in is emptied (not Gielz's own fields). Solar fields and grid counters that are still empty show **(please fill in)**.
+- **Extra planner charge margin %** was called *Battery charge margin %*.
+- **Calibration charging** is now an on switch (was *Calibration charging off*) and is on by default, also if you turned it off before: turn it off again after the upgrade if needed.
+- **Missing cards notice:** if apexcharts-card, card-mod or button-card is missing (detected via HACS), the dashboard says which to install.
+- **Upgrade notice:** if the dashboard does not match the version of the packages, the plan says what to replace (paste the dashboard or replace the packages). If a new version is on GitHub, it says so too.
+
+**Measured charge power: 90th percentile**
+- The statistic counts per change, not per minute: ramp-up and charging with changing solar gave many low readings, full power few. The median therefore came out too low (e.g. 1.4 kW for a real 2.4 kW). Now the 90th percentile. *Charge from the grid* adds when it uses the measured power and what is configured.
+
+**Clearer plan on the dashboard**
+- *Today's plan runs until* without the fixed explanation after it.
+- *Expected usage until end of bridge*: now split into battery now + solar to the battery + planned charging (after losses), and how much the house buys directly.
+- *Price now* removed (already in the chart and badges); when the battery holds, the reason is in the line **Battery is holding now**.
+- **Planning** and **Tomorrow**: clear that it plans again after midnight for tomorrow's expensive hours, and that tomorrow's estimate replaces tonight's charging.
+- **Collected data:** new line **Usage per day** (kWh per weekday from the profile). The own profile per weekday shows how many weeks have been measured (*Mon 1/3*) instead of *0 of 24 learned*.
+
+**Charts**
+- **Plan Timeline:** the columns now sit in their own quarter hour (before they were centred on the start, half a column early compared with the usage line and the time). The time labels at the bottom are annotations at the exact time (03:00, 06:00 …, day name at midnight); before, the bottom row could shift (e.g. around 12:00).
+- **Usage Profile:** the column of an hour sits between that hour and the next.
+
 **Upgrading**
 - Replace all files, restart and paste the dashboard again. Check at Negative Price: *Net metering* = Automatic (or No net metering outside the Netherlands), *Market price sensor is* = Including VAT (with the Nordpool sensor `_5_10_021`). Enter the fixed feed-in tariff for 2027 at Savings.
 

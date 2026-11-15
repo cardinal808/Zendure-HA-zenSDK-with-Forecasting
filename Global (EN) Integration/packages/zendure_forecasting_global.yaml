@@ -56,7 +56,7 @@ input_text:
 
 input_number:
   forecast_setting_charge_margin:
-    name: Forecast Battery Charge Margin
+    name: Forecast Extra Planner Charge Margin
     icon: mdi:battery-plus-variant
     min: 0
     max: 50
@@ -198,10 +198,15 @@ input_boolean:
     name: Forecast Smart Hold Set
     icon: mdi:robot
   # Shows the 12 monthly reliability fields on the dashboard
-  # Turn calibration charging off (on by default)
-  forecast_setting_calibration_off:
-    name: Forecast Calibration Charging Off
+  # Calibration charging: after this many days without 100%, charge full once. On by default
+  # (set once by the automation at the bottom). Up to 2026.11.6: Calibration Charging Off.
+  forecast_setting_calibration_charging:
+    name: Forecast Calibration Charging
     icon: mdi:battery-sync-outline
+  # Internal: calibration charging has been turned on by default once
+  forecast_setting_calibration_charging_set:
+    name: Forecast Calibration Charging Set
+    icon: mdi:robot
   forecast_setting_show_reliability_per_month:
     name: Forecast Show Reliability Per Month
     icon: mdi:calendar-month
@@ -302,8 +307,11 @@ sensor:
     name: "Forecast Measured Charge Power"
     unique_id: forecast_measured_charge_power
     entity_id: sensor.forecast_grid_charge_power
-    # Median: a few low readings (e.g. at the end of a charge) do not pull it down
-    state_characteristic: median
+    # 90th percentile: the statistic counts per change, not per minute. Ramp-up and charging with changing
+    # solar give many low readings, full power few (it stays the same). The median therefore came out too
+    # low (e.g. 1.4 kW for a real 2.4 kW); the 90th percentile is at the power it really reaches.
+    state_characteristic: percentile
+    percentile: 90
     max_age:
       days: 14
     sampling_size: 3000
@@ -380,6 +388,27 @@ sensor:
     precision: 2
 
 template:
+  # Grid counters recognised automatically (field empty, P1 meter found): the dashboard then hides
+  # the input field and shows which sensor is used (attribute sensors).
+  - binary_sensor:
+      - name: "Forecast Grid Import Counter Automatic"
+        unique_id: forecast_grid_import_counter_automatic
+        icon: mdi:transmission-tower-import
+        state: >
+          {{ states('input_text.forecast_setting_grid_import_counter_sensor') | trim in ['', 'unknown']
+             and (state_attr('sensor.forecast_counter_grid_import', 'meter_sensors') or []) | length > 0
+             and (state_attr('sensor.forecast_counter_grid_import', 'source') or '') | trim == 'P1 meter (kWh counters)' }}
+        attributes:
+          sensors: "{{ (state_attr('sensor.forecast_counter_grid_import', 'meter_sensors') or []) | join(', ') }}"
+      - name: "Forecast Grid Export Counter Automatic"
+        unique_id: forecast_grid_export_counter_automatic
+        icon: mdi:transmission-tower-export
+        state: >
+          {{ states('input_text.forecast_setting_grid_export_counter_sensor') | trim in ['', 'unknown']
+             and (state_attr('sensor.forecast_counter_grid_export', 'meter_sensors') or []) | length > 0
+             and (state_attr('sensor.forecast_counter_grid_export', 'source') or '') | trim == 'P1 meter (kWh counters)' }}
+        attributes:
+          sensors: "{{ (state_attr('sensor.forecast_counter_grid_export', 'meter_sensors') or []) | join(', ') }}"
   # Solar forecast reliability that applies now: the month value, otherwise the general one, otherwise 100%.
   # The binary sensor decides on the dashboard which row is visible.
   - binary_sensor:
@@ -1199,7 +1228,7 @@ template:
           - input_boolean.forecast_setting_hold_discharge_in_dip
           - input_boolean.forecast_setting_smart_hold
           - sensor.forecast_measured_charge_power
-          - input_boolean.forecast_setting_calibration_off
+          - input_boolean.forecast_setting_calibration_charging
           - input_number.forecast_setting_calibration_days
           - sensor.zendure_last_calibration_days
           - input_number.dynamic_setting_minimal_spread
@@ -2096,7 +2125,7 @@ template:
       cal_days: "{{ states('sensor.zendure_last_calibration_days') | float(-1) }}"
       cal_threshold: "{{ (states('input_number.forecast_setting_calibration_days') | float(0)) if (states('input_number.forecast_setting_calibration_days') | float(0)) > 0 else c_calibration_days }}"
       cal_wait_from: "{{ (cal_threshold / 2) | round(0, 'ceil') }}"
-      cal_on: "{{ not is_state('input_boolean.forecast_setting_calibration_off', 'on') and cal_days >= 0 and cap > 0 }}"
+      cal_on: "{{ is_state('input_boolean.forecast_setting_calibration_charging', 'on') and cal_days >= 0 and cap > 0 }}"
       cal_max_ok: "{{ soc_max >= 100 }}"
       # Does the sun fill the battery today (rest of the day) or tomorrow (surplus ≥ 80% of usable capacity)?
       cal_sun_today: "{{ room > 0 and ([solar_rest - direct_rest_kwh - ev_solar_today_kwh, 0] | max) * eff_in >= room }}"
@@ -2754,6 +2783,102 @@ automation:
             - input_boolean.forecast_setting_smart_hold
             - input_boolean.forecast_setting_smart_hold_set
 
+  # Calibration charging is on by default (same approach as smart hold: turn it on once).
+  - id: forecast_calibration_charging_default
+    alias: Forecast Calibration Charging Default On
+    description: >-
+      Forecasting 2026.11.7 - Turns Calibration charging on once (after installation or upgrade).
+    mode: single
+    triggers:
+      - trigger: homeassistant
+        event: start
+      - trigger: state
+        entity_id: input_boolean.forecast_setting_calibration_charging_set
+        to: 'off'
+    conditions:
+      - condition: state
+        entity_id: input_boolean.forecast_setting_calibration_charging_set
+        state: 'off'
+    actions:
+      - delay:
+          seconds: 5
+      - action: input_boolean.turn_on
+        target:
+          entity_id:
+            - input_boolean.forecast_setting_calibration_charging
+            - input_boolean.forecast_setting_calibration_charging_set
+
+  # Fill in the solar forecast sensors automatically when the field is empty: Solcast (solcast_solar),
+  # otherwise Forecast.Solar. Only with exactly one candidate (remaining today / tomorrow, in kWh); a
+  # field you filled in yourself is kept. That way a new installation works without filling in.
+  - id: forecast_solar_sensors_fill
+    alias: Forecast Solar Sensors Fill
+    description: >-
+      Forecasting 2026.11.7 - Fills in the solar forecast sensors (Solcast or Forecast.Solar) when the field is empty.
+    mode: single
+    triggers:
+      - trigger: homeassistant
+        event: start
+      - trigger: state
+        entity_id:
+          - input_text.forecast_setting_solar_remaining_today_sensor
+          - input_text.forecast_setting_solar_tomorrow_sensor
+        to: ''
+      - trigger: time_pattern
+        hours: "/1"
+        minutes: 7
+    conditions:
+      - condition: template
+        value_template: "{{ states('input_text.forecast_setting_solar_remaining_today_sensor') | trim in ['', 'unknown'] or states('input_text.forecast_setting_solar_tomorrow_sensor') | trim in ['', 'unknown'] }}"
+    actions:
+      - delay:
+          seconds: 30
+      - variables:
+          # Solcast first; without Solcast Forecast.Solar (no half-hour detail)
+          candidates: >
+            {%- set ns = namespace(sc=[], fs=[]) -%}
+            {%- for e in integration_entities('solcast_solar') | select('match', 'sensor\\.') -%}
+              {%- if state_attr(e, 'unit_of_measurement') in ['kWh', 'Wh', 'MWh'] -%}{%- set ns.sc = ns.sc + [e] -%}{%- endif -%}
+            {%- endfor -%}
+            {%- for e in integration_entities('forecast_solar') | select('match', 'sensor\\.') -%}
+              {%- if state_attr(e, 'unit_of_measurement') in ['kWh', 'Wh', 'MWh'] -%}{%- set ns.fs = ns.fs + [e] -%}{%- endif -%}
+            {%- endfor -%}
+            {{ ns.sc if ns.sc | length > 0 else ns.fs }}
+          remaining: >
+            {%- set l = candidates | select('search', '(remaining|resterend|rest_)') | reject('search', '(peak|piek|power|vermogen)') | list -%}
+            {{ l[0] if l | length == 1 else '' }}
+          tomorrow: >
+            {%- set l = candidates | select('search', '(tomorrow|morgen)') | reject('search', '(peak|piek|power|vermogen)') | list -%}
+            {{ l[0] if l | length == 1 else '' }}
+      - if:
+          - condition: template
+            value_template: "{{ remaining != '' and states('input_text.forecast_setting_solar_remaining_today_sensor') | trim in ['', 'unknown'] }}"
+        then:
+          - action: input_text.set_value
+            target:
+              entity_id: input_text.forecast_setting_solar_remaining_today_sensor
+            data:
+              value: "{{ remaining }}"
+          - action: logbook.log
+            data:
+              name: Zendure Forecasting
+              message: "Solar remaining today sensor filled in automatically: {{ remaining }}"
+              entity_id: input_text.forecast_setting_solar_remaining_today_sensor
+      - if:
+          - condition: template
+            value_template: "{{ tomorrow != '' and states('input_text.forecast_setting_solar_tomorrow_sensor') | trim in ['', 'unknown'] }}"
+        then:
+          - action: input_text.set_value
+            target:
+              entity_id: input_text.forecast_setting_solar_tomorrow_sensor
+            data:
+              value: "{{ tomorrow }}"
+          - action: logbook.log
+            data:
+              name: Zendure Forecasting
+              message: "Solar tomorrow sensor filled in automatically: {{ tomorrow }}"
+              entity_id: input_text.forecast_setting_solar_tomorrow_sensor
+
   # Clean up input fields with an entity: on a phone autocorrect easily turns them into
   # "Sensor .solcast_..." (capital letter, space). Such a field is then not recognised. This
   # automation converts it to lower case without spaces (also for comma lists).
@@ -2796,6 +2921,9 @@ automation:
               {%- if oud not in ['unknown', 'unavailable'] -%}
                 {%- set nieuw = oud | lower | regex_replace('\\s+', '') -%}
                 {%- if nieuw != oud -%}{%- set ns.l = ns.l + [{'e': e, 'oud': oud, 'nieuw': nieuw}] -%}{%- endif -%}
+              {#- Never filled in: HA then shows "unknown" in the field. Empty it (not for Gielz's own fields). -#}
+              {%- elif oud == 'unknown' and state_attr(e, 'friendly_name') is not none and e not in ['input_text.home_energy_setting_meter_sensor', 'input_text.dynamic_setting_nordpool_sensor'] -%}
+                {%- set ns.l = ns.l + [{'e': e, 'oud': oud, 'nieuw': ''}] -%}
               {%- endif -%}
             {%- endfor -%}
             {{ ns.l }}
@@ -2807,11 +2935,15 @@ automation:
                 entity_id: "{{ repeat.item.e }}"
               data:
                 value: "{{ repeat.item.nieuw }}"
-            - action: logbook.log
-              data:
-                name: Zendure Forecasting
-                message: "Input field cleaned up: '{{ repeat.item.oud }}' becomes '{{ repeat.item.nieuw }}'"
-                entity_id: "{{ repeat.item.e }}"
+            - if:
+                - condition: template
+                  value_template: "{{ repeat.item.oud != 'unknown' }}"
+              then:
+                - action: logbook.log
+                  data:
+                    name: Zendure Forecasting
+                    message: "Input field cleaned up: '{{ repeat.item.oud }}' becomes '{{ repeat.item.nieuw }}'"
+                    entity_id: "{{ repeat.item.e }}"
 
   # Reliability per month: fill in the measured ratio of the finalised month (for next year)
   - id: forecast_reliability_month_fill

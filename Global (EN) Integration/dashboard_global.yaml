@@ -863,7 +863,7 @@ views:
                       followCursor: true
                       custom: >-
                         EVAL:function({ series, dataPointIndex, w }) {
-                          const t = w.globals.seriesX[0][dataPointIndex];
+                          const t = Math.floor(w.globals.seriesX[0][dataPointIndex] / 900000) * 900000;
                           const d = new Date(t);
                           const tijd = d.toLocaleString(navigator.language, { weekday: 'short', hour: '2-digit', minute: '2-digit' });
                           const delen = [];
@@ -917,7 +917,7 @@ views:
                           if (exp.has(t * 1000)) c = 'rgba(197,59,44,1)';
                           if (!d.known[i]) c = 'rgba(162,162,163,0.4)';
                           if (d.charge[i]) c = 'rgba(46,125,215,1)';
-                          return { x: t * 1000, y: v, fillColor: c };
+                          return { x: (t + ((d.t[i + 1] ?? t + 900) - t) / 2) * 1000, y: v, fillColor: c };
                         });
                   card_mod:
                     style: |
@@ -985,7 +985,7 @@ views:
                       followCursor: true
                       custom: >-
                         EVAL:function({ series, dataPointIndex, w }) {
-                          const t = w.globals.seriesX[0][dataPointIndex];
+                          const t = Math.floor(w.globals.seriesX[0][dataPointIndex] / 900000) * 900000;
                           const d = new Date(t);
                           const tijd = d.toLocaleString(navigator.language, { weekday: 'short', hour: '2-digit', minute: '2-digit' });
                           const delen = [];
@@ -1025,7 +1025,7 @@ views:
                       data_generator: |
                         const d = entity.attributes.timeline;
                         if (!d || !d.t) return [];
-                        return d.t.map((t, i) => ({ x: t * 1000, y: d.solar_kw[i] }));
+                        return d.t.map((t, i) => ({ x: (t + ((d.t[i + 1] ?? t + 900) - t) / 2) * 1000, y: d.solar_kw[i] }));
                     - entity: sensor.zendure_forecast_chart
                       name: Usage
                       type: line
@@ -1116,7 +1116,7 @@ views:
                       followCursor: true
                       custom: >-
                         EVAL:function({ series, dataPointIndex, w }) {
-                          const t = w.globals.seriesX[0][dataPointIndex];
+                          const t = Math.floor(w.globals.seriesX[0][dataPointIndex] / 900000) * 900000;
                           const d = new Date(t);
                           const tijd = d.toLocaleString(navigator.language, { weekday: 'short', hour: '2-digit', minute: '2-digit' });
                           const delen = [];
@@ -1158,7 +1158,7 @@ views:
                         return d.t.map((t, i) => {
                           const v = d.battery_kw[i];
                           const c = v < 0 ? '#e8743b' : (d.charge[i] ? '#2e7dd7' : '#f2c037');
-                          return { x: t * 1000, y: v, fillColor: c };
+                          return { x: (t + ((d.t[i + 1] ?? t + 900) - t) / 2) * 1000, y: v, fillColor: c };
                         });
                     - entity: sensor.zendure_forecast_chart
                       name: State of charge
@@ -1172,7 +1172,7 @@ views:
                       data_generator: |
                         const d = entity.attributes.timeline;
                         if (!d || !d.t) return [];
-                        // laadpercentage aan het begin van elk slot (zelfde tijdstippen als de kolommen)
+                        // state of charge at the start of each slot (left edge of the column)
                         return d.t.map((t, i) => ({ x: t * 1000, y: i === 0 ? d.soc_now_pct : d.soc_pct[i - 1] }));
                   card_mod:
                     style: |
@@ -1208,17 +1208,10 @@ views:
                     dataLabels:
                       enabled: false
                     annotations:
-                      # Dotted line at midnight (today, tomorrow, the day after)
-                      xaxis:
-                        - x: 'EVAL:(() => { const d = new Date(); d.setHours(0, 0, 0, 0); return d.getTime(); })()'
-                          borderColor: 'rgba(160,160,160,0.7)'
-                          strokeDashArray: 3
-                        - x: 'EVAL:(() => { const d = new Date(); d.setHours(24, 0, 0, 0); return d.getTime(); })()'
-                          borderColor: 'rgba(160,160,160,0.7)'
-                          strokeDashArray: 3
-                        - x: 'EVAL:(() => { const d = new Date(); d.setHours(48, 0, 0, 0); return d.getTime(); })()'
-                          borderColor: 'rgba(160,160,160,0.7)'
-                          strokeDashArray: 3
+                      # Time labels every 3 hours (03:00, 06:00 …) and the day name with a dotted line at midnight, as
+                      # annotations: they sit exactly on the time, like the columns in the rows above.
+                      xaxis: >-
+                        EVAL:(() => { const a = []; const s = new Date(); s.setMinutes(0, 0, 0); for (let k = 0; k <= 37; k++) { const d = new Date(s.getTime() + k * 3600000); const h = d.getHours(); if (h % 3 !== 0) continue; const m = h === 0; a.push({ x: d.getTime(), borderColor: m ? 'rgba(160,160,160,0.7)' : 'transparent', strokeDashArray: 3, label: { text: m ? d.toLocaleDateString(navigator.language, { weekday: 'short' }) : String(h).padStart(2, '0') + ':00', borderWidth: 0, orientation: 'horizontal', position: 'bottom', offsetY: 16, style: { background: 'transparent', color: 'grey', fontSize: '10px' } } }); } return a; })()
                       texts:
                         - x: 4
                           'y': 11
@@ -1232,7 +1225,7 @@ views:
                       strokeDashArray: 0
                       padding:
                         top: -10
-                        bottom: -4
+                        bottom: 12
                         left: 6
                         right: 4
                     tooltip:
@@ -1241,7 +1234,7 @@ views:
                       followCursor: true
                       custom: >-
                         EVAL:function({ series, dataPointIndex, w }) {
-                          const t = w.globals.seriesX[0][dataPointIndex];
+                          const t = Math.floor(w.globals.seriesX[0][dataPointIndex] / 900000) * 900000;
                           const d = new Date(t);
                           const tijd = d.toLocaleString(navigator.language, { weekday: 'short', hour: '2-digit', minute: '2-digit' });
                           const delen = [];
@@ -1255,28 +1248,12 @@ views:
                           });
                           return '<div style="padding:1px 6px;font-size:11px;line-height:16px;white-space:nowrap;background:var(--card-background-color,#1c1f26);color:var(--primary-text-color,#e1e1e1);border:1px solid var(--divider-color,#444);border-radius:4px">' + tijd + ' · ' + delen.join(' · ') + '</div>';
                         }
-                    # Labels every 3 hours on whole hours (03, 06, 09 …); midnight as day name
                     xaxis:
-                      type: numeric
-                      tickAmount: 36
-                      tickPlacement: 'on'
                       tooltip:
                         enabled: false
                       labels:
-                        show: true
-                        rotate: 0
-                        hideOverlappingLabels: false
-                        formatter: >-
-                          EVAL:function(value) {
-                            const d = new Date(value);
-                            const h = d.getHours();
-                            if (d.getMinutes() !== 0 || h % 3 !== 0) return '';
-                            if (h === 0) return d.toLocaleDateString(navigator.language, { weekday: 'short' });
-                            return String(h).padStart(2, '0') + ':00';
-                          }
-                        style:
-                          fontSize: 10px
-                          colors: grey
+                        show: false
+                        datetimeUTC: false
                       axisTicks:
                         show: false
                       axisBorder:
@@ -1296,7 +1273,7 @@ views:
                           const v = d.grid_kw[i];
                           // blue = battery charging from the grid, purple = house from the grid, grey = export
                           const c = v < 0 ? '#a2a2a3' : (d.charge[i] ? '#2e7dd7' : '#8e7cc3');
-                          return { x: t * 1000, y: v, fillColor: c };
+                          return { x: (t + ((d.t[i + 1] ?? t + 900) - t) / 2) * 1000, y: v, fillColor: c };
                         });
                   card_mod:
                     style: |
@@ -1632,7 +1609,7 @@ views:
                 data_generator: |
                   const d = entity.attributes.workday || [];
                   const base = new Date(); base.setHours(0, 0, 0, 0);
-                  return d.map((v, i) => [base.getTime() + i * 3600000, v]);
+                  return d.map((v, i) => [base.getTime() + i * 3600000 + 1800000, v]);
               - entity: sensor.forecast_usage_profile
                 name: Weekend
                 type: column
@@ -1642,7 +1619,7 @@ views:
                 data_generator: |
                   const d = entity.attributes.weekend || [];
                   const base = new Date(); base.setHours(0, 0, 0, 0);
-                  return d.map((v, i) => [base.getTime() + i * 3600000, v]);
+                  return d.map((v, i) => [base.getTime() + i * 3600000 + 1800000, v]);
             visibility:
               - condition: state
                 entity: input_boolean.dashboard_setting_show_forecasting
@@ -2063,7 +2040,7 @@ views:
                 text: Recalculate
           - type: markdown
             content: |-
-              {% set p = 'sensor.zendure_forecast_plan' %}{% set a = states[p].attributes %}{% if states('input_select.zendure_operation_mode') != 'Dynamic Smart Matching + Forecasting' %}<ha-alert alert-type="info">Mode **Dynamic Smart Matching + Forecasting** is not active. The plan below is a simulation.</ha-alert>{% endif %}{% if a.solar_remaining_today_sensor_ok == false or a.solar_tomorrow_sensor_ok == false %}<ha-alert alert-type="warning">A solar forecast sensor is not filled in or not available. That solar is counted as 0 kWh (more grid charging will be planned).</ha-alert>{% endif %}{% set ns = namespace(l=[]) %}{% for e in (states('input_text.forecast_setting_solar_production_sensor') | lower | replace(' ', '')).split(',') | reject('eq', '') %}{% if e not in ['unknown', 'unavailable'] and (not e is match('^sensor\\.[a-z0-9_]+$') or (states(e) == 'unknown' and state_attr(e, 'friendly_name') is none)) %}{% set ns.l = ns.l + ['Solar panels production sensor (' ~ e ~ ')'] %}{% endif %}{% endfor %}{% for e in (states('input_text.forecast_setting_grid_import_counter_sensor') | lower | replace(' ', '')).split(',') | reject('eq', '') %}{% if e not in ['unknown', 'unavailable'] and (not e is match('^sensor\\.[a-z0-9_]+$') or (states(e) == 'unknown' and state_attr(e, 'friendly_name') is none)) %}{% set ns.l = ns.l + ['Grid import counter (' ~ e ~ ')'] %}{% endif %}{% endfor %}{% for e in (states('input_text.forecast_setting_grid_export_counter_sensor') | lower | replace(' ', '')).split(',') | reject('eq', '') %}{% if e not in ['unknown', 'unavailable'] and (not e is match('^sensor\\.[a-z0-9_]+$') or (states(e) == 'unknown' and state_attr(e, 'friendly_name') is none)) %}{% set ns.l = ns.l + ['Grid export counter (' ~ e ~ ')'] %}{% endif %}{% endfor %}{% if ns.l | length > 0 %}<ha-alert alert-type="warning">Filled-in field does not point to an existing sensor: {{ ns.l | join(', ') }}. Check the entity ID (Settings → Entities). Without a valid solar panel counter the usage profile learns without solar production.</ha-alert>{% endif %}
+              {% set p = 'sensor.zendure_forecast_plan' %}{% set a = states[p].attributes %}{% set hacs = integration_entities('hacs') %}{% if hacs | length > 0 %}{% set names = hacs | map('state_attr', 'title') | map('string') | list + hacs | map('state_attr', 'friendly_name') | map('string') | list + hacs %}{% set txt = names | join(' ') | lower %}{% set nk = namespace(l=[]) %}{% for k in [['apexcharts', 'apexcharts-card (charts)'], ['card[-_ ]?mod', 'card-mod (table layout)'], ['button[-_ ]?card', 'button-card (diagnostics export download button)']] %}{% if not txt is search(k[0]) and (k[0] != 'button[-_ ]?card' or states('script.zendure_diagnostics_export') != 'unknown') %}{% set nk.l = nk.l + [k[1]] %}{% endif %}{% endfor %}{% if nk.l | length > 0 %}<ha-alert alert-type="warning">These cards do not seem to be installed: **{{ nk.l | join(', ') }}**. Install them via HACS (Frontend) and refresh the page. Without them the dashboard shows errors (*Custom element doesn't exist*).</ha-alert>{% endif %}{% endif %}{% set dash_version = '2026.11.6' %}{% set pv = states('sensor.forecasting_version') %}{% macro vnum(x) %}{% set q = (x | string | replace('v', '')).split('.') %}{{ '%04d%02d%03d' | format(q[0] | int(0), q[1] | int(0), q[2] | int(0)) if q | length == 3 else '' }}{% endmacro %}{% if vnum(pv) and vnum(pv) != vnum(dash_version) %}<ha-alert alert-type="warning">The dashboard is version **{{ dash_version }}**, the packages version **{{ pv }}**. {% if vnum(pv) > vnum(dash_version) %}Paste the {{ pv }} dashboard via **Edit dashboard → Raw configuration editor**.{% else %}Replace the packages with those of {{ dash_version }} and restart Home Assistant.{% endif %}</ha-alert>{% elif is_state('sensor.forecasting_release_check', 'New release on GitHub') %}<ha-alert alert-type="info">A new version is on GitHub: **{{ state_attr('sensor.github_zendure_forecasting', 'tag_name') }}** (you have {{ pv }}). See the **Releasenotes** tab.</ha-alert>{% endif %}{% if states('input_select.zendure_operation_mode') != 'Dynamic Smart Matching + Forecasting' %}<ha-alert alert-type="info">Mode **Dynamic Smart Matching + Forecasting** is not active. The plan below is a simulation.</ha-alert>{% endif %}{% if a.solar_remaining_today_sensor_ok == false or a.solar_tomorrow_sensor_ok == false %}<ha-alert alert-type="warning">A solar forecast sensor is not filled in or not available. That solar is counted as 0 kWh (more grid charging will be planned).</ha-alert>{% endif %}{% set ns = namespace(l=[]) %}{% for e in (states('input_text.forecast_setting_solar_production_sensor') | lower | replace(' ', '')).split(',') | reject('eq', '') %}{% if e not in ['unknown', 'unavailable'] and (not e is match('^sensor\\.[a-z0-9_]+$') or (states(e) == 'unknown' and state_attr(e, 'friendly_name') is none)) %}{% set ns.l = ns.l + ['Solar panels production sensor (' ~ e ~ ')'] %}{% endif %}{% endfor %}{% for e in (states('input_text.forecast_setting_grid_import_counter_sensor') | lower | replace(' ', '')).split(',') | reject('eq', '') %}{% if e not in ['unknown', 'unavailable'] and (not e is match('^sensor\\.[a-z0-9_]+$') or (states(e) == 'unknown' and state_attr(e, 'friendly_name') is none)) %}{% set ns.l = ns.l + ['Grid import counter (' ~ e ~ ')'] %}{% endif %}{% endfor %}{% for e in (states('input_text.forecast_setting_grid_export_counter_sensor') | lower | replace(' ', '')).split(',') | reject('eq', '') %}{% if e not in ['unknown', 'unavailable'] and (not e is match('^sensor\\.[a-z0-9_]+$') or (states(e) == 'unknown' and state_attr(e, 'friendly_name') is none)) %}{% set ns.l = ns.l + ['Grid export counter (' ~ e ~ ')'] %}{% endif %}{% endfor %}{% if ns.l | length > 0 %}<ha-alert alert-type="warning">Filled-in field does not point to an existing sensor: {{ ns.l | join(', ') }}. Check the entity ID (Settings → Entities). Without a valid solar panel counter the usage profile learns without solar production.</ha-alert>{% endif %}
               **Status:** {{ states(p) }}
 
               **Scenario:** {{ a.scenario }}
@@ -2076,12 +2053,12 @@ views:
               ### Today
 
               - Battery now: **{{ a.battery_now_kwh }}** of {{ a.battery_max_kwh }} kWh usable
-              {% set td = now().strftime('%Y-%m-%d') %}- Today's plan runs until **{{ ('tomorrow ' if (a.bridge_until or '')[:10] != td else '') ~ (a.bridge_until or '')[11:] }}** ({{ a.bridge_hours }} hours), the start of tomorrow's cheap hours; after that it plans again with tomorrow's prices
-              {% set lb = a.charge_blocks | default([]) %}- Expected usage until end of bridge (after direct solar): **{{ '%.1f' | format(a.expected_battery_usage_kwh | float(0)) }} kWh**, covered by the battery{% if lb | length > 0 %} and the planned charging{% endif %}{% if a.pathcheck_dip_hold %} (outside the cheap dips){% endif %}, the rest directly from the grid
+              {% set td = now().strftime('%Y-%m-%d') %}- Today's plan runs until **{{ ('tomorrow ' if (a.bridge_until or '')[:10] != td else '') ~ (a.bridge_until or '')[11:] }}** ({{ a.bridge_hours }} hours)
+              {% set lb = a.charge_blocks | default([]) %}{% set vb = a.expected_battery_usage_kwh | float(0) %}{% set acc = a.battery_now_kwh | float(0) %}{% set zb = a.expected_solar_to_battery_kwh | float(0) %}{% set gl = (a.planned_grid_charge_kwh | float(0)) * (a.efficiency_round_trip_pct | float(85)) / 100 %}{% set rst = [vb - acc - zb - gl, 0] | max %}- Expected usage until end of bridge (after direct solar): **{{ '%.1f' | format(vb) }} kWh**. Covered by: battery now {{ '%.1f' | format(acc) }} kWh{% if zb >= 0.05 %} + solar to the battery {{ '%.1f' | format(zb) }} kWh{% endif %}{% if gl >= 0.05 %} + planned charging {{ '%.1f' | format(gl) }} kWh (after losses){% endif %}{% if rst >= 0.05 %}; the rest, about **{{ '%.1f' | format(rst) }} kWh**, the house buys directly from the grid{% if a.pathcheck_dip_hold or a.smart_hold or a.between_charge_hold %} (mostly in the cheaper quarter hours){% endif %}{% else %}; that is enough{% endif %}
               - Expected solar to battery: **{{ a.expected_solar_to_battery_kwh }} kWh** (solar still expected: {{ a.solar_remaining_today_kwh }} kWh, {{ a.self_consumption_pct }}% used directly){% if a.get('ev_daytime_from_solar_kwh', 0) | float(0) > 0 %}; the car still charges {{ '%.1f' | format(a.get('ev_daytime_from_solar_kwh', 0) | float(0)) }} kWh during the day, which comes off the solar surplus first{% endif %}
-              - Price now: €{{ '%.3f' | format(a.price_now | float(0)) }}{% if a.smart_hold %}: the battery is saved for the most expensive quarters (€{{ '%.3f' | format(a.hold_threshold_price | float(0)) }} and up), because it does not last until the end of the bridge; until then the house buys directly{% elif a.between_charge_hold %}: the battery holds until the next charge slot, because what it supplies now would have to be charged back there with loss; buying directly is cheaper now{% elif a.in_dip %}, cheap dip{% if a.hold_discharge %}: the battery is being saved and the house buys directly from the grid, because that is cheaper than power from the battery{% endif %}{% endif %}
-              {% set lb = a.charge_blocks | default([]) %}- **Charge from the grid: {% if lb | length > 0 %}{{ '%.1f' | format(a.planned_grid_charge_kwh | float(0)) }} kWh planned at {{ a.charge_power_used_kw }} kW, estimated cost €{{ '%.2f' | format(a.estimated_cost) }}**{% else %}nothing planned**{% endif %}{% set rest = (a.grid_charge_today_kwh | float(0)) - (a.planned_grid_charge_kwh | float(0)) %}{% if rest >= 0.3 %} (energy balance {{ '%.1f' | format(a.grid_charge_today_kwh | float(0)) }} kWh; the rest is not stored, because buying directly from the grid is then cheaper after charge and discharge losses){% endif %}
-              {% if a.pathcheck_gap_hours | float(0) > 0 %}{% set td = now().strftime('%Y-%m-%d') %}{% set empty = a.pathcheck_gap_start or a.pathcheck_battery_empty_at or '' %}{% set gend = a.pathcheck_gap_end or '' %}- **Planning:** without topping up, the battery is empty {{ 'today' if empty[:10] == td else 'tomorrow' }} around **{{ empty[11:] }}**{% if a.pathcheck_dip_hold %} (the battery does not supply in cheap dips){% endif %}. Until {{ ('tomorrow ' if gend[:10] != td else '') ~ gend[11:] }} ({% if a.pathcheck_over_day %}over the day, solar counts{% elif a.pathcheck_beyond_night %}until the sun covers usage tomorrow{% elif (a.pathcheck_solar_source or '') is search('no longer|None') %}end of the bridge{% else %}then the sun covers usage{% endif %}) the house would then buy **{{ '%.1f' | format(a.pathcheck_shortfall_kwh | float(0)) }} kWh**{% if a.pathcheck_shortfall_expensive_slots_kwh | float(0) > 0 %}, of which {{ '%.1f' | format(a.pathcheck_shortfall_expensive_slots_kwh | float(0)) }} kWh expensive{% if a.pathcheck_gap_price | float(0) > 0 %} (avg. €{{ '%.3f' | format(a.pathcheck_gap_price | float(0)) }}){% endif %}{% endif %}.{% if a.pathcheck_extra_slots | int(0) > 0 %}{% set cf = a.pathcheck_charge_from or '' %}{% set cu = a.pathcheck_charge_until or '' %} So **{{ '%.1f' | format(a.pathcheck_grid_charge_kwh | float(0)) }} kWh charging** {{ ('tomorrow ' if cf[:10] != td else '') ~ cf[11:] }}–{{ cu[11:] }} ({{ a.pathcheck_extra_slots }} quarter hour{{ 's' if a.pathcheck_extra_slots | int(0) != 1 else '' }}){% if a.pathcheck_solar_room_kwh | float(0) >= 0.1 %}; {{ '%.1f' | format(a.pathcheck_solar_room_kwh | float(0)) }} kWh of room stays free for the sun{% endif %}.{% elif a.pathcheck_shortfall_expensive_slots_kwh | float(0) > 0 %} Topping up does not pay off: buying directly is cheaper after losses.{% endif %}{% endif %}
+              {% if a.smart_hold or a.between_charge_hold or (a.in_dip and a.hold_discharge) %}- Battery is holding now{% if a.smart_hold %}: the battery is saved for the most expensive quarters (€{{ '%.3f' | format(a.hold_threshold_price | float(0)) }} and up), because it does not last until the end of the bridge; until then the house buys directly{% elif a.between_charge_hold %}: the battery holds until the next charge slot, because what it supplies now would have to be charged back there with loss; buying directly is cheaper now{% else %}: cheap dip, the house buys directly from the grid, because that is cheaper than power from the battery{% endif %}
+              {% endif %}{% set lb = a.charge_blocks | default([]) %}- **Charge from the grid: {% if lb | length > 0 %}{{ '%.1f' | format(a.planned_grid_charge_kwh | float(0)) }} kWh planned at {{ a.charge_power_used_kw }} kW{% if a.charge_power_used_kw | float(0) < (a.charge_power_set_kw | float(0)) - 0.05 %} (measured charge power; configured {{ a.charge_power_set_kw }} kW){% endif %}, estimated cost €{{ '%.2f' | format(a.estimated_cost) }}**{% else %}nothing planned**{% endif %}{% set rest = (a.grid_charge_today_kwh | float(0)) - (a.planned_grid_charge_kwh | float(0)) %}{% if rest >= 0.3 %} (energy balance {{ '%.1f' | format(a.grid_charge_today_kwh | float(0)) }} kWh; the rest is not stored, because buying directly from the grid is then cheaper after charge and discharge losses){% endif %}
+              {% if a.pathcheck_gap_hours | float(0) > 0 %}{% set td = now().strftime('%Y-%m-%d') %}{% set empty = a.pathcheck_gap_start or a.pathcheck_battery_empty_at or '' %}{% set gend = a.pathcheck_gap_end or '' %}- **Planning:** without topping up, the battery is empty {{ 'today' if empty[:10] == td else 'tomorrow' }} around **{{ empty[11:] }}**{% if a.pathcheck_dip_hold %} (the battery does not supply in cheap dips){% endif %}. Until {{ ('tomorrow ' if gend[:10] != td else '') ~ gend[11:] }} ({% if a.pathcheck_over_day %}over the day, solar counts{% elif a.pathcheck_beyond_night %}until the sun covers usage tomorrow{% elif (a.pathcheck_solar_source or '') is search('no longer|None') %}end of the bridge{% else %}then the sun covers usage{% endif %}) the house would then buy **{{ '%.1f' | format(a.pathcheck_shortfall_kwh | float(0)) }} kWh**{% if a.pathcheck_shortfall_expensive_slots_kwh | float(0) > 0 %}, of which {{ '%.1f' | format(a.pathcheck_shortfall_expensive_slots_kwh | float(0)) }} kWh expensive{% if a.pathcheck_gap_price | float(0) > 0 %} (avg. €{{ '%.3f' | format(a.pathcheck_gap_price | float(0)) }}){% endif %}{% endif %}.{% if a.pathcheck_extra_slots | int(0) > 0 %}{% set cf = a.pathcheck_charge_from or '' %}{% set cu = a.pathcheck_charge_until or '' %} So **{{ '%.1f' | format(a.pathcheck_grid_charge_kwh | float(0)) }} kWh charging** {{ ('tomorrow ' if cf[:10] != td else '') ~ cf[11:] }}–{{ cu[11:] }} ({{ a.pathcheck_extra_slots }} quarter hour{{ 's' if a.pathcheck_extra_slots | int(0) != 1 else '' }}){% if a.pathcheck_solar_room_kwh | float(0) >= 0.1 %}; {{ '%.1f' | format(a.pathcheck_solar_room_kwh | float(0)) }} kWh of room stays free for the sun{% endif %}.{% elif a.pathcheck_shortfall_expensive_slots_kwh | float(0) > 0 %} Topping up does not pay off: buying directly is cheaper after losses.{% endif %}{% if (a.tomorrow_charge_moments | default([])) | length > 0 %} After midnight it plans again, also for tomorrow's expensive hours (see **Tomorrow**).{% endif %}{% endif %}
               {% for b in lb %}- Charge {{ b.day }} {{ b.start }}–{{ b.end }}: {{ b.minutes }} minutes{{ ' left' if b.running | default(false) else '' }}, about {{ '%.1f' | format(b.kwh) }} kWh, average €{{ '%.3f' | format(b.price) }}
               {% endfor %}
 
@@ -2091,7 +2068,7 @@ views:
               - Cheapest hours tomorrow vs. today: {{ a.spread_tomorrow_pct }}% (decides scenario A or B)
               - Solar tomorrow: {{ a.solar_tomorrow_kwh }} kWh, of which {{ a.tomorrow_solar_direct_kwh }} kWh used directly{% if a.tomorrow_solar_to_battery_kwh | float(0) > 0 %} and {{ a.tomorrow_solar_to_battery_kwh }} kWh to the battery{% endif %}
               - Expected usage tomorrow (after direct solar): **{{ '%.1f' | format(a.tomorrow_battery_usage_kwh | float(0)) }} kWh**. About **{{ '%.1f' | format(a.tomorrow_from_battery_kwh | float(0)) }} kWh of it comes from the battery**, in the expensive quarter hours. The rest, {{ '%.1f' | format(a.tomorrow_direct_grid_kwh | float(0)) }} kWh, the house buys directly from the grid, because in those hours that is cheaper than storing it first
-              {% set mb = a.tomorrow_charge_moments | default([]) %}- Estimated grid charge tomorrow: **{% if mb | length > 0 %}{{ '%.1f' | format(a.tomorrow_grid_charge_estimate_kwh | float(0)) }} kWh**, for the expensive quarter hours, without charge margin. It is planned definitively after midnight, with the margin of {{ '%.1f' | format(a.margin_kwh | float(0)) }} kWh added if there are enough cheap quarter hours{% else %}nothing**, charging is not expected to pay off{% endif %}
+              {% set mb = a.tomorrow_charge_moments | default([]) %}- Estimated grid charge tomorrow: **{% if mb | length > 0 %}{{ '%.1f' | format(a.tomorrow_grid_charge_estimate_kwh | float(0)) }} kWh**, for tomorrow's expensive quarter hours (until the cheap hours of the day after), without charge margin. {% if (a.charge_blocks | default([])) | length > 0 %}After midnight this replaces tonight's charging above: it is then planned definitively{% else %}It is planned definitively after midnight{% endif %}, with the margin of {{ '%.1f' | format(a.margin_kwh | float(0)) }} kWh added if there are enough cheap quarter hours{% else %}nothing**, charging is not expected to pay off{% endif %}
               {% for b in mb %}- Charge tomorrow {{ b.start }}–{{ b.end }}: {{ b.minutes | default('-') }} minutes, about {{ '%.1f' | format(b.kwh | default(0)) }} kWh, average €{{ '%.3f' | format(b.price) }}
               {% endfor %}
             text_only: true
@@ -2117,7 +2094,9 @@ views:
 
               - Efficiency: charging {{ a.efficiency_charge_pct }}%, discharging {{ a.efficiency_discharge_pct }}%, round trip {{ a.efficiency_round_trip_pct }}% ({{ a.efficiency_source }})
 
-              - Usage per hour: **{{ a.usage_per_hour_source }}**, next 24 hours {{ a.usage_next_24h_kwh }} kWh. Profile learned: {{ states('sensor.forecast_usage_profile') }} of 48 hours (workday + weekend){% set pd = state_attr('sensor.forecast_usage_profile', 'n_per_day') or [] %}{% if pd | length == 7 %}. Learned per weekday (hours with 3+ measurements): {% for d in range(7) %}{{ ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'][d] }} {{ pd[d] | select('ge', 3) | list | length }}{{ ', ' if not loop.last else '' }}{% endfor %} of 24{% endif %}{% if state_attr('sensor.forecast_usage_profile', 'last_hour') %}, last measurement {{ state_attr('sensor.forecast_usage_profile', 'last_hour') }}: {{ state_attr('sensor.forecast_usage_profile', 'last_hour_kwh') }} kWh{% endif %}
+              - Usage per hour: **{{ a.usage_per_hour_source }}**, next 24 hours {{ a.usage_next_24h_kwh }} kWh. Profile learned: {{ states('sensor.forecast_usage_profile') }} of 48 hours (workday + weekend){% if state_attr('sensor.forecast_usage_profile', 'last_hour') %}, last measurement {{ state_attr('sensor.forecast_usage_profile', 'last_hour') }}: {{ state_attr('sensor.forecast_usage_profile', 'last_hour_kwh') }} kWh{% endif %}{% set wd = state_attr('sensor.forecast_usage_profile', 'workday') or [] %}{% set we = state_attr('sensor.forecast_usage_profile', 'weekend') or [] %}{% set pdk = state_attr('sensor.forecast_usage_profile', 'per_day') or [] %}{% set pd = state_attr('sensor.forecast_usage_profile', 'n_per_day') or [] %}{% if wd | length == 24 and we | length == 24 %}
+
+              - Usage per day (from the profile): {% for d in range(7) %}{% set base = wd if d < 5 else we %}{% set nd = namespace(t=0) %}{% for h in range(24) %}{% set n = (pd[d][h] if pd | length == 7 else 0) | float(0) %}{% set w = [n / 3, 1] | min %}{% set v = (pdk[d][h] if pdk | length == 7 else base[h]) | float(0) %}{% set nd.t = nd.t + w * v + (1 - w) * (base[h] | float(0)) %}{% endfor %}{{ ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'][d] }} **{{ '%.1f' | format(nd.t) }}**{{ ' · ' if not loop.last else '' }}{% endfor %} kWh{% if pd | length == 7 %}. Own profile per weekday: {% for d in range(7) %}{{ ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'][d] }} {{ [pd[d] | max, 3] | min }}/3{{ ', ' if not loop.last else '' }}{% endfor %} weeks measured (each weekday comes by once a week; until 3 weeks it is blended with workday or weekend){% endif %}{% endif %}
 
               - Usage per quarter: **{{ a.usage_per_quarter_source }}**{% if state_attr('sensor.forecast_usage_profile', 'last_quarter_kwh') is not none %}, last quarter {{ state_attr('sensor.forecast_usage_profile', 'last_quarter_kwh') }} kWh{% endif %}
             text_only: false
@@ -4062,10 +4041,12 @@ views:
               solar forecast sensors (kWh, e.g. Forecast.Solar or Solcast) and of
               a total counter (kWh) of your solar panels. Solar self-consumption
               and daily usage are calculated automatically from day 1 from your own
-              measurements and get more accurate every day (up to 7 days). The
-              charge margin is an extra buffer as a percentage of the battery
-              capacity. The kWh counters of your grid meter are detected automatically
-              (SlimmeLezer, HomeWizard, DSMR integration). With another meter, e.g. a
+              measurements and get more accurate every day (up to 7 days). The set
+              fills in Solcast or Forecast.Solar itself when the field is empty.
+              **Extra planner charge margin**: an extra buffer on top of what the
+              planner needs, as a percentage of the battery capacity. The kWh
+              counters of your grid meter are detected automatically (SlimmeLezer,
+              HomeWizard, DSMR integration); you then see which sensor it uses. With another meter, e.g. a
               Shelly Pro 3EM, enter the grid import and export counter (several
               sensors separated by a comma, e.g. tariff 1 and 2). **Hold discharge in
               cheap dip**: the battery does not supply in cheap dips when grid
@@ -4077,7 +4058,7 @@ views:
               next year. **Calibration after days**: the Zendure calibrates at 100%.
               From half this number of days the planner waits for a sunny day;
               after that it charges the battery full from the grid (cheapest
-              quarter hours).
+              quarter hours). **Calibration charging** is on by default.
             text_only: true
             visibility:
               - condition: state
@@ -4088,18 +4069,100 @@ views:
                 state: 'on'
           - type: entities
             entities:
-              - entity: input_text.forecast_setting_solar_remaining_today_sensor
-                name: Solar remaining today sensor
-              - entity: input_text.forecast_setting_solar_tomorrow_sensor
-                name: Solar tomorrow sensor
-              - entity: input_text.forecast_setting_solar_production_sensor
-                name: Solar panels production sensor (total kWh)
-              - entity: input_text.forecast_setting_grid_import_counter_sensor
-                name: Grid import counter (kWh, empty = automatic)
-              - entity: input_text.forecast_setting_grid_export_counter_sensor
-                name: Grid export counter (kWh, empty = automatic)
+              - type: conditional
+                conditions:
+                  - entity: input_text.forecast_setting_solar_remaining_today_sensor
+                    state_not: ['', 'unknown']
+                row:
+                  entity: input_text.forecast_setting_solar_remaining_today_sensor
+                  name: Solar remaining today sensor
+              - type: conditional
+                conditions:
+                  - entity: input_text.forecast_setting_solar_remaining_today_sensor
+                    state: ['', 'unknown']
+                row:
+                  entity: input_text.forecast_setting_solar_remaining_today_sensor
+                  name: Solar remaining today sensor (please fill in)
+              - type: conditional
+                conditions:
+                  - entity: input_text.forecast_setting_solar_tomorrow_sensor
+                    state_not: ['', 'unknown']
+                row:
+                  entity: input_text.forecast_setting_solar_tomorrow_sensor
+                  name: Solar tomorrow sensor
+              - type: conditional
+                conditions:
+                  - entity: input_text.forecast_setting_solar_tomorrow_sensor
+                    state: ['', 'unknown']
+                row:
+                  entity: input_text.forecast_setting_solar_tomorrow_sensor
+                  name: Solar tomorrow sensor (please fill in)
+              - type: conditional
+                conditions:
+                  - entity: input_text.forecast_setting_solar_production_sensor
+                    state_not: ['', 'unknown']
+                row:
+                  entity: input_text.forecast_setting_solar_production_sensor
+                  name: Solar panels production sensor (total kWh)
+              - type: conditional
+                conditions:
+                  - entity: input_text.forecast_setting_solar_production_sensor
+                    state: ['', 'unknown']
+                row:
+                  entity: input_text.forecast_setting_solar_production_sensor
+                  name: Solar panels production sensor (total kWh) (please fill in)
+              - type: conditional
+                conditions:
+                  - entity: input_text.forecast_setting_grid_import_counter_sensor
+                    state_not: ['', 'unknown']
+                row:
+                  entity: input_text.forecast_setting_grid_import_counter_sensor
+                  name: Grid import counter (kWh)
+              - type: conditional
+                conditions:
+                  - entity: binary_sensor.forecast_grid_import_counter_automatic
+                    state: 'on'
+                row:
+                  type: attribute
+                  entity: binary_sensor.forecast_grid_import_counter_automatic
+                  attribute: sensors
+                  name: Grid import counter (detected automatically)
+              - type: conditional
+                conditions:
+                  - entity: input_text.forecast_setting_grid_import_counter_sensor
+                    state: ['', 'unknown']
+                  - entity: binary_sensor.forecast_grid_import_counter_automatic
+                    state_not: 'on'
+                row:
+                  entity: input_text.forecast_setting_grid_import_counter_sensor
+                  name: Grid import counter (kWh) (please fill in)
+              - type: conditional
+                conditions:
+                  - entity: input_text.forecast_setting_grid_export_counter_sensor
+                    state_not: ['', 'unknown']
+                row:
+                  entity: input_text.forecast_setting_grid_export_counter_sensor
+                  name: Grid export counter (kWh)
+              - type: conditional
+                conditions:
+                  - entity: binary_sensor.forecast_grid_export_counter_automatic
+                    state: 'on'
+                row:
+                  type: attribute
+                  entity: binary_sensor.forecast_grid_export_counter_automatic
+                  attribute: sensors
+                  name: Grid export counter (detected automatically)
+              - type: conditional
+                conditions:
+                  - entity: input_text.forecast_setting_grid_export_counter_sensor
+                    state: ['', 'unknown']
+                  - entity: binary_sensor.forecast_grid_export_counter_automatic
+                    state_not: 'on'
+                row:
+                  entity: input_text.forecast_setting_grid_export_counter_sensor
+                  name: Grid export counter (kWh) (please fill in)
               - entity: input_number.forecast_setting_charge_margin
-                name: Battery charge margin %
+                name: Extra planner charge margin %
               - type: conditional
                 conditions:
                   - entity: binary_sensor.forecast_reliability_month_set
@@ -4220,8 +4283,8 @@ views:
                 name: Smart hold (keep the charge for the most expensive quarter hours)
               - entity: input_number.forecast_setting_calibration_days
                 name: Calibration after days (0 = 14)
-              - entity: input_boolean.forecast_setting_calibration_off
-                name: Calibration charging off
+              - entity: input_boolean.forecast_setting_calibration_charging
+                name: Calibration charging
             visibility:
               - condition: state
                 entity: input_boolean.dashboard_setting_show_forecasting

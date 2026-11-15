@@ -14,6 +14,29 @@ Versies volgen `jaar.maand.volgnummer`; het volgnummer begint elke maand bij 1. 
 - **Besparing, vast contract:** zolang saldering geldt telt teruglevering tegen het leveringstarief. Het veld heet nu **Vast contract tarief teruglevering (zonder saldering)**: vul de terugleververgoeding van je contract voor 2027 in.
 - Saldering geldt tot je jaarverbruik. Lever je over het jaar meer terug dan je afneemt, kies dan *Geen saldering*.
 
+**Configuratie makkelijker**
+- **Zon-forecast sensoren automatisch invullen:** is *Zon resterend vandaag sensor* of *Zon morgen sensor* leeg, dan vult de set Solcast in (anders Forecast.Solar), als er precies één passende sensor is. Een zelf ingevuld veld blijft staan; elke invulling staat in het logboek.
+- **Net-tellers:** worden ze automatisch herkend (HomeWizard, SlimmeLezer, DSMR), dan verbergt het dashboard de invoervelden en toont het welke sensor gebruikt wordt (*Net import teller (automatisch herkend)*). Nieuwe `binary_sensor.forecast_net_import_teller_automatisch` en `..._export_...` (attribuut `sensoren`).
+- **Geen "unknown" meer in lege invoervelden:** een veld dat nooit is ingevuld wordt leeg gemaakt (niet bij Gielz' eigen velden). Zon-velden en net-tellers die nog leeg zijn, tonen **(graag invullen)**.
+- **Extra planner laadmarge %** heette *Batterij laadmarge %*.
+- **Kalibratieladen** is nu een aan-schakelaar (was *Kalibratieladen uit*) en staat standaard aan, ook als je hem eerder uit had gezet: zet hem na de upgrade zo nodig opnieuw uit.
+- **Melding ontbrekende kaarten:** mist apexcharts-card, card-mod of button-card (herkend via HACS), dan zegt het dashboard welke je moet installeren.
+- **Upgrade-melding:** past het dashboard niet bij de versie van de pakketten, dan zegt het plan wat je moet vervangen (dashboard plakken of pakketten vervangen). Staat er een nieuwe versie op GitHub, dan staat dat er ook.
+
+**Gemeten laadvermogen: 90e percentiel**
+- De statistiek telt per wijziging, niet per minuut: aanloop en laden met wisselende zon gaven veel lage metingen, het volle vermogen weinig. De mediaan kwam daardoor te laag uit (bv. 1,4 kW bij 2,4 kW echt). Nu het 90e percentiel. *Uit het net laden* toont erbij als hij met het gemeten vermogen rekent en wat ingesteld is.
+
+**Plan op het dashboard duidelijker**
+- *Plan van vandaag loopt tot* zonder de vaste uitleg erachter.
+- *Verwacht verbruik tot einde overbrugging*: nu met de opsplitsing accu nu + zon naar de accu + gepland laden (na verlies), en hoeveel het huis direct inkoopt.
+- *Prijs nu* weg (staat al in de grafiek en de badges); houdt de accu vast, dan staat de reden in de regel **Accu houdt nu vast**.
+- **Planning** en **Morgen**: duidelijk dat na middernacht opnieuw gepland wordt voor de dure uren van morgen, en dat de indicatie voor morgen het laden van vannacht vervangt.
+- **Verzamelde gegevens:** nieuwe regel **Verbruik per dag** (kWh per weekdag uit het profiel). Het eigen profiel per weekdag toont hoeveel weken gemeten zijn (*ma 1/3*) in plaats van *0 van 24 geleerd*.
+
+**Grafieken**
+- **Plan Tijdlijn:** de kolommen staan nu in hun eigen kwartier (eerst gecentreerd op het begin, een halve kolom te vroeg t.o.v. de verbruikslijn en de tijd). De tijdlabels onderaan zijn annotaties op het exacte tijdstip (03:00, 06:00 …, dagnaam bij middernacht); eerder kon de onderste rij verschuiven (bv. rond 12:00).
+- **Verbruiksprofiel:** de kolom van een uur staat tussen dat uur en het volgende.
+
 **Upgraden**
 - Vervang alle bestanden, herstart en plak het dashboard opnieuw. Controleer in Negatieve Prijs: *Saldering* = Automatisch, *Marktprijs sensor is* = Inclusief btw (bij de Nordpool-sensor `_5_10_021`). Vul bij Besparing het vaste terugleveringstarief voor 2027 in.
 
