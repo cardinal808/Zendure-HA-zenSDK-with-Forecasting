@@ -1326,9 +1326,10 @@ template:
       # Reliability of this month; 0 = not filled in, then the general one; also 0 = 100%
       reliab_month: "{{ states('input_number.forecast_setting_solar_reliability_' ~ ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'][now().month - 1]) | float(0) }}"
       reliab_general: "{{ states('input_number.forecast_setting_solar_reliability') | float(0) }}"
-      reliab_set: "{{ reliab_month > 0 or reliab_general > 0 }}"
+      # Set = a month value, or a general value other than 100 (100 is there by default)
+      reliab_set: "{{ reliab_month > 0 or (reliab_general > 0 and reliab_general != 100) }}"
       reliab: "{{ (reliab_month if reliab_month > 0 else (reliab_general if reliab_general > 0 else 100)) / 100 }}"
-      reliab_source: "{{ ('Month (' ~ ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'][now().month - 1] ~ ')') if reliab_month > 0 else ('General' if reliab_general > 0 else 'Not filled in (100%)') }}"
+      reliab_source: "{{ ('Month (' ~ ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'][now().month - 1] ~ ')') if reliab_month > 0 else ('General' if reliab_general > 0 and reliab_general != 100 else 'Not filled in (100%)') }}"
       solar_rest: "{{ ([solar_rest_raw, 0] | max * reliab) | round(2) }}"
       solar_tomorrow: "{{ ([solar_tomorrow_raw, 0] | max * reliab) | round(2) }}"
 
@@ -2821,7 +2822,7 @@ automation:
   - id: forecast_default_values
     alias: Forecast Default Values
     description: >-
-      Forecasting 2026.11.7 - Fills in the default value when a field is 0 (Calibration after days = 14).
+      Forecasting 2026.11.7 - Fills in the default value when a field is 0 (Calibration after days 14, Solar forecast reliability 100%).
     mode: queued
     max: 5
     triggers:
@@ -2830,6 +2831,7 @@ automation:
       - trigger: state
         entity_id:
           - input_number.forecast_setting_calibration_days
+          - input_number.forecast_setting_solar_reliability
     conditions: []
     actions:
       - delay:
@@ -2837,6 +2839,7 @@ automation:
       - repeat:
           for_each:
               - {e: input_number.forecast_setting_calibration_days, v: 14}
+              - {e: input_number.forecast_setting_solar_reliability, v: 100}
           sequence:
             - if:
                 - condition: template

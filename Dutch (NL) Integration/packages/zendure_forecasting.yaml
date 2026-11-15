@@ -1326,9 +1326,10 @@ template:
       # Betrouwbaarheid van deze maand; 0 = niet ingevuld, dan de algemene; ook 0 = 100%
       betr_maand: "{{ states('input_number.forecast_betrouwbaarheid_' ~ ['jan', 'feb', 'mrt', 'apr', 'mei', 'jun', 'jul', 'aug', 'sep', 'okt', 'nov', 'dec'][now().month - 1]) | float(0) }}"
       betr_algemeen: "{{ states('input_number.forecast_betrouwbaarheid') | float(0) }}"
-      betr_ingevuld: "{{ betr_maand > 0 or betr_algemeen > 0 }}"
+      # Ingevuld = een maandwaarde, of een algemene waarde anders dan 100 (100 staat er standaard in)
+      betr_ingevuld: "{{ betr_maand > 0 or (betr_algemeen > 0 and betr_algemeen != 100) }}"
       betr: "{{ (betr_maand if betr_maand > 0 else (betr_algemeen if betr_algemeen > 0 else 100)) / 100 }}"
-      betr_bron: "{{ ('Maand (' ~ ['jan', 'feb', 'mrt', 'apr', 'mei', 'jun', 'jul', 'aug', 'sep', 'okt', 'nov', 'dec'][now().month - 1] ~ ')') if betr_maand > 0 else ('Algemeen' if betr_algemeen > 0 else 'Niet ingevuld (100%)') }}"
+      betr_bron: "{{ ('Maand (' ~ ['jan', 'feb', 'mrt', 'apr', 'mei', 'jun', 'jul', 'aug', 'sep', 'okt', 'nov', 'dec'][now().month - 1] ~ ')') if betr_maand > 0 else ('Algemeen' if betr_algemeen > 0 and betr_algemeen != 100 else 'Niet ingevuld (100%)') }}"
       zon_rest: "{{ ([zon_rest_raw, 0] | max * betr) | round(2) }}"
       zon_morgen: "{{ ([zon_morgen_raw, 0] | max * betr) | round(2) }}"
 
@@ -2821,7 +2822,7 @@ automation:
   - id: forecast_standaardwaarden
     alias: Forecast Standaardwaarden
     description: >-
-      Forecasting 2026.11.7 - Vult de standaardwaarde in als een veld op 0 staat (Kalibratie na dagen = 14).
+      Forecasting 2026.11.7 - Vult de standaardwaarde in als een veld op 0 staat (Kalibratie na dagen 14, Betrouwbaarheid zonvoorspelling 100%).
     mode: queued
     max: 5
     triggers:
@@ -2830,6 +2831,7 @@ automation:
       - trigger: state
         entity_id:
           - input_number.forecast_kalibratie_dagen
+          - input_number.forecast_betrouwbaarheid
     conditions: []
     actions:
       - delay:
@@ -2837,6 +2839,7 @@ automation:
       - repeat:
           for_each:
               - {e: input_number.forecast_kalibratie_dagen, v: 14}
+              - {e: input_number.forecast_betrouwbaarheid, v: 100}
           sequence:
             - if:
                 - condition: template

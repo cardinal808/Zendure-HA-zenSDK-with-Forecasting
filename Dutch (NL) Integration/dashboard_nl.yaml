@@ -4060,7 +4060,7 @@ views:
               de zon of het volgende laadmoment, dan bewaart hij zijn lading voor de
               duurste kwartieren (kost geen extra verlies; staat standaard aan).
               **Betrouwbaarheid per maand**: per maand een eigen correctie van de
-              zonvoorspelling; na afloop van een maand vult de set de gemeten waarde
+              zonvoorspelling (0 = de algemene waarde); na afloop van een maand vult de set de gemeten waarde
               in voor volgend jaar. **Kalibratie na dagen**: de Zendure kalibreert bij
               100%. Vanaf de helft van dit aantal dagen wacht de planner op een
               zonnige dag; daarna laadt hij de accu vol uit het net (goedkoopste
@@ -4175,7 +4175,7 @@ views:
                     state_not: 'on'
                 row:
                   entity: input_number.forecast_betrouwbaarheid
-                  name: Betrouwbaarheid zonvoorspelling % (0 = 100%)
+                  name: Betrouwbaarheid zonvoorspelling %
               - type: conditional
                 conditions:
                   - entity: binary_sensor.forecast_betrouwbaarheid_maand_ingevuld
@@ -4205,84 +4205,84 @@ views:
                     state: 'on'
                 row:
                   entity: input_number.forecast_betrouwbaarheid_jan
-                  name: Januari % (0 = algemene waarde)
+                  name: Januari %
               - type: conditional
                 conditions:
                   - entity: input_boolean.forecast_betrouwbaarheid_per_maand_tonen
                     state: 'on'
                 row:
                   entity: input_number.forecast_betrouwbaarheid_feb
-                  name: Februari % (0 = algemene waarde)
+                  name: Februari %
               - type: conditional
                 conditions:
                   - entity: input_boolean.forecast_betrouwbaarheid_per_maand_tonen
                     state: 'on'
                 row:
                   entity: input_number.forecast_betrouwbaarheid_mrt
-                  name: Maart % (0 = algemene waarde)
+                  name: Maart %
               - type: conditional
                 conditions:
                   - entity: input_boolean.forecast_betrouwbaarheid_per_maand_tonen
                     state: 'on'
                 row:
                   entity: input_number.forecast_betrouwbaarheid_apr
-                  name: April % (0 = algemene waarde)
+                  name: April %
               - type: conditional
                 conditions:
                   - entity: input_boolean.forecast_betrouwbaarheid_per_maand_tonen
                     state: 'on'
                 row:
                   entity: input_number.forecast_betrouwbaarheid_mei
-                  name: Mei % (0 = algemene waarde)
+                  name: Mei %
               - type: conditional
                 conditions:
                   - entity: input_boolean.forecast_betrouwbaarheid_per_maand_tonen
                     state: 'on'
                 row:
                   entity: input_number.forecast_betrouwbaarheid_jun
-                  name: Juni % (0 = algemene waarde)
+                  name: Juni %
               - type: conditional
                 conditions:
                   - entity: input_boolean.forecast_betrouwbaarheid_per_maand_tonen
                     state: 'on'
                 row:
                   entity: input_number.forecast_betrouwbaarheid_jul
-                  name: Juli % (0 = algemene waarde)
+                  name: Juli %
               - type: conditional
                 conditions:
                   - entity: input_boolean.forecast_betrouwbaarheid_per_maand_tonen
                     state: 'on'
                 row:
                   entity: input_number.forecast_betrouwbaarheid_aug
-                  name: Augustus % (0 = algemene waarde)
+                  name: Augustus %
               - type: conditional
                 conditions:
                   - entity: input_boolean.forecast_betrouwbaarheid_per_maand_tonen
                     state: 'on'
                 row:
                   entity: input_number.forecast_betrouwbaarheid_sep
-                  name: September % (0 = algemene waarde)
+                  name: September %
               - type: conditional
                 conditions:
                   - entity: input_boolean.forecast_betrouwbaarheid_per_maand_tonen
                     state: 'on'
                 row:
                   entity: input_number.forecast_betrouwbaarheid_okt
-                  name: Oktober % (0 = algemene waarde)
+                  name: Oktober %
               - type: conditional
                 conditions:
                   - entity: input_boolean.forecast_betrouwbaarheid_per_maand_tonen
                     state: 'on'
                 row:
                   entity: input_number.forecast_betrouwbaarheid_nov
-                  name: November % (0 = algemene waarde)
+                  name: November %
               - type: conditional
                 conditions:
                   - entity: input_boolean.forecast_betrouwbaarheid_per_maand_tonen
                     state: 'on'
                 row:
                   entity: input_number.forecast_betrouwbaarheid_dec
-                  name: December % (0 = algemene waarde)
+                  name: December %
               - entity: input_boolean.forecast_dal_ontladen_blokkeren
                 name: Niet ontladen in goedkoop dal (accu sparen)
               - entity: input_boolean.forecast_slim_vasthouden

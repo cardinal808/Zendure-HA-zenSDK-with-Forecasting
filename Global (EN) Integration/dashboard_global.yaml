@@ -4054,7 +4054,7 @@ views:
               the sun or the next charge moment, it keeps its charge for the most
               expensive quarter hours (no extra loss; on by default).
               **Reliability per month**: a separate solar forecast correction per
-              month; after a month ends the set fills in the measured value for
+              month (0 = the general value); after a month ends the set fills in the measured value for
               next year. **Calibration after days**: the Zendure calibrates at 100%.
               From half this number of days the planner waits for a sunny day;
               after that it charges the battery full from the grid (cheapest
@@ -4169,7 +4169,7 @@ views:
                     state_not: 'on'
                 row:
                   entity: input_number.forecast_setting_solar_reliability
-                  name: Solar forecast reliability % (0 = 100%)
+                  name: Solar forecast reliability %
               - type: conditional
                 conditions:
                   - entity: binary_sensor.forecast_reliability_month_set
@@ -4199,84 +4199,84 @@ views:
                     state: 'on'
                 row:
                   entity: input_number.forecast_setting_solar_reliability_jan
-                  name: January % (0 = general value)
+                  name: January %
               - type: conditional
                 conditions:
                   - entity: input_boolean.forecast_setting_show_reliability_per_month
                     state: 'on'
                 row:
                   entity: input_number.forecast_setting_solar_reliability_feb
-                  name: February % (0 = general value)
+                  name: February %
               - type: conditional
                 conditions:
                   - entity: input_boolean.forecast_setting_show_reliability_per_month
                     state: 'on'
                 row:
                   entity: input_number.forecast_setting_solar_reliability_mar
-                  name: March % (0 = general value)
+                  name: March %
               - type: conditional
                 conditions:
                   - entity: input_boolean.forecast_setting_show_reliability_per_month
                     state: 'on'
                 row:
                   entity: input_number.forecast_setting_solar_reliability_apr
-                  name: April % (0 = general value)
+                  name: April %
               - type: conditional
                 conditions:
                   - entity: input_boolean.forecast_setting_show_reliability_per_month
                     state: 'on'
                 row:
                   entity: input_number.forecast_setting_solar_reliability_may
-                  name: May % (0 = general value)
+                  name: May %
               - type: conditional
                 conditions:
                   - entity: input_boolean.forecast_setting_show_reliability_per_month
                     state: 'on'
                 row:
                   entity: input_number.forecast_setting_solar_reliability_jun
-                  name: June % (0 = general value)
+                  name: June %
               - type: conditional
                 conditions:
                   - entity: input_boolean.forecast_setting_show_reliability_per_month
                     state: 'on'
                 row:
                   entity: input_number.forecast_setting_solar_reliability_jul
-                  name: July % (0 = general value)
+                  name: July %
               - type: conditional
                 conditions:
                   - entity: input_boolean.forecast_setting_show_reliability_per_month
                     state: 'on'
                 row:
                   entity: input_number.forecast_setting_solar_reliability_aug
-                  name: August % (0 = general value)
+                  name: August %
               - type: conditional
                 conditions:
                   - entity: input_boolean.forecast_setting_show_reliability_per_month
                     state: 'on'
                 row:
                   entity: input_number.forecast_setting_solar_reliability_sep
-                  name: September % (0 = general value)
+                  name: September %
               - type: conditional
                 conditions:
                   - entity: input_boolean.forecast_setting_show_reliability_per_month
                     state: 'on'
                 row:
                   entity: input_number.forecast_setting_solar_reliability_oct
-                  name: October % (0 = general value)
+                  name: October %
               - type: conditional
                 conditions:
                   - entity: input_boolean.forecast_setting_show_reliability_per_month
                     state: 'on'
                 row:
                   entity: input_number.forecast_setting_solar_reliability_nov
-                  name: November % (0 = general value)
+                  name: November %
               - type: conditional
                 conditions:
                   - entity: input_boolean.forecast_setting_show_reliability_per_month
                     state: 'on'
                 row:
                   entity: input_number.forecast_setting_solar_reliability_dec
-                  name: December % (0 = general value)
+                  name: December %
               - entity: input_boolean.forecast_setting_hold_discharge_in_dip
                 name: Hold discharge in cheap dip (save the battery)
               - entity: input_boolean.forecast_setting_smart_hold
