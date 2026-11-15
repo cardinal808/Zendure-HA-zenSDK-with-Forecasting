@@ -772,10 +772,6 @@ views:
             icon: ''
             heading: Plan Timeline
             heading_style: title
-            visibility:
-              - condition: state
-                entity: input_boolean.dashboard_setting_show_forecasting
-                state: 'on'
           - type: markdown
             content: >-
               <ha-alert alert-type="info">Help</ha-alert>Forecast per price slot for the next 36 hours. Price (colours as in Gielz): blue = planned grid charging, red = expensive (Gielz's most expensive periods), grey = other, light grey = price not known yet. Battery: blue = charging from the grid, yellow = charging from solar, orange = discharging; white line = state of charge (0–100%). Grid: blue = battery charging from the grid, purple = house from the grid, grey = export. Tomorrow's charging is indicative; the cheap-dip hold is not part of this forecast. Solar only with a Solcast detailed forecast.
@@ -786,9 +782,6 @@ views:
             visibility:
               - condition: state
                 entity: input_boolean.dashboard_setting_show_help
-                state: 'on'
-              - condition: state
-                entity: input_boolean.dashboard_setting_show_forecasting
                 state: 'on'
           - type: custom:mod-card
             card_mod:
@@ -1284,10 +1277,6 @@ views:
                         box-shadow: none !important;
                         border-top: 1px solid var(--divider-color) !important;
                       }
-            visibility:
-              - condition: state
-                entity: input_boolean.dashboard_setting_show_forecasting
-                state: 'on'
       - type: grid
         cards:
           - type: heading
@@ -1560,10 +1549,6 @@ views:
             icon: ''
             heading: Usage Profile
             heading_style: title
-            visibility:
-              - condition: state
-                entity: input_boolean.dashboard_setting_show_forecasting
-                state: 'on'
           - type: custom:apexcharts-card
             graph_span: 24h
             span:
@@ -1636,10 +1621,6 @@ views:
                   const d = entity.attributes.weekend || [];
                   const base = new Date(); base.setHours(0, 0, 0, 0);
                   return d.map((v, i) => [base.getTime() + i * 3600000 + 1800000, v]);
-            visibility:
-              - condition: state
-                entity: input_boolean.dashboard_setting_show_forecasting
-                state: 'on'
           - type: custom:apexcharts-card
             graph_span: 7d
             span:
@@ -1715,10 +1696,6 @@ views:
                     out.push({ x: ma.getTime() + d * 86400000, y: Math.round(t * 10) / 10, fillColor: d < 5 ? '#01a180' : '#a2a2a3' });
                   }
                   return out;
-            visibility:
-              - condition: state
-                entity: input_boolean.dashboard_setting_show_forecasting
-                state: 'on'
           - type: markdown
             content: >-
               <ha-alert alert-type="info">Help</ha-alert>Top chart: average usage per hour (kWh), learned from your own measurements, for workdays (green) and weekends (grey). Becomes useful after about a week. Bottom chart: expected usage per weekday (kWh); the own profile per weekday counts fully after 3 weeks.
@@ -1726,9 +1703,6 @@ views:
             visibility:
               - condition: state
                 entity: input_boolean.dashboard_setting_show_help
-                state: 'on'
-              - condition: state
-                entity: input_boolean.dashboard_setting_show_forecasting
                 state: 'on'
       - type: grid
         cards:
@@ -2083,10 +2057,6 @@ views:
               - condition: time
                 after: '13:30:00'
                 before: '24:00:00'
-        visibility:
-          - condition: state
-            entity: input_boolean.dashboard_setting_show_dynamic
-            state: 'on'
       - type: grid
         cards:
           - type: heading
@@ -2183,16 +2153,8 @@ views:
 
               - Usage per quarter: **{{ a.usage_per_quarter_source }}**{% if state_attr('sensor.forecast_usage_profile', 'last_quarter_kwh') is not none %}, last quarter {{ state_attr('sensor.forecast_usage_profile', 'last_quarter_kwh') }} kWh{% endif %}
             text_only: false
-        visibility:
-          - condition: state
-            entity: input_boolean.dashboard_setting_show_forecasting
-            state: 'on'
       - column_span: 2
         cards: []
-        visibility:
-          - condition: state
-            entity: input_boolean.dashboard_setting_show_forecasting
-            state: 'on'
     cards: []
     icon: mdi:battery
     dense_section_placement: false
@@ -4049,10 +4011,6 @@ views:
             heading: Gielz Configuration (Dynamic)
             heading_style: title
             badges: []
-            visibility:
-              - condition: state
-                entity: input_boolean.dashboard_setting_show_dynamic
-                state: 'on'
           - type: markdown
             content: >-
               <ha-alert alert-type="info">Help text</ha-alert>If you have a
@@ -4069,9 +4027,6 @@ views:
               - condition: state
                 entity: input_boolean.dashboard_setting_show_help
                 state: 'on'
-              - condition: state
-                entity: input_boolean.dashboard_setting_show_dynamic
-                state: 'on'
             text_only: true
           - type: entities
             entities:
@@ -4082,10 +4037,6 @@ views:
                 name: Minimal Spread
               - entity: input_boolean.dynamic_setting_15_minute_interval
                 name: 15 Minute Interval
-            visibility:
-              - condition: state
-                entity: input_boolean.dashboard_setting_show_dynamic
-                state: 'on'
       - type: grid
         cards:
           - type: heading
@@ -4113,10 +4064,6 @@ views:
                     dismiss_text: Cancel
                 color: '#01a180'
                 text: Reset usage data
-            visibility:
-              - condition: state
-                entity: input_boolean.dashboard_setting_show_forecasting
-                state: 'on'
           - type: markdown
             content: >-
               <ha-alert alert-type="info">Help text</ha-alert>For the mode
@@ -4151,9 +4098,6 @@ views:
             visibility:
               - condition: state
                 entity: input_boolean.dashboard_setting_show_help
-                state: 'on'
-              - condition: state
-                entity: input_boolean.dashboard_setting_show_forecasting
                 state: 'on'
           - type: entities
             entities:
@@ -4408,10 +4352,6 @@ views:
                 name: Calibration after days
               - entity: input_boolean.forecast_setting_calibration_charging
                 name: Calibration charging
-            visibility:
-              - condition: state
-                entity: input_boolean.dashboard_setting_show_forecasting
-                state: 'on'
           - type: heading
             icon: ''
             heading: Forecasting Configuration (Battery discharge and Negative Price)
@@ -4711,9 +4651,6 @@ views:
               - condition: state
                 entity: input_number.savings_setting_fixed_supply_price
                 state_not: unavailable
-              - condition: state
-                entity: input_boolean.dashboard_setting_show_forecasting
-                state: 'on'
           - type: markdown
             content: >-
               <ha-alert alert-type="info">Help text</ha-alert>Enter the
@@ -4745,9 +4682,6 @@ views:
               - condition: state
                 entity: input_boolean.dashboard_setting_show_help
                 state: 'on'
-              - condition: state
-                entity: input_boolean.dashboard_setting_show_forecasting
-                state: 'on'
           - type: entities
             entities:
               - entity: input_number.savings_setting_fixed_supply_price
@@ -4771,9 +4705,6 @@ views:
               - condition: state
                 entity: input_number.savings_setting_fixed_supply_price
                 state_not: unavailable
-              - condition: state
-                entity: input_boolean.dashboard_setting_show_forecasting
-                state: 'on'
           - type: heading
             icon: ''
             heading_style: title
@@ -4986,8 +4917,8 @@ views:
           - type: markdown
             content: >-
               <ha-alert alert-type="info">Help text</ha-alert>Here you can set
-              whether you want to hide or show the dynamic information on the
-              first tab via **Show Dynamic On Dashboard⚙️**. Use **Show Forecasting On Dashboard** to show or hide the Forecasting section and the Forecasting settings.
+              whether you want to show or hide the help texts and the PV
+              information. The dynamic information and the Forecasting section are always on the dashboard.
             text_only: true
             visibility:
               - condition: state
@@ -4997,9 +4928,6 @@ views:
             entities:
               - entity: input_boolean.dashboard_setting_show_help
               - entity: input_boolean.dashboard_setting_show_pv
-              - entity: input_boolean.dashboard_setting_show_dynamic
-              - entity: input_boolean.dashboard_setting_show_forecasting
-                name: Show Forecasting On Dashboard
           - type: heading
             heading: Logbook (last 4 hours)
             heading_style: title

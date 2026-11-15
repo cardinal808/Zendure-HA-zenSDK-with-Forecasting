@@ -219,9 +219,6 @@ input_boolean:
   forecast_betrouwbaarheid_automatisch_ingesteld:
     name: Forecast Betrouwbaarheid Automatisch Ingesteld
     icon: mdi:robot
-  forecast_tonen_op_dashboard:
-    name: Forecasting Tonen Op Dashboard
-    icon: mdi:calendar-clock
 
 input_button:
   forecast_herberekenen:

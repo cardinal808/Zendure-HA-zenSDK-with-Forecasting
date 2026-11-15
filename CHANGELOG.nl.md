@@ -13,6 +13,9 @@ Versies volgen `jaar.maand.volgnummer`; het volgnummer begint elke maand bij 1. 
 - `sensor.zendure_terugleverprijs_nu` heeft nieuwe attributen `saldering_actief`, `saldering_tot`, `saldering_tot_ts`, `btw_pct`, `markt_btw_factor`, `eb_saldering`; de besparing en de planner (vooraf ontladen) rekenen daarmee per kwartier.
 - **Besparing, vast contract:** zolang saldering geldt telt teruglevering tegen het leveringstarief. Het veld heet nu **Vast contract tarief teruglevering (zonder saldering)**: vul de terugleververgoeding van je contract voor 2027 in.
 
+**Dynamisch en Forecasting altijd op het dashboard**
+- De schakelaars *Dynamisch Tonen Op Dashboard* en *Forecasting Tonen Op Dashboard* zijn weg; de dynamische informatie en de Forecasting-sectie (en -instellingen) staan altijd op het dashboard. `input_boolean.forecast_tonen_op_dashboard` is verwijderd; Gielz' `input_boolean.dynamisch_tonen_op_dashboard` blijft in zijn pakket bestaan maar wordt niet meer gebruikt. *Help* en *PV Tonen Op Dashboard* blijven.
+
 **Fix: controle van alle bestanden (15-11)**
 - EN-dashboard: Gielz' grafiek *Import | Export* was beschadigd bij het toevoegen van het verbruiksprofiel (de Export-reeks miste statistiek, kolom en kleur; de tellerkaart stond onderaan). Hersteld zoals bij Gielz.
 - Dashboard: in drie helpteksten van Gielz waren de harde regeleinden (twee spaties) weggevallen, waardoor regels aan elkaar liepen. Hersteld.

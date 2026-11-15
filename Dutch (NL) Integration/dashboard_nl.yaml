@@ -772,10 +772,6 @@ views:
             icon: ''
             heading: Plan Tijdlijn
             heading_style: title
-            visibility:
-              - condition: state
-                entity: input_boolean.forecast_tonen_op_dashboard
-                state: 'on'
           - type: markdown
             content: >-
               <ha-alert alert-type="info">Helptekst</ha-alert>Voorspelling per prijsslot voor de komende 36 uur. Prijs (kleuren zoals Gielz): blauw = gepland laden uit het net, rood = duur (duurste periodes van Gielz), grijs = overig, lichtgrijs = prijs nog onbekend. Accu: blauw = laden uit het net, geel = laden uit zon, oranje = ontladen; witte lijn = laadpercentage (0–100%). Net: blauw = accu laden uit het net, paars = huis uit het net, grijs = teruglevering. Het laden van morgen is indicatief; de dal-blokkade zit niet in deze voorspelling. Zon alleen met een Solcast-detailvoorspelling.
@@ -786,9 +782,6 @@ views:
             visibility:
               - condition: state
                 entity: input_boolean.help_tonen_op_dashboard
-                state: 'on'
-              - condition: state
-                entity: input_boolean.forecast_tonen_op_dashboard
                 state: 'on'
           - type: custom:mod-card
             card_mod:
@@ -1284,10 +1277,6 @@ views:
                         box-shadow: none !important;
                         border-top: 1px solid var(--divider-color) !important;
                       }
-            visibility:
-              - condition: state
-                entity: input_boolean.forecast_tonen_op_dashboard
-                state: 'on'
       - type: grid
         cards:
           - type: heading
@@ -1564,10 +1553,6 @@ views:
             icon: ''
             heading: Verbruiksprofiel
             heading_style: title
-            visibility:
-              - condition: state
-                entity: input_boolean.forecast_tonen_op_dashboard
-                state: 'on'
           - type: custom:apexcharts-card
             graph_span: 24h
             span:
@@ -1640,10 +1625,6 @@ views:
                   const d = entity.attributes.weekend || [];
                   const base = new Date(); base.setHours(0, 0, 0, 0);
                   return d.map((v, i) => [base.getTime() + i * 3600000 + 1800000, v]);
-            visibility:
-              - condition: state
-                entity: input_boolean.forecast_tonen_op_dashboard
-                state: 'on'
           - type: custom:apexcharts-card
             graph_span: 7d
             span:
@@ -1719,10 +1700,6 @@ views:
                     out.push({ x: ma.getTime() + d * 86400000, y: Math.round(t * 10) / 10, fillColor: d < 5 ? '#01a180' : '#a2a2a3' });
                   }
                   return out;
-            visibility:
-              - condition: state
-                entity: input_boolean.forecast_tonen_op_dashboard
-                state: 'on'
           - type: markdown
             content: >-
               <ha-alert alert-type="info">Help</ha-alert>Bovenste grafiek: gemiddeld verbruik per uur (kWh), geleerd uit je eigen meting, voor werkdag (groen) en weekend (grijs). Wordt na ongeveer een week bruikbaar. Onderste grafiek: verwacht verbruik per weekdag (kWh); het eigen profiel per weekdag telt na 3 weken volledig mee.
@@ -1730,9 +1707,6 @@ views:
             visibility:
               - condition: state
                 entity: input_boolean.help_tonen_op_dashboard
-                state: 'on'
-              - condition: state
-                entity: input_boolean.forecast_tonen_op_dashboard
                 state: 'on'
       - type: grid
         cards:
@@ -2088,10 +2062,6 @@ views:
               - condition: time
                 after: '13:30:00'
                 before: '24:00:00'
-        visibility:
-          - condition: state
-            entity: input_boolean.dynamisch_tonen_op_dashboard
-            state: 'on'
       - type: grid
         cards:
           - type: heading
@@ -2188,16 +2158,8 @@ views:
 
               - Verbruik per kwartier: **{{ a.verbruik_per_kwartier_bron }}**{% if state_attr('sensor.forecast_verbruiksprofiel', 'laatste_kwartier_kwh') is not none %}, laatste kwartier {{ state_attr('sensor.forecast_verbruiksprofiel', 'laatste_kwartier_kwh') }} kWh{% endif %}{% endfilter %}
             text_only: false
-        visibility:
-          - condition: state
-            entity: input_boolean.forecast_tonen_op_dashboard
-            state: 'on'
       - column_span: 2
         cards: []
-        visibility:
-          - condition: state
-            entity: input_boolean.forecast_tonen_op_dashboard
-            state: 'on'
     cards: []
     icon: mdi:battery
     dense_section_placement: false
@@ -4058,10 +4020,6 @@ views:
             heading: Gielz Configuratie (Dynamisch)
             heading_style: title
             badges: []
-            visibility:
-              - condition: state
-                entity: input_boolean.dynamisch_tonen_op_dashboard
-                state: 'on'
           - type: markdown
             content: >-
               <ha-alert alert-type="info">Helptekst</ha-alert>Heb je een
@@ -4077,9 +4035,6 @@ views:
               - condition: state
                 entity: input_boolean.help_tonen_op_dashboard
                 state: 'on'
-              - condition: state
-                entity: input_boolean.dynamisch_tonen_op_dashboard
-                state: 'on'
           - type: entities
             entities:
               - entity: input_text.dynamisch_nordpool_sensor
@@ -4089,10 +4044,6 @@ views:
                 name: Minimale Spread
               - entity: input_boolean.dynamisch_15_minuten
                 name: 15 Minuten Tarieven Actief
-            visibility:
-              - condition: state
-                entity: input_boolean.dynamisch_tonen_op_dashboard
-                state: 'on'
       - type: grid
         cards:
           - type: heading
@@ -4120,10 +4071,6 @@ views:
                     dismiss_text: Annuleren
                 color: '#01a180'
                 text: Verbruiksgegevens resetten
-            visibility:
-              - condition: state
-                entity: input_boolean.forecast_tonen_op_dashboard
-                state: 'on'
           - type: markdown
             content: >-
               <ha-alert alert-type="info">Helptekst</ha-alert>Voor de modus
@@ -4157,9 +4104,6 @@ views:
             visibility:
               - condition: state
                 entity: input_boolean.help_tonen_op_dashboard
-                state: 'on'
-              - condition: state
-                entity: input_boolean.forecast_tonen_op_dashboard
                 state: 'on'
           - type: entities
             entities:
@@ -4414,10 +4358,6 @@ views:
                 name: Kalibratie na dagen
               - entity: input_boolean.forecast_kalibratieladen
                 name: Kalibratieladen
-            visibility:
-              - condition: state
-                entity: input_boolean.forecast_tonen_op_dashboard
-                state: 'on'
           - type: heading
             icon: ''
             heading: Forecasting Configuratie (Accu ontladen en Negatieve Prijs)
@@ -4720,9 +4660,6 @@ views:
               - condition: state
                 entity: input_number.besparing_vast_leveringsprijs
                 state_not: unavailable
-              - condition: state
-                entity: input_boolean.forecast_tonen_op_dashboard
-                state: 'on'
           - type: markdown
             content: >-
               <ha-alert alert-type="info">Helptekst</ha-alert>Vul de
@@ -4755,9 +4692,6 @@ views:
               - condition: state
                 entity: input_boolean.help_tonen_op_dashboard
                 state: 'on'
-              - condition: state
-                entity: input_boolean.forecast_tonen_op_dashboard
-                state: 'on'
           - type: entities
             entities:
               - entity: input_number.besparing_vast_leveringsprijs
@@ -4781,9 +4715,6 @@ views:
               - condition: state
                 entity: input_number.besparing_vast_leveringsprijs
                 state_not: unavailable
-              - condition: state
-                entity: input_boolean.forecast_tonen_op_dashboard
-                state: 'on'
           - type: heading
             icon: ''
             heading_style: title
@@ -4995,8 +4926,8 @@ views:
           - type: markdown
             content: >-
               <ha-alert alert-type="info">Helptekst</ha-alert>Hier stel je in of
-              je de Dynamische informatie wilt verbergen of tonen op het eerste
-              tabblad via **Dynamisch Tonen Op Dashboard⚙️**. Met **Forecasting Tonen Op Dashboard** toon of verberg je de Forecasting-sectie en de Forecasting-instellingen.
+              je de helpteksten en de PV-informatie wilt tonen of verbergen. De
+              Dynamische informatie en de Forecasting-sectie staan altijd op het dashboard.
             text_only: true
             visibility:
               - condition: state
@@ -5006,9 +4937,6 @@ views:
             entities:
               - entity: input_boolean.help_tonen_op_dashboard
               - entity: input_boolean.pv_tonen_op_dashboard
-              - entity: input_boolean.dynamisch_tonen_op_dashboard
-              - entity: input_boolean.forecast_tonen_op_dashboard
-                name: Forecasting Tonen Op Dashboard
           - type: heading
             heading: Logboek (afgelopen 4 uur)
             heading_style: title

@@ -36,7 +36,7 @@ The battery charges at the cheapest moments, but **only as much as is actually n
 - **Diagnostics export** *(optional package `zendure_export_global.yaml`)*: one button saves a JSON file directly on your own device, with your settings, sensor states, planner details and the logs of the last 24 hours, to attach to a question or issue. IP addresses and serial numbers are left out. The button uses [button-card](https://github.com/custom-cards/button-card) (HACS); without button-card it works via Developer tools → Actions.
 - **Optional packages show themselves:** the Forecasting Configuration (Savings), (EV), (HVAC) and Diagnostics export blocks are only on the dashboard when the matching package is loaded. The **Optional packages** card on the Settings tab shows which ones are loaded and what the others do. See [Packages](#packages).
 - **Plan Timeline** on the dashboard: for the next 36 hours per price slot in four compact rows the price (colours as in Gielz: green = planned charging, red = expensive), solar and house usage, battery charge and discharge with the expected state of charge, and grid import and export. As one card via `custom:mod-card`, so card-mod (HACS) is needed. Tip: exclude `sensor.zendure_forecast_chart` from the recorder (`recorder: exclude: entities:`), its attributes exceed the recorder's 16 kB limit.
-- Dashboard: a Forecasting section on the Zendure tab (plan for today and tomorrow, usage profile, collected 7-day data, recalculate button), a Savings tab and a Forecasting Configuration (Basic) block with all input fields. Both can be shown or hidden with **Show Forecasting On Dashboard**.
+- Dashboard: a Forecasting section on the Zendure tab (plan for today and tomorrow, usage profile, collected 7-day data, recalculate button), a Savings tab and a Forecasting Configuration (Basic) block with all input fields.
 
 ### Packages
 
@@ -213,7 +213,6 @@ homeassistant:
 | **Configuration (Dashboard)** | **Information** |
 | `dashboard_setting_show_help` | Enable to show help text on the dashboard. |
 | `dashboard_setting_show_pv` | Enable to show connected (offgrid/mppt) PV on the dashboard. |
-| `dashboard_setting_show_dynamic` | Enable to show dynamic control on the dashboard. |
 
 ---
 

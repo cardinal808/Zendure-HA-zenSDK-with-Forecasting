@@ -219,9 +219,6 @@ input_boolean:
   forecast_setting_reliability_auto_fill_set:
     name: Forecast Reliability Auto Fill Set
     icon: mdi:robot
-  dashboard_setting_show_forecasting:
-    name: Show Forecasting On Dashboard
-    icon: mdi:calendar-clock
 
 input_button:
   forecast_recalculate:

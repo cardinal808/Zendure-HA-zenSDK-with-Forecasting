@@ -35,7 +35,7 @@ De accu laadt op de goedkoopste momenten, maar **alleen zoveel als nodig is**, r
 - **Diagnose-export** *(optioneel pakket `zendure_export.yaml`)*: met één knop een JSON-bestand rechtstreeks op je eigen apparaat, met je instellingen, sensorstanden, plannerdetails en de logs van de afgelopen 24 uur, om mee te sturen bij een vraag of issue. IP-adressen en serienummers worden weggelaten. De knop gebruikt [button-card](https://github.com/custom-cards/button-card) (HACS); zonder button-card kan het via Ontwikkelhulpmiddelen → Acties.
 - **Optionele pakketten tonen zich vanzelf:** de blokken Forecasting Configuratie (Besparing), (EV), (HVAC) en Diagnose-export staan alleen op het dashboard als het bijbehorende pakket geladen is. De kaart **Optionele pakketten** op de tab Configuratie laat zien welke geladen zijn en wat de andere doen. Zie [Pakketten](#pakketten).
 - **Plan Tijdlijn** op het dashboard: voor de komende 36 uur per prijsslot in vier compacte rijen de prijs (kleuren zoals Gielz: groen = gepland laden, rood = duur), zon en huisverbruik, laden en ontladen van de accu met het verwachte laadpercentage, en net-import en -export. Als één kaart via `custom:mod-card`, dus card-mod (HACS) is nodig. Tip: sluit `sensor.zendure_forecast_grafiek` uit van de recorder (`recorder: exclude: entities:`), de attributen zijn groter dan de 16 kB-limiet van de recorder.
-- Dashboard: sectie Forecasting op tab Zendure (plan vandaag en morgen, verbruiksprofiel, verzamelde 7-daagse gegevens, herbereken-knop), een tab Besparing en een blok Forecasting Configuratie (Basis) met alle invoervelden. Beide zijn te tonen of te verbergen met **Forecasting Tonen Op Dashboard**.
+- Dashboard: sectie Forecasting op tab Zendure (plan vandaag en morgen, verbruiksprofiel, verzamelde 7-daagse gegevens, herbereken-knop), een tab Besparing en een blok Forecasting Configuratie (Basis) met alle invoervelden.
 
 ### Pakketten
 
@@ -212,7 +212,6 @@ homeassistant:
 | **Configuratie (Dashboard)** |**Informatie**|  
 | `help_tonen_op_dashboard` | Vink dit aan om de helpteksten te tonen bij de meest relevante onderdelen.  | 
 | `pv_tonen_op_dashboard` | Vink dit aan om de verbonden (offgrid/mppt) PV te tonen op het dashboard.  |  
-| `dynamisch_tonen_op_dashboard` | Vink dit aan om de dynamische sturing te tonen op het dashboard.  |  
 
 ---
 

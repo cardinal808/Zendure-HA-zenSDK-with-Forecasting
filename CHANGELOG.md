@@ -13,6 +13,9 @@ Versions follow `year.month.sequence`; the sequence restarts at 1 every month. E
 - `sensor.zendure_feedin_price_now` has new attributes `net_metering_active`, `net_metering_until`, `net_metering_until_ts`, `vat_pct`, `market_vat_factor`, `energy_tax_net_metering`; the savings and the planner (pre-discharge) use them per quarter hour.
 - **Savings, fixed contract:** while net metering applies, export counts at the supply tariff. The field is now called **Fixed contract feed-in tariff (without net metering)**: enter your contract's feed-in tariff for 2027.
 
+**Dynamic and Forecasting always on the dashboard**
+- The switches *Show Dynamic On Dashboard* and *Show Forecasting On Dashboard* are gone; the dynamic information and the Forecasting section (and settings) are always on the dashboard. `input_boolean.dashboard_setting_show_forecasting` is removed; Gielz's `input_boolean.dashboard_setting_show_dynamic` stays in his package but is no longer used. *Show Help* and *Show PV On Dashboard* stay.
+
 **Fix: review of all files (15-11)**
 - EN dashboard: Gielz's *Import | Export* chart was damaged when the usage profile was added (the Export series lacked statistics, column and colour; the counter card was at the bottom). Restored as in Gielz.
 - Dashboard: in three of Gielz's help texts the hard line breaks (two spaces) were lost, so lines ran together. Restored.
