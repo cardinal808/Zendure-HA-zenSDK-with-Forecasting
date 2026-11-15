@@ -236,7 +236,7 @@ script:
             {%- endfor -%}
             {#- Externe entiteiten die in de invoervelden zijn ingevuld (zon-forecast, Nordpool, airco, ...) -#}
             {#- Ook de _today-variant van de resterend-vandaag-sensor (de planner leest daar de detailvoorspelling) -#}
-            {%- set ext_ids = ns.ent_ext + (ns.ent_ext | select('search', '_remaining_today') | map('replace', '_remaining_today', '_today') | list) -%}
+            {%- set ext_ids = ns.ent_ext + (ns.ent_ext | select('search', '_remaining_today') | map('replace', '_remaining_today', '_today') | list) + (ns.ent_ext | select('search', '_resterende_voorspelling_vandaag') | map('replace', '_resterende_voorspelling_vandaag', '_voorspelling_vandaag') | list) -%}
             {%- for s in expand(ext_ids | unique | list) -%}
               {%- set a = dict(s.attributes) -%}
               {%- set at = a if (j(a) | length) < 1500 else {'(te groot, alleen namen)': a.keys() | list} -%}

@@ -1708,7 +1708,10 @@ template:
         {%- set e1 = states('input_text.forecast_zon_resterend_vandaag_sensor') | trim -%}
         {%- set e2 = states('input_text.forecast_zon_morgen_sensor') | trim -%}
         {%- set ns = namespace(l=[], ts=[], ids=[]) -%}
-        {%- for e in [e1, e1 | replace('_remaining_today', '_today'), e2] -%}
+        {#- Dag-sensor met detail bij de resterend-vandaag-sensor (EN- en NL-namen van Solcast), en alle Solcast-sensoren als vangnet -#}
+        {%- set e_vandaag = [e1 | replace('_remaining_today', '_today'), e1 | replace('_resterende_voorspelling_vandaag', '_voorspelling_vandaag')] -%}
+        {%- set solcast = (integration_entities('solcast_solar') | select('match', '^sensor\\.') | list) if (e1 ~ e2) is search('solcast') else [] -%}
+        {%- for e in [e1] + e_vandaag + [e2] + solcast -%}
           {%- if e | lower | regex_match('^sensor\\..+') and e not in ns.ids -%}
             {%- set ns.ids = ns.ids + [e] -%}
             {%- set d = state_attr(e, 'detailedForecast') or state_attr(e, 'detailed_forecast') or [] -%}
@@ -1803,7 +1806,10 @@ template:
         {%- set e2 = states('input_text.forecast_zon_morgen_sensor') | trim -%}
         {%- set ns = namespace(l=[], ts=[], ids=[]) -%}
         {%- if not zon_dag_is_vandaag -%}
-          {%- for e in [e2, e1 | replace('_remaining_today', '_today'), e1] -%}
+          {#- Dag-sensor met detail bij de resterend-vandaag-sensor (EN- en NL-namen van Solcast), en alle Solcast-sensoren als vangnet -#}
+          {%- set e_vandaag = [e1 | replace('_remaining_today', '_today'), e1 | replace('_resterende_voorspelling_vandaag', '_voorspelling_vandaag')] -%}
+          {%- set solcast = (integration_entities('solcast_solar') | select('match', '^sensor\\.') | list) if (e1 ~ e2) is search('solcast') else [] -%}
+          {%- for e in [e2] + e_vandaag + [e1] + solcast -%}
             {%- if e | lower | regex_match('^sensor\\..+') and e not in ns.ids -%}
               {%- set ns.ids = ns.ids + [e] -%}
               {%- set d = state_attr(e, 'detailedForecast') or state_attr(e, 'detailed_forecast') or [] -%}
@@ -2392,7 +2398,10 @@ template:
         {%- set e1 = states('input_text.forecast_zon_resterend_vandaag_sensor') | trim -%}
         {%- set e2 = states('input_text.forecast_zon_morgen_sensor') | trim -%}
         {%- set ns = namespace(l=[], ts=[], ids=[]) -%}
-        {%- for e in [e1, e1 | replace('_remaining_today', '_today'), e2] -%}
+        {#- Dag-sensor met detail bij de resterend-vandaag-sensor (EN- en NL-namen van Solcast), en alle Solcast-sensoren als vangnet -#}
+        {%- set e_vandaag = [e1 | replace('_remaining_today', '_today'), e1 | replace('_resterende_voorspelling_vandaag', '_voorspelling_vandaag')] -%}
+        {%- set solcast = (integration_entities('solcast_solar') | select('match', '^sensor\\.') | list) if (e1 ~ e2) is search('solcast') else [] -%}
+        {%- for e in [e1] + e_vandaag + [e2] + solcast -%}
           {%- if e | lower | regex_match('^sensor\\..+') and e not in ns.ids -%}
             {%- set ns.ids = ns.ids + [e] -%}
             {%- set d = state_attr(e, 'detailedForecast') or state_attr(e, 'detailed_forecast') or [] -%}

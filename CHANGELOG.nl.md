@@ -14,6 +14,9 @@ Versies volgen `jaar.maand.volgnummer`; het volgnummer begint elke maand bij 1. 
 - **Besparing, vast contract:** zolang saldering geldt telt teruglevering tegen het leveringstarief. Het veld heet nu **Vast contract tarief teruglevering (zonder saldering)**: vul de terugleververgoeding van je contract voor 2027 in.
 - Saldering geldt tot je jaarverbruik. Lever je over het jaar meer terug dan je afneemt, kies dan *Geen saldering*.
 
+**Fix: Solcast-detail voor vandaag met Nederlandse entiteitnamen**
+- Met HA in het Nederlands heet de Solcast-sensor `…_resterende_voorspelling_vandaag`. De planner zocht de detailvoorspelling van vandaag alleen bij de Engelse naam (`…_remaining_today` → `…_today`), en vond met de Nederlandse naam niets. Gevolg: geen zon voor de rest van vandaag in de Plan Tijdlijn, de laadpercentage-lijn liep overdag leeg en de pad-check rekende met *zonsopkomst + 3 uur*. Nu ook `…_voorspelling_vandaag`, en als vangnet alle Solcast-sensoren (alleen als je Solcast gebruikt). Ook in de diagnose-export.
+
 **Configuratie makkelijker**
 - **Zon-forecast sensoren automatisch invullen:** is *Zon resterend vandaag sensor* of *Zon morgen sensor* leeg, dan vult de set Solcast in (anders Forecast.Solar), als er precies één passende sensor is. Een zelf ingevuld veld blijft staan; elke invulling staat in het logboek.
 - **Net-tellers:** worden ze automatisch herkend (HomeWizard, SlimmeLezer, DSMR), dan verbergt het dashboard de invoervelden en toont het welke sensor gebruikt wordt (*Net import teller (automatisch herkend)*). Nieuwe `binary_sensor.forecast_net_import_teller_automatisch` en `..._export_...` (attribuut `sensoren`).

@@ -14,6 +14,9 @@ Versions follow `year.month.sequence`; the sequence restarts at 1 every month. E
 - **Savings, fixed contract:** while net metering applies, export counts at the supply tariff. The field is now called **Fixed contract feed-in tariff (without net metering)**: enter your contract's feed-in tariff for 2027.
 - Net metering only covers your annual consumption. If you export more than you import over the year, choose *No net metering*.
 
+**Fix: Solcast detail for today with Dutch entity names**
+- With HA in Dutch the Solcast sensor is called `…_resterende_voorspelling_vandaag`. The planner only looked for today's detailed forecast under the English name (`…_remaining_today` → `…_today`), and found nothing with the Dutch name. As a result there was no solar for the rest of today in the Plan Timeline, the state of charge line ran empty during the day and the path check used *sunrise + 3 hours*. Now also `…_voorspelling_vandaag`, and as a fallback all Solcast sensors (only if you use Solcast). Also in the diagnostics export.
+
 **Easier configuration**
 - **Solar forecast sensors filled in automatically:** if *Solar remaining today sensor* or *Solar tomorrow sensor* is empty, the set fills in Solcast (otherwise Forecast.Solar), when there is exactly one matching sensor. A field you filled in yourself is kept; every fill-in is in the logbook.
 - **Grid counters:** when they are detected automatically (HomeWizard, SlimmeLezer, DSMR), the dashboard hides the input fields and shows which sensor is used (*Grid import counter (detected automatically)*). New `binary_sensor.forecast_grid_import_counter_automatic` and `..._export_...` (attribute `sensors`).
