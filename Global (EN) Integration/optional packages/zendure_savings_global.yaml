@@ -45,10 +45,10 @@
 # They are extrapolated from the "total" period; what the battery earned before the measurement
 # started can be entered at "Battery Already Earned".
 #
-# Export has its own price (fixed: feed-in price; dynamic: Nordpool price + bonus % on a
-# positive market price + feed-in markup; the markup can be negative if the supplier deducts
-# something). Net metering (setting Negative Price Net Metering in the negative price package,
-# default the Dutch salderingsregeling until 31-12-2026) per quarter hour: fixed = supply price,
+# Export has its own price (fixed: feed-in price; dynamic: market price + feed-in markup + in
+# daylight bonus % of (bare market price + markup) when positive; the markup can be negative if
+# the supplier deducts something). Net metering (no choice: the Dutch salderingsregeling until
+# 31-12-2026) per quarter hour: fixed = supply price,
 # dynamic = market price incl. VAT + energy tax incl. VAT. Without net metering: fixed = the
 # entered Fixed Contract Feed-in Price, dynamic = market price without VAT.
 # =====================================================================
@@ -193,8 +193,15 @@ template:
       fixed_out: "{{ states('input_number.savings_setting_fixed_feedin_price') | float(0) }}"
       markup_in: "{{ states('input_number.savings_setting_dynamic_supply_markup') | float(0) }}"
       markup_out: "{{ states('input_number.savings_setting_dynamic_feedin_markup') | float(0) }}"
-      # Bonus (%) on the market price for export, only when that price is positive
+      # Solar bonus (%) for export: on (bare market price + markup), only when that is positive
+      # and only in daylight (middle of the quarter hour between sunrise and sunset, sun.sun)
       bonus_out: "{{ states('input_number.savings_setting_dynamic_feedin_bonus') | float(0) / 100 }}"
+      bonus_day: >
+        {%- set t = ((prev.ts | float(now_ts)) if prev is mapping else now_ts) + 450 -%}
+        {%- set sr = as_timestamp(state_attr('sun.sun', 'next_rising'), 0) -%}
+        {%- set ss = as_timestamp(state_attr('sun.sun', 'next_setting'), 0) -%}
+        {%- set sr = sr - 86400 if sr > ss else sr -%}
+        {{ sr <= 0 or ss <= 0 or ((t - sr) % 86400) < (ss - sr) }}
       # Net metering and VAT (settings from the negative price package, attributes of the feed-in price).
       # The quarter hour counts under the rules of the moment it started.
       nm_until: "{{ state_attr('sensor.zendure_feedin_price_now', 'net_metering_until_ts') | float(as_timestamp('2027-01-01T00:00:00+01:00')) }}"
@@ -220,7 +227,8 @@ template:
           {%- set din = p_dyn + markup_in -%}
           {#- Export: under net metering market price incl. VAT + energy tax, otherwise without VAT -#}
           {%- set mk = (p_market / market_f) * (vat_f if nm_q else 1) -%}
-          {%- set dout = mk + bonus_out * ([mk, 0] | max) + markup_out + (tax_nm if nm_q else 0) -%}
+          {%- set bon = (bonus_out * ([p_market / market_f + markup_out, 0] | max)) if bonus_day else 0 -%}
+          {%- set dout = mk + bon + markup_out + (tax_nm if nm_q else 0) -%}
           {%- set fout = fixed_in if nm_q else fixed_out -%}{%- set d = delta -%}
           {#- Solar into the battery: the surplus (solar minus direct use), at most what was charged -#}
           {%- set sin = [d.solar - [d.solar, d.usage] | min, d.charge] | min -%}

@@ -7,15 +7,17 @@
 # Place this file next to zendure_gielz1986_global.yaml (same packages folder).
 #
 # Feed-in price (sensor.zendure_feedin_price_now), per quarter hour:
-#   market price + bonus % (only when the market price is positive) + feed-in markup
+#   market price + feed-in markup + solar bonus
+#   Solar bonus (like Zonneplan): bonus % of (bare market price excl. VAT + feed-in markup), only
+#   between sunrise and sunset (sun.sun) and only when that amount is positive.
 #   Market price from Dynamic Market Price Sensor (Feed-in) when filled in, otherwise from the
 #   Nordpool sensor of Gielz (which can be all-in: energy tax and markup do not apply to export). Feed-in markup and bonus live in this package (so they
 #   exist without the savings package too); on the dashboard in Forecasting Configuration
-#   (Negative Price), under Feed-in price.
-#   Net metering (Negative Price Net Metering, default Automatic = Dutch salderingsregeling until
-#   31-12-2026): while net metering applies the market price includes VAT and the energy tax
+#   (Battery discharge and Negative Price), under Feed-in price.
+#   Net metering (no choice: the Dutch salderingsregeling, quarter hours starting before
+#   1-1-2027): while net metering applies the market price includes VAT and the energy tax
 #   (incl. VAT) is added, because you get it back. After that: market price without VAT, no energy
-#   tax (private household). Outside the Netherlands: choose No net metering (or Net metering).
+#   tax (private household).
 #   VAT in the market price sensor: Negative Price Market Price VAT (the sensor of the Nordpool
 #   package includes VAT). Other packages (savings, planner) read the settings from the attributes
 #   net_metering_until_ts, vat_pct, market_vat_factor and energy_tax_net_metering.
@@ -227,7 +229,8 @@ template:
         unique_id: zendure_feedin_price_now
         icon: mdi:transmission-tower-export
         unit_of_measurement: "€/kWh"
-        # Feed-in price = market + bonus % x max(market, 0) + markup (+ energy tax under net metering)
+        # Feed-in price = market + markup + solar bonus (+ energy tax under net metering)
+        #   solar bonus = bonus % x max(bare + markup, 0), only while the sun is up
         #   market = bare price excl. VAT; under net metering x (1 + VAT)
         # The same rule is in the savings (feedin_dyn) and the planner (pd_window), per quarter hour.
         state: >
@@ -254,10 +257,13 @@ template:
             {%- set fm = 1 if is_state('input_select.negative_price_market_price_vat', 'Excluding VAT') else 1 + vat -%}
             {%- set tx = states('input_number.nordpool_setting_energy_tax') | float(-1) -%}
             {%- set tax = tx * (1 + vat) if tx >= 0 else states('input_number.negative_price_net_metering_energy_tax') | float(0) -%}
-            {%- set market = (ns.p / fm) * ((1 + vat) if nm else 1) -%}
+            {%- set bare = ns.p / fm -%}
+            {%- set market = bare * ((1 + vat) if nm else 1) -%}
             {%- set markup = states('input_number.savings_setting_dynamic_feedin_markup') | float(0) -%}
             {%- set bonus = states('input_number.savings_setting_dynamic_feedin_bonus') | float(0) / 100 -%}
-            {{ (market + bonus * ([market, 0] | max) + markup + (tax if nm else 0)) | round(5) }}
+            {%- set day = not is_state('sun.sun', 'below_horizon') -%}
+            {%- set bon = (bonus * ([bare + markup, 0] | max)) if day else 0 -%}
+            {{ (market + bon + markup + (tax if nm else 0)) | round(5) }}
           {%- else -%}
             {{ none }}
           {%- endif -%}

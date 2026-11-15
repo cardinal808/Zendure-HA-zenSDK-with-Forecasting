@@ -13,11 +13,17 @@ Versies volgen `jaar.maand.volgnummer`; het volgnummer begint elke maand bij 1. 
 - `sensor.zendure_terugleverprijs_nu` heeft nieuwe attributen `saldering_actief`, `saldering_tot`, `saldering_tot_ts`, `btw_pct`, `markt_btw_factor`, `eb_saldering`; de besparing en de planner (vooraf ontladen) rekenen daarmee per kwartier.
 - **Besparing, vast contract:** zolang saldering geldt telt teruglevering tegen het leveringstarief. Het veld heet nu **Vast contract tarief teruglevering (zonder saldering)**: vul de terugleververgoeding van je contract voor 2027 in.
 
+**Fix: zonnebonus alleen overdag, over kale marktprijs + opslag (zoals Zonneplan)**
+- De bonus teruglevering (nu **Zonnebonus % (overdag)**) telde over de marktprijs **inclusief** btw en de hele dag. Zonneplan geeft de zonnebonus over de kale marktprijs (zonder btw) plus de verkoopvergoeding, alleen tussen zonsopkomst en zonsondergang en alleen als dat bedrag positief is.
+- Nu: zonnebonus = bonus % × max(kale marktprijs + opslag teruglevering, 0), alleen als de zon op is (`sun.sun`; voor kwartieren in de planning en de besparing het midden van het kwartier tussen zonsopkomst en zonsondergang).
+- Voorbeeld Zonneplan (10%, opslag €0,02, marktprijs €0,20384 incl. btw): 's avonds €0,3347 (was €0,3571), overdag €0,3535.
+- Geldt voor de terugleverprijs, *Niet terugleveren bij negatieve prijs*, *Accu ontladen bij negatieve prijzen*, *Accu ontladen bij zonoverschot* en de besparing.
+
 **Fix: Solcast-detail voor vandaag met Nederlandse entiteitnamen**
 - Met HA in het Nederlands heet de Solcast-sensor `…_resterende_voorspelling_vandaag`. De planner zocht de detailvoorspelling van vandaag alleen bij de Engelse naam (`…_remaining_today` → `…_today`), en vond met de Nederlandse naam niets. Gevolg: geen zon voor de rest van vandaag in de Plan Tijdlijn, de laadpercentage-lijn liep overdag leeg en de pad-check rekende met *zonsopkomst + 3 uur*. Nu ook `…_voorspelling_vandaag`, en als vangnet alle Solcast-sensoren (alleen als je Solcast gebruikt). Ook in de diagnose-export.
 
 **Nieuw: accu ontladen bij zonoverschot (terugleveren vóór de zon)**
-- Schakelaar **Zonoverschot** (`input_boolean.zonoverschot_ontladen`) in Forecasting Configuratie (Negatieve Prijs), onder *Accu ontladen bij*. Standaard uit.
+- Schakelaar **Zonoverschot** (`input_boolean.zonoverschot_ontladen`) in Forecasting Configuratie (Accu ontladen en Negatieve Prijs), onder *Accu ontladen bij*. Standaard uit.
 - Vult de zon de accu straks toch vol, dan levert de accu wat het huis tot de zon niet nodig heeft (plus marge) vóór de zon terug aan het net: in de kwartieren met de hoogste terugleverprijs, met het maximale ontlaadvermogen. Voorbeeld: accu 40%, 20% nodig tot de zon, de zon vult de accu vol → ongeveer 20% terugleveren in de duurste kwartieren vóór de zon.
 - Alleen als het loont: terugleverprijs nu > terugleverprijs tijdens de zon / rendement (+ €0,01). Niet als er vóór de zon netladen gepland is, en alleen met een zon-detailvoorspelling (Solcast). Zonder ingevulde betrouwbaarheid telt 75% van het verwachte overschot.
 - Planner: attributen `zonoverschot_*` (kWh, kwartieren, zon vanaf, prijs tijdens de zon, grensprijs, opbrengst); `binary_sensor.forecast_zonoverschot_terugleveren`. Automation: nieuwe takken *Dynamisch NOM + Forecasting terugleveren bij zonoverschot* (Gielz' `zendure_snel_ontladen`, stopt bij geen kwartier meer of minimale SOC) en *… terugleveren controle* (na een herstart). Gielz' *Dynamisch ontladen controle* geldt niet in Forecasting-modus.

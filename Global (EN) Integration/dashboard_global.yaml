@@ -4412,9 +4412,11 @@ views:
             content: >-
               <ha-alert alert-type="info">Help text</ha-alert>When the feed-in
               price is negative, the installation does not export. Feed-in
-              price = market price + bonus % (only when the market price is
-              positive) + feed-in markup, using the fields under **Feed-in
-              price** below (also used by the savings and pre-discharge). Enter
+              price = market price + feed-in markup + solar bonus, using the
+              fields under **Feed-in price** below (also used by the savings and
+              pre-discharge). The **solar bonus** (as with Zonneplan) is the
+              bonus % of the bare market price (excl. VAT) plus the markup, only
+              between sunrise and sunset and only when that is positive. Enter
               a sensor with the bare market price at **Market price sensor**
               (with the Nordpool package that happens automatically:
               sensor.nordpool_kwh_nl_eur_5_10_021, *Including VAT*). Empty =
@@ -4558,7 +4560,7 @@ views:
               - entity: input_number.savings_setting_dynamic_feedin_markup
                 name: Feed-in markup
               - entity: input_number.savings_setting_dynamic_feedin_bonus
-                name: Feed-in bonus % (of market price)
+                name: Solar bonus % (daytime)
               - type: section
                 label: External inverter (optional) managed at negative prices
               - entity: input_select.negative_price_inverter_count

@@ -2058,6 +2058,10 @@ template:
         {%- set vat_f = 1 + state_attr(fp, 'vat_pct') | float(21) / 100 -%}
         {%- set market_f = state_attr(fp, 'market_vat_factor') | float(vat_f) -%}
         {%- set tax_nm = state_attr(fp, 'energy_tax_net_metering') | float(0) -%}
+        {#- Solar bonus only in daylight: sunrise/sunset from sun.sun, shifted per day -#}
+        {%- set sr = as_timestamp(state_attr('sun.sun', 'next_rising'), 0) -%}
+        {%- set ss = as_timestamp(state_attr('sun.sun', 'next_setting'), 0) -%}
+        {%- set sr = sr - 86400 if sr > ss else sr -%}
         {#- Market price per quarter hour (export): from the market price sensor when filled in, otherwise the slot price -#}
         {%- set msens = states('input_text.dynamic_setting_market_price_sensor') | trim | lower -%}
         {%- set mk = namespace(d={}) -%}
@@ -2076,8 +2080,11 @@ template:
             {%- endfor -%}
             {%- set mp0 = (mq.s / mq.n) if mq.n > 0 else x.v -%}
             {%- set nm = x.s < nm_until -%}
-            {%- set mp = (mp0 / market_f) * (vat_f if nm else 1) -%}
-            {%- set neg = (mp + bonus * ([mp, 0] | max) + markup + (tax_nm if nm else 0)) < 0 -%}
+            {%- set bare = mp0 / market_f -%}
+            {%- set mp = bare * (vat_f if nm else 1) -%}
+            {%- set day = sr <= 0 or ss <= 0 or (((x.s + x.e) / 2 - sr) % 86400) < (ss - sr) -%}
+            {%- set bon = (bonus * ([bare + markup, 0] | max)) if day else 0 -%}
+            {%- set neg = (mp + bon + markup + (tax_nm if nm else 0)) < 0 -%}
             {%- if neg and ns.cur is not none and ns.cur.e == x.s -%}
               {%- set ns.cur = {'s': ns.cur.s, 'e': x.e} -%}
             {%- elif neg -%}
@@ -2243,6 +2250,10 @@ template:
           {%- set vat_f = 1 + state_attr(fp, 'vat_pct') | float(21) / 100 -%}
           {%- set market_f = state_attr(fp, 'market_vat_factor') | float(vat_f) -%}
           {%- set tax_nm = state_attr(fp, 'energy_tax_net_metering') | float(0) -%}
+          {#- Solar bonus only in daylight: sunrise/sunset from sun.sun, shifted per day -#}
+          {%- set sr = as_timestamp(state_attr('sun.sun', 'next_rising'), 0) -%}
+          {%- set ss = as_timestamp(state_attr('sun.sun', 'next_setting'), 0) -%}
+          {%- set sr = sr - 86400 if sr > ss else sr -%}
           {%- set msens = states('input_text.dynamic_setting_market_price_sensor') | trim | lower -%}
           {%- set mk = namespace(d={}) -%}
           {%- if msens.startswith('sensor.') -%}
@@ -2258,8 +2269,11 @@ template:
             {%- endfor -%}
             {%- set mp0 = (mq.s / mq.n) if mq.n > 0 else x.v -%}
             {%- set nm = x.s < nm_until -%}
-            {%- set mp = (mp0 / market_f) * (vat_f if nm else 1) -%}
-            {%- set f = mp + bonus * ([mp, 0] | max) + markup + (tax_nm if nm else 0) -%}
+            {%- set bare = mp0 / market_f -%}
+            {%- set mp = bare * (vat_f if nm else 1) -%}
+            {%- set day = sr <= 0 or ss <= 0 or (((x.s + x.e) / 2 - sr) % 86400) < (ss - sr) -%}
+            {%- set bon = (bonus * ([bare + markup, 0] | max)) if day else 0 -%}
+            {%- set f = mp + bon + markup + (tax_nm if nm else 0) -%}
             {%- set ns.l = ns.l + [{'s': x.s, 'e': x.e, 'f': f | round(4)}] -%}
           {%- endfor -%}
         {%- endif -%}

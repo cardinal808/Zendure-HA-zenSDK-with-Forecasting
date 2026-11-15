@@ -4418,10 +4418,12 @@ views:
             content: >-
               <ha-alert alert-type="info">Helptekst</ha-alert>Is de
               terugleverprijs negatief, dan levert de installatie niet terug.
-              Terugleverprijs = marktprijs + bonus % (alleen bij een positieve
-              marktprijs) + opslag teruglevering, met de velden onder
+              Terugleverprijs = marktprijs + opslag teruglevering + zonnebonus,
+              met de velden onder
               **Terugleverprijs** hieronder (ook gebruikt door de besparing en
-              vooraf ontladen).
+              vooraf ontladen). De **zonnebonus** (zoals bij Zonneplan) is het
+              bonus % over de kale marktprijs (zonder btw) plus de opslag, alleen
+              tussen zonsopkomst en zonsondergang en alleen als dat positief is.
               Vul bij **Marktprijs sensor** een sensor met de kale marktprijs
               in (met het Nordpool-pakket gebeurt dat vanzelf:
               sensor.nordpool_kwh_nl_eur_5_10_021, *Inclusief btw*). Leeg = de
@@ -4566,7 +4568,7 @@ views:
               - entity: input_number.besparing_dyn_opslag_teruglevering
                 name: Opslag teruglevering
               - entity: input_number.besparing_dyn_bonus_teruglevering
-                name: Bonus teruglevering % (over marktprijs)
+                name: Zonnebonus % (overdag)
               - type: section
                 label: Externe omvormer (optioneel) managen bij negatieve prijzen
               - entity: input_select.negatieve_prijs_omvormer_aantal

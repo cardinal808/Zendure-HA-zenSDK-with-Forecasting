@@ -44,9 +44,9 @@
 # al opbracht kan bij "Accu Al Terugverdiend" worden ingevuld.
 #
 # Teruglevering heeft een eigen prijs (vast: terugleverprijs; dynamisch: marktprijs
-# + bonus-% over een positieve marktprijs + opslag teruglevering; de opslag kan negatief zijn
-# als de leverancier iets inhoudt). Saldering (instelling Teruglevering Saldering in het
-# negatieve-prijspakket, standaard t/m 31-12-2026) per kwartier: vast = leveringsprijs,
+# + opslag teruglevering + overdag bonus-% over (kale marktprijs + opslag) als dat positief is;
+# de opslag kan negatief zijn als de leverancier iets inhoudt). Saldering (geen keuze,
+# t/m 31-12-2026) per kwartier: vast = leveringsprijs,
 # dynamisch = marktprijs incl. btw + energiebelasting incl. btw. Zonder saldering: vast = het
 # ingevulde Vast Contract Tarief Teruglevering, dynamisch = marktprijs zonder btw.
 # Marktprijs = Dynamisch Marktprijs Sensor (Teruglevering) als die is ingevuld, anders de
@@ -194,8 +194,15 @@ template:
       vast_uit: "{{ states('input_number.besparing_vast_terugleverprijs') | float(0) }}"
       opsl_in: "{{ states('input_number.besparing_dyn_opslag_levering') | float(0) }}"
       opsl_uit: "{{ states('input_number.besparing_dyn_opslag_teruglevering') | float(0) }}"
-      # Bonus (%) over de marktprijs bij teruglevering, alleen als die prijs positief is
+      # Zonnebonus (%) bij teruglevering: over (kale marktprijs + opslag), alleen als dat positief is
+      # en alleen overdag (midden van het kwartier tussen zonsopkomst en zonsondergang, sun.sun)
       bonus_uit: "{{ states('input_number.besparing_dyn_bonus_teruglevering') | float(0) / 100 }}"
+      bonus_dag: >
+        {%- set t = ((vorig.ts | float(nu_ts)) if vorig is mapping else nu_ts) + 450 -%}
+        {%- set zr = as_timestamp(state_attr('sun.sun', 'next_rising'), 0) -%}
+        {%- set zs = as_timestamp(state_attr('sun.sun', 'next_setting'), 0) -%}
+        {%- set zr = zr - 86400 if zr > zs else zr -%}
+        {{ zr <= 0 or zs <= 0 or ((t - zr) % 86400) < (zs - zr) }}
       # Saldering en btw (instellingen uit het negatieve-prijspakket, attributen van de terugleverprijs).
       # Het kwartier telt mee onder de regels van het moment waarop het begon.
       sal_tot: "{{ state_attr('sensor.zendure_terugleverprijs_nu', 'saldering_tot_ts') | float(as_timestamp('2027-01-01T00:00:00+01:00')) }}"
@@ -221,7 +228,8 @@ template:
           {%- set din = p_dyn + opsl_in -%}
           {#- Teruglevering: bij saldering marktprijs incl. btw + energiebelasting, anders zonder btw -#}
           {%- set mk = (p_markt / markt_f) * (btw_f if sal_kw else 1) -%}
-          {%- set duit = mk + bonus_uit * ([mk, 0] | max) + opsl_uit + (eb_sal if sal_kw else 0) -%}
+          {%- set bon = (bonus_uit * ([p_markt / markt_f + opsl_uit, 0] | max)) if bonus_dag else 0 -%}
+          {%- set duit = mk + bon + opsl_uit + (eb_sal if sal_kw else 0) -%}
           {%- set vuit = vast_in if sal_kw else vast_uit -%}{%- set d = delta -%}
           {#- Zonnestroom de accu in: het overschot (zon min direct verbruik), hooguit wat er geladen is -#}
           {%- set zin = [d.zon - [d.zon, d.verbruik] | min, d.laden] | min -%}

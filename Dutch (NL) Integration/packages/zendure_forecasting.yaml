@@ -2057,6 +2057,10 @@ template:
         {%- set btw_f = 1 + state_attr(tp, 'btw_pct') | float(21) / 100 -%}
         {%- set markt_f = state_attr(tp, 'markt_btw_factor') | float(btw_f) -%}
         {%- set eb_sal = state_attr(tp, 'eb_saldering') | float(0) -%}
+        {#- Zonnebonus alleen overdag: zonsopkomst/-ondergang uit sun.sun, per dag doorgeschoven -#}
+        {%- set zr = as_timestamp(state_attr('sun.sun', 'next_rising'), 0) -%}
+        {%- set zs = as_timestamp(state_attr('sun.sun', 'next_setting'), 0) -%}
+        {%- set zr = zr - 86400 if zr > zs else zr -%}
         {#- Marktprijs per kwartier (teruglevering): uit de marktprijs-sensor als die is ingevuld, anders de prijs van het slot -#}
         {%- set msens = states('input_text.dynamisch_marktprijs_sensor') | trim | lower -%}
         {%- set mk = namespace(d={}) -%}
@@ -2075,8 +2079,11 @@ template:
             {%- endfor -%}
             {%- set mp0 = (mq.s / mq.n) if mq.n > 0 else x.v -%}
             {%- set sal = x.s < sal_tot -%}
-            {%- set mp = (mp0 / markt_f) * (btw_f if sal else 1) -%}
-            {%- set neg = (mp + bonus * ([mp, 0] | max) + opslag + (eb_sal if sal else 0)) < 0 -%}
+            {%- set kaal = mp0 / markt_f -%}
+            {%- set mp = kaal * (btw_f if sal else 1) -%}
+            {%- set dag = zr <= 0 or zs <= 0 or (((x.s + x.e) / 2 - zr) % 86400) < (zs - zr) -%}
+            {%- set bon = (bonus * ([kaal + opslag, 0] | max)) if dag else 0 -%}
+            {%- set neg = (mp + bon + opslag + (eb_sal if sal else 0)) < 0 -%}
             {%- if neg and ns.cur is not none and ns.cur.e == x.s -%}
               {%- set ns.cur = {'s': ns.cur.s, 'e': x.e} -%}
             {%- elif neg -%}
@@ -2242,6 +2249,10 @@ template:
           {%- set btw_f = 1 + state_attr(tp, 'btw_pct') | float(21) / 100 -%}
           {%- set markt_f = state_attr(tp, 'markt_btw_factor') | float(btw_f) -%}
           {%- set eb_sal = state_attr(tp, 'eb_saldering') | float(0) -%}
+          {#- Zonnebonus alleen overdag: zonsopkomst/-ondergang uit sun.sun, per dag doorgeschoven -#}
+          {%- set zr = as_timestamp(state_attr('sun.sun', 'next_rising'), 0) -%}
+          {%- set zs = as_timestamp(state_attr('sun.sun', 'next_setting'), 0) -%}
+          {%- set zr = zr - 86400 if zr > zs else zr -%}
           {%- set msens = states('input_text.dynamisch_marktprijs_sensor') | trim | lower -%}
           {%- set mk = namespace(d={}) -%}
           {%- if msens.startswith('sensor.') -%}
@@ -2257,8 +2268,11 @@ template:
             {%- endfor -%}
             {%- set mp0 = (mq.s / mq.n) if mq.n > 0 else x.v -%}
             {%- set sal = x.s < sal_tot -%}
-            {%- set mp = (mp0 / markt_f) * (btw_f if sal else 1) -%}
-            {%- set f = mp + bonus * ([mp, 0] | max) + opslag + (eb_sal if sal else 0) -%}
+            {%- set kaal = mp0 / markt_f -%}
+            {%- set mp = kaal * (btw_f if sal else 1) -%}
+            {%- set dag = zr <= 0 or zs <= 0 or (((x.s + x.e) / 2 - zr) % 86400) < (zs - zr) -%}
+            {%- set bon = (bonus * ([kaal + opslag, 0] | max)) if dag else 0 -%}
+            {%- set f = mp + bon + opslag + (eb_sal if sal else 0) -%}
             {%- set ns.l = ns.l + [{'s': x.s, 'e': x.e, 'f': f | round(4)}] -%}
           {%- endfor -%}
         {%- endif -%}

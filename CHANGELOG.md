@@ -13,11 +13,17 @@ Versions follow `year.month.sequence`; the sequence restarts at 1 every month. E
 - `sensor.zendure_feedin_price_now` has new attributes `net_metering_active`, `net_metering_until`, `net_metering_until_ts`, `vat_pct`, `market_vat_factor`, `energy_tax_net_metering`; the savings and the planner (pre-discharge) use them per quarter hour.
 - **Savings, fixed contract:** while net metering applies, export counts at the supply tariff. The field is now called **Fixed contract feed-in tariff (without net metering)**: enter your contract's feed-in tariff for 2027.
 
+**Fix: solar bonus only in daylight, on bare market price + markup (like Zonneplan)**
+- The feed-in bonus (now **Solar bonus % (daytime)**) counted on the market price **including** VAT, all day. Zonneplan gives the solar bonus on the bare market price (without VAT) plus the sales fee, only between sunrise and sunset and only when that amount is positive.
+- Now: solar bonus = bonus % × max(bare market price + feed-in markup, 0), only while the sun is up (`sun.sun`; for quarter hours in the plan and the savings the middle of the quarter between sunrise and sunset).
+- Example Zonneplan (10%, markup €0.02, market price €0.20384 incl. VAT): in the evening €0.3347 (was €0.3571), in daytime €0.3535.
+- Applies to the feed-in price, *No export at negative price*, *Discharge battery at negative prices*, *Discharge battery at solar surplus* and the savings.
+
 **Fix: Solcast detail for today with Dutch entity names**
 - With HA in Dutch the Solcast sensor is called `…_resterende_voorspelling_vandaag`. The planner only looked for today's detailed forecast under the English name (`…_remaining_today` → `…_today`), and found nothing with the Dutch name. As a result there was no solar for the rest of today in the Plan Timeline, the state of charge line ran empty during the day and the path check used *sunrise + 3 hours*. Now also `…_voorspelling_vandaag`, and as a fallback all Solcast sensors (only if you use Solcast). Also in the diagnostics export.
 
 **New: discharge battery at solar surplus (export before the sun)**
-- Switch **Solar surplus** (`input_boolean.solar_surplus_discharge`) in Forecasting Configuration (Negative Price), under *Discharge battery at*. Off by default.
+- Switch **Solar surplus** (`input_boolean.solar_surplus_discharge`) in Forecasting Configuration (Battery discharge and Negative Price), under *Discharge battery at*. Off by default.
 - If the sun will fill the battery anyway, the battery exports what the house does not need until the sun (plus margin) to the grid before the sun: in the quarter hours with the highest feed-in price, at maximum discharge power. Example: battery 40%, 20% needed until the sun, the sun fills the battery → about 20% exported in the most expensive quarter hours before the sun.
 - Only when it pays off: feed-in price now > feed-in price during the sun / efficiency (+ €0.01). Not when grid charging is planned before the sun, and only with a detailed solar forecast (Solcast). Without a filled-in reliability, 75% of the expected surplus counts.
 - Planner: attributes `solar_surplus_*` (kWh, quarter hours, sun from, price during the sun, threshold price, revenue); `binary_sensor.forecast_solar_surplus_export`. Automation: new branches *Dynamic Smart Matching + Forecasting export at solar surplus* (Gielz's `zendure_quick_discharge`, stops when there is no export quarter left or at minimum state of charge) and *… export check* (after a restart). Gielz's *Dynamic discharging check* does not apply in Forecasting mode.

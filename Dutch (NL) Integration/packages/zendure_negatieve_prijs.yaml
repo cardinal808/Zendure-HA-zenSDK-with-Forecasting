@@ -7,8 +7,10 @@
 # Plaats dit bestand naast zendure_gielz1986_nl.yaml (zelfde packages-map).
 #
 # Terugleverprijs (sensor.zendure_terugleverprijs_nu), per kwartier:
-#   marktprijs + bonus % (alleen bij positieve marktprijs) + opslag teruglevering
-#   Saldering (Teruglevering Saldering, standaard Automatisch = t/m 31-12-2026): zolang saldering
+#   marktprijs + opslag teruglevering + zonnebonus
+#   Zonnebonus (zoals Zonneplan): bonus % over (kale marktprijs zonder btw + opslag teruglevering),
+#   alleen tussen zonsopkomst en zonsondergang (sun.sun) en alleen als dat bedrag positief is.
+#   Saldering (geen keuze, t/m 31-12-2026 = kwartieren die vóór 1-1-2027 beginnen): zolang saldering
 #   geldt is de marktprijs inclusief btw en komt de energiebelasting (incl. btw) erbij, want die
 #   krijg je via saldering terug. Daarna: marktprijs zonder btw, geen energiebelasting (particulier).
 #   Btw in de marktprijs-sensor: Teruglevering Marktprijs Btw (de sensor van het Nordpool-pakket is
@@ -17,7 +19,7 @@
 #   Marktprijs uit Dynamisch Marktprijs Sensor (Teruglevering) als die is ingevuld, anders uit de
 #   Nordpool-sensor van Gielz (die kan all-in zijn: energiebelasting en opslag horen niet bij teruglevering). Opslag en bonus teruglevering staan in dit pakket
 #   (zodat ze er ook zonder het besparingspakket zijn); op het dashboard in Forecasting Configuratie
-#   (Negatieve Prijs), onder Terugleverprijs.
+#   (Accu ontladen en Negatieve Prijs), onder Terugleverprijs.
 # binary_sensor.zendure_export_geblokkeerd_negatieve_prijs staat aan als de functie aanstaat
 # en de terugleverprijs negatief is.
 #
@@ -226,7 +228,8 @@ template:
         unique_id: zendure_terugleverprijs_nu
         icon: mdi:transmission-tower-export
         unit_of_measurement: "€/kWh"
-        # Terugleverprijs = markt + bonus % x max(markt, 0) + opslag (+ energiebelasting bij saldering)
+        # Terugleverprijs = markt + opslag + zonnebonus (+ energiebelasting bij saldering)
+        #   zonnebonus = bonus % x max(kaal + opslag, 0), alleen als de zon op is
         #   markt = kale prijs zonder btw; bij saldering x (1 + btw)
         # Dezelfde rekenregel staat in de besparing (duit) en de planner (vo_venster), per kwartier.
         state: >
@@ -253,10 +256,13 @@ template:
             {%- set fm = 1 if is_state('input_select.teruglevering_marktprijs_btw', 'Zonder btw') else 1 + btw -%}
             {%- set ebx = states('input_number.nordpool_energiebelasting') | float(-1) -%}
             {%- set eb = ebx * (1 + btw) if ebx >= 0 else states('input_number.teruglevering_energiebelasting') | float(0) -%}
-            {%- set markt = (ns.p / fm) * ((1 + btw) if sal else 1) -%}
+            {%- set kaal = ns.p / fm -%}
+            {%- set markt = kaal * ((1 + btw) if sal else 1) -%}
             {%- set opslag = states('input_number.besparing_dyn_opslag_teruglevering') | float(0) -%}
             {%- set bonus = states('input_number.besparing_dyn_bonus_teruglevering') | float(0) / 100 -%}
-            {{ (markt + bonus * ([markt, 0] | max) + opslag + (eb if sal else 0)) | round(5) }}
+            {%- set dag = not is_state('sun.sun', 'below_horizon') -%}
+            {%- set bon = (bonus * ([kaal + opslag, 0] | max)) if dag else 0 -%}
+            {{ (markt + bon + opslag + (eb if sal else 0)) | round(5) }}
           {%- else -%}
             {{ none }}
           {%- endif -%}
