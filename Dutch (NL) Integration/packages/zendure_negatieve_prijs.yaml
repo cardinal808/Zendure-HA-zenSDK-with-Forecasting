@@ -135,13 +135,6 @@ input_select:
       - Productielimiet (SolarEdge, Hoymiles, APsystems, Fronius)
       - Exportlimiet (GoodWe, Growatt)
 
-  # Bevat de marktprijs-sensor btw? (sensor.nordpool_kwh_nl_eur_5_10_021 van het Nordpool-pakket: ja)
-  teruglevering_marktprijs_btw:
-    name: Teruglevering Marktprijs Btw
-    icon: mdi:percent-circle
-    options:
-      - Inclusief btw
-      - Zonder btw
 
 input_number:
   # Tarieven teruglevering (ook gebruikt door het besparingspakket). Stonden tot 2026.11.3 in
@@ -253,7 +246,9 @@ template:
             {%- set sal = nu < as_timestamp('2027-01-01T00:00:00+01:00') -%}
             {%- set v = states('input_number.nordpool_btw_percentage') | float(-1) -%}
             {%- set btw = (v if v >= 0 else 21) / 100 -%}
-            {%- set fm = 1 if is_state('input_select.teruglevering_marktprijs_btw', 'Zonder btw') else 1 + btw -%}
+            {#- Btw in de marktprijs-sensor: uit de naam (nordpool_kwh_..._021 = 21%, _0 = zonder) -#}
+            {%- set bm = (bron | regex_findall_index('^sensor\\.nordpool_kwh_.*_(\\d+)$')) if bron is match('^sensor\\.nordpool_kwh_.*_\\d+$') else '' -%}
+            {%- set fm = (1 if bm | int(0) == 0 else 1 + ('0.' ~ bm[1:]) | float(0)) if bm != '' else 1 + btw -%}
             {%- set ebx = states('input_number.nordpool_energiebelasting') | float(-1) -%}
             {%- set eb = ebx * (1 + btw) if ebx >= 0 else states('input_number.teruglevering_energiebelasting') | float(0) -%}
             {%- set kaal = ns.p / fm -%}
@@ -292,11 +287,28 @@ template:
           btw_pct: >
             {%- set v = states('input_number.nordpool_btw_percentage') | float(-1) -%}
             {{ v if v >= 0 else 21 }}
-          # Deelfactor om de btw uit de marktprijs-sensor te halen (1 = sensor zonder btw)
+          # Deelfactor om de btw uit de marktprijs-sensor te halen (1 = sensor zonder btw). Uit de
+          # sensornaam van Nord Pool: sensor.nordpool_kwh_nl_eur_5_10_021 = 21% btw, ..._0 = zonder btw.
+          # Een andere sensor: aangenomen incl. btw (btw-% van het Nordpool-pakket, anders 21).
           markt_btw_factor: >
+            {%- set m = states('input_text.dynamisch_marktprijs_sensor') | trim | lower -%}
+            {%- set bron = m if m.startswith('sensor.') and has_value(m) else (states('input_text.dynamisch_nordpool_sensor') | trim | lower) -%}
             {%- set v = states('input_number.nordpool_btw_percentage') | float(-1) -%}
             {%- set b = (v if v >= 0 else 21) / 100 -%}
-            {{ 1 if is_state('input_select.teruglevering_marktprijs_btw', 'Zonder btw') else (1 + b) | round(4) }}
+            {%- set bm = (bron | regex_findall_index('^sensor\\.nordpool_kwh_.*_(\\d+)$')) if bron is match('^sensor\\.nordpool_kwh_.*_\\d+$') else '' -%}
+            {%- set f = (1 if bm | int(0) == 0 else 1 + ('0.' ~ bm[1:]) | float(0)) if bm != '' else 1 + b -%}
+            {{ f | round(4) }}
+          # Leesbaar voor het dashboard: wat de set over de btw van de marktprijs-sensor aanneemt
+          markt_btw: >
+            {%- set m = states('input_text.dynamisch_marktprijs_sensor') | trim | lower -%}
+            {%- set bron = m if m.startswith('sensor.') and has_value(m) else (states('input_text.dynamisch_nordpool_sensor') | trim | lower) -%}
+            {%- set v = states('input_number.nordpool_btw_percentage') | float(-1) -%}
+            {%- set b = (v if v >= 0 else 21) / 100 -%}
+            {%- set bm = (bron | regex_findall_index('^sensor\\.nordpool_kwh_.*_(\\d+)$')) if bron is match('^sensor\\.nordpool_kwh_.*_\\d+$') else '' -%}
+            {%- set f = (1 if bm | int(0) == 0 else 1 + ('0.' ~ bm[1:]) | float(0)) if bm != '' else 1 + b -%}
+            {%- set pct = ((f - 1) * 100) | round(1) -%}
+            {%- set pct = pct | int if pct == pct | int else pct -%}
+            {{ ('zonder btw' if f == 1 else 'incl. ' ~ pct ~ '% btw') ~ (' (uit de sensornaam)' if bm != '' else ' (aangenomen)') }}
           # Energiebelasting incl. btw die je via saldering terugkrijgt (Nordpool-pakket of eigen veld)
           eb_saldering: >
             {%- set eb = states('input_number.nordpool_energiebelasting') | float(-1) -%}

@@ -4597,8 +4597,11 @@ views:
                 label: Terugleverprijs
               - entity: input_text.dynamisch_marktprijs_sensor
                 name: Marktprijs sensor (kale marktprijs)
-              - entity: input_select.teruglevering_marktprijs_btw
+              - type: attribute
+                entity: sensor.zendure_terugleverprijs_nu
+                attribute: markt_btw
                 name: Marktprijs sensor is
+                icon: mdi:percent-circle
               - type: conditional
                 conditions:
                   - entity: input_number.nordpool_energiebelasting

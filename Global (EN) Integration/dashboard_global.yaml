@@ -4589,8 +4589,11 @@ views:
                 label: Feed-in price
               - entity: input_text.dynamic_setting_market_price_sensor
                 name: Market price sensor (bare market price)
-              - entity: input_select.negative_price_market_price_vat
+              - type: attribute
+                entity: sensor.zendure_feedin_price_now
+                attribute: market_vat
                 name: Market price sensor is
+                icon: mdi:percent-circle
               - type: conditional
                 conditions:
                   - entity: input_number.nordpool_setting_energy_tax
