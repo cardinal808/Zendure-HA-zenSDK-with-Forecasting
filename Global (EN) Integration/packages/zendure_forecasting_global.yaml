@@ -390,6 +390,12 @@ sensor:
 template:
   # Grid counters recognised automatically (field empty, P1 meter found): the dashboard then hides
   # the input field and shows which sensor is used (attribute sensors).
+  # Export now at solar surplus (from the planner); the automation uses the state with 'for'
+  - binary_sensor:
+      - name: "Forecast Solar Surplus Export"
+        unique_id: forecast_solar_surplus_export
+        icon: mdi:transmission-tower-export
+        state: "{{ state_attr('sensor.zendure_forecast_plan', 'solar_surplus_now') == true }}"
   - binary_sensor:
       - name: "Forecast Grid Import Counter Automatic"
         unique_id: forecast_grid_import_counter_automatic
@@ -1227,6 +1233,7 @@ template:
           - input_number.forecast_setting_solar_reliability_dec
           - input_boolean.forecast_setting_hold_discharge_in_dip
           - input_boolean.forecast_setting_smart_hold
+          - input_boolean.solar_surplus_discharge
           - sensor.forecast_measured_charge_power
           - input_boolean.forecast_setting_calibration_charging
           - input_number.forecast_setting_calibration_days
@@ -1260,6 +1267,9 @@ template:
       c_cover_min_kwh: 2                 # and only if at least this much solar is expected that day
       c_solar_credit: 0.75               # pre-discharge: expected solar surplus counts for only 75% (the forecast can be too optimistic)
       c_pd_min_kwh: 0.5                  # pre-discharge: only from this much expected solar surplus in a negative window
+      c_sx_reserve_kwh: 0.3              # discharge at solar surplus: extra reserve above what the house needs until the sun
+      c_sx_min_kwh: 0.3                  # discharge at solar surplus: only from this many kWh
+      c_sx_margin_eur: 0.01              # discharge at solar surplus: minimum gain per kWh after losses
       c_shape_n_full_workday: 10         # shape per quarter counts fully after this many complete hours (workday)
       c_calibration_days: 14             # calibration charging: default after this many days without 100%
       c_day_n_full: 3                    # profile per weekday counts fully after this many measurements (weeks) of that hour
@@ -2200,6 +2210,110 @@ template:
         {% set ns = namespace(a=false) %}
         {% for x in chosen %}{% if x.s <= now_ts < x.e %}{% set ns.a = true %}{% endif %}{% endfor %}
         {{ ns.a }}
+      # ---- Discharge at solar surplus (export before the sun) -----------------
+      # If the sun will fill the battery anyway, whatever is in it now beyond what the house needs
+      # until the sun can be sold: before the sun the feed-in price is higher than during the sun.
+      # The part the sun refills (with solar credit) goes back to the grid in the quarter hours with
+      # the highest feed-in price before the sun, at maximum discharge power. Only pays off when the
+      # feed-in price now is higher than the one during the sun divided by the efficiency.
+      sx_on: >
+        {{ is_state('input_boolean.solar_surplus_discharge', 'on') and prices_ok and eff_rt > 0
+           and not is_state('input_boolean.zendure_setting_pv_export_disabled', 'on') }}
+      # Start and end of the next solar surplus (detailed forecast), and the surplus (kWh AC)
+      sx_solar: >
+        {%- set ns = namespace(s=none, e=none, o=0) -%}
+        {%- if sx_on -%}
+          {%- for p in pd_solar if p.s + c_detail_period_s > now_ts -%}
+            {%- set ov = [p.pv - p.kw, 0] | max -%}
+            {%- if ov > 0.05 and ns.s is none -%}{%- set ns.s = [p.s, now_ts] | max -%}{%- endif -%}
+            {%- if ns.s is not none and p.s < ns.s + 57600 and (ns.e is none or p.s <= ns.e + 3600) -%}
+              {%- set ns.o = ns.o + ov * c_detail_period_s / 3600 -%}
+              {%- if ov > 0.05 -%}{%- set ns.e = p.s + c_detail_period_s -%}{%- endif -%}
+            {%- endif -%}
+          {%- endfor -%}
+        {%- endif -%}
+        {{ {'s': ns.s, 'e': ns.e, 'kwh': ns.o | round(3)} if ns.s is not none and ns.s > now_ts + 900 else none }}
+      # Feed-in price per quarter hour (like sensor.zendure_feedin_price_now, net metering per quarter hour)
+      sx_feedin: >
+        {%- set ns = namespace(l=[]) -%}
+        {%- if sx_solar is mapping -%}
+          {%- set markup = states('input_number.savings_setting_dynamic_feedin_markup') | float(0) -%}
+          {%- set bonus = states('input_number.savings_setting_dynamic_feedin_bonus') | float(0) / 100 -%}
+          {%- set fp = 'sensor.zendure_feedin_price_now' -%}
+          {%- set nm_until = state_attr(fp, 'net_metering_until_ts') | float(as_timestamp('2027-01-01T00:00:00+01:00')) -%}
+          {%- set vat_f = 1 + state_attr(fp, 'vat_pct') | float(21) / 100 -%}
+          {%- set market_f = state_attr(fp, 'market_vat_factor') | float(vat_f) -%}
+          {%- set tax_nm = state_attr(fp, 'energy_tax_net_metering') | float(0) -%}
+          {%- set msens = states('input_text.dynamic_setting_market_price_sensor') | trim | lower -%}
+          {%- set mk = namespace(d={}) -%}
+          {%- if msens.startswith('sensor.') -%}
+            {%- for y in (state_attr(msens, 'raw_today') or []) + (state_attr(msens, 'raw_tomorrow') or []) -%}
+              {%- if y.value is number -%}{%- set mk.d = dict(mk.d, **{((as_timestamp(y.start, 0) | int) | string): y.value}) -%}{%- endif -%}
+            {%- endfor -%}
+          {%- endif -%}
+          {%- for x in path_cand | sort(attribute='s') if x.e > now_ts and x.s < sx_solar.e -%}
+            {%- set mq = namespace(s=0, n=0) -%}
+            {%- for k in range([((x.e - x.s) / 900) | round(0) | int, 1] | max) -%}
+              {%- set key = ((x.s | int) + k * 900) | string -%}
+              {%- if key in mk.d -%}{%- set mq.s = mq.s + mk.d[key] -%}{%- set mq.n = mq.n + 1 -%}{%- endif -%}
+            {%- endfor -%}
+            {%- set mp0 = (mq.s / mq.n) if mq.n > 0 else x.v -%}
+            {%- set nm = x.s < nm_until -%}
+            {%- set mp = (mp0 / market_f) * (vat_f if nm else 1) -%}
+            {%- set f = mp + bonus * ([mp, 0] | max) + markup + (tax_nm if nm else 0) -%}
+            {%- set ns.l = ns.l + [{'s': x.s, 'e': x.e, 'f': f | round(4)}] -%}
+          {%- endfor -%}
+        {%- endif -%}
+        {{ ns.l }}
+      # Feed-in price during the sun (weighted by the surplus): what export yields then
+      sx_p_solar: >
+        {%- set ns = namespace(w=0, t=0) -%}
+        {%- if sx_solar is mapping -%}
+          {%- for p in pd_solar if p.s >= sx_solar.s - c_detail_period_s and p.s < sx_solar.e -%}
+            {%- set ov = [p.pv - p.kw, 0] | max -%}
+            {%- for x in sx_feedin if x.s <= p.s < x.e -%}{%- set ns.w = ns.w + ov -%}{%- set ns.t = ns.t + ov * x.f -%}{%- endfor -%}
+          {%- endfor -%}
+        {%- endif -%}
+        {{ (ns.t / ns.w) | round(4) if ns.w > 0 else none }}
+      # What the house needs until the sun (kWh AC), from the profile
+      sx_need_ac: >
+        {%- set ns = namespace(k=0) -%}
+        {%- if sx_solar is mapping -%}
+          {%- set a = now_ts -%}{%- set b = sx_solar.s -%}
+          {%- for i in range(((a - q_s0) // 900) | int, ((b - q_s0 - 0.001) // 900) | int + 1) -%}{%- set qa = q_s0 + i * 900 -%}{%- set ov = [qa + 900, b] | min - [qa, a] | max -%}{%- if ov > 0 -%}{%- set ns.k = ns.k + (q_kw[[i, 0] | max] if i < q_kw | length else l_hour) * ov / 3600 -%}{%- endif -%}{%- endfor -%}
+        {%- endif -%}
+        {{ ns.k | round(3) }}
+      # How much can go (kWh DC): above what the house needs plus margin, and no more than the sun
+      # (with solar credit) refills. No grid charging planned before the sun (that would contradict).
+      sx_kwh_dc: >
+        {%- if sx_solar is mapping and sx_p_solar is number and (chosen | selectattr('s', 'lt', sx_solar.s) | list | length) == 0 -%}
+          {%- set reserve = sx_need_ac / eff_out + margin_dc + c_sx_reserve_kwh -%}
+          {%- set room0 = s_max - [s_now - sx_need_ac / eff_out, 0] | max -%}
+          {%- set x = [s_now - reserve, sx_solar.kwh * pd_credit * eff_in - room0] | min -%}
+          {{ ([x, 0] | max) | round(3) }}
+        {%- else -%}0{%- endif -%}
+      # Quarter hours with the highest feed-in price before the sun (only when it pays off), each at
+      # maximum discharge power minus the house usage
+      sx_slots: >
+        {%- set ns = namespace(l=[], rest=sx_kwh_dc * eff_out) -%}
+        {%- if sx_kwh_dc >= c_sx_min_kwh -%}
+          {%- set p_out = [states('input_number.zendure_setting_max_discharge_power') | float(2400), 100] | max / 1000 -%}
+          {%- set threshold = sx_p_solar / eff_rt + c_sx_margin_eur -%}
+          {%- for x in sx_feedin | sort(attribute='f', reverse=true) if x.e > now_ts and x.e <= sx_solar.s + 1 and x.f > threshold and ns.rest > 0.01 -%}
+            {%- set a = [x.s, now_ts] | max -%}
+            {%- set i = ((a - q_s0) // 900) | int -%}
+            {%- set house = (q_kw[[i, 0] | max] if i < q_kw | length else l_hour) -%}
+            {%- set k = [([p_out - house, 0] | max) * (x.e - a) / 3600, ns.rest] | min -%}
+            {%- if k > 0.01 -%}
+              {%- set ns.l = ns.l + [{'s': x.s, 'e': x.e, 'f': x.f, 'kwh': k | round(3)}] -%}
+              {%- set ns.rest = ns.rest - k -%}
+            {%- endif -%}
+          {%- endfor -%}
+        {%- endif -%}
+        {{ ns.l | sort(attribute='s') }}
+      sx_now: >
+        {{ sx_slots | selectattr('s', 'le', now_ts) | selectattr('e', 'gt', now_ts) | list | length > 0 and not slot_now }}
+
       planned_ac: "{{ ([chosen | length * e_slot, grid_total_ac] | min) | round(3) }}"
       p_chosen_avg: >
         {% if chosen | length > 0 %}{{ (chosen | map(attribute='v') | sum / (chosen | length)) | round(5) }}{% else %}0{% endif %}
@@ -2599,6 +2713,18 @@ template:
           pre_discharge_expected_kwh: "{{ pd_sim.e if pd_window is mapping else none }}"
           pre_discharge_price_limit: "{{ pd_threshold }}"
           pre_discharge_grid_dropped: "{{ pd_grid_dropped }}"
+          solar_surplus_on: "{{ sx_on }}"
+          solar_surplus_now: "{{ sx_now }}"
+          solar_surplus_kwh: "{{ (sx_slots | map(attribute='kwh') | sum) | round(2) }}"
+          solar_surplus_slots: "{{ sx_slots }}"
+          solar_surplus_sun_from: "{{ sx_solar.s | timestamp_custom('%Y-%m-%d %H:%M', true) if sx_solar is mapping else none }}"
+          solar_surplus_sun_kwh: "{{ sx_solar.kwh if sx_solar is mapping else none }}"
+          solar_surplus_need_kwh: "{{ sx_need_ac }}"
+          solar_surplus_price_sun: "{{ sx_p_solar }}"
+          solar_surplus_threshold_price: "{{ (sx_p_solar / eff_rt + c_sx_margin_eur) | round(4) if sx_p_solar is number and eff_rt > 0 else none }}"
+          solar_surplus_revenue: >
+            {%- set ns = namespace(t=0) -%}{%- for x in sx_slots -%}{%- set ns.t = ns.t + x.kwh * x.f -%}{%- endfor -%}
+            {{ (ns.t - (sx_slots | map(attribute='kwh') | sum) / eff_rt * sx_p_solar) | round(2) if sx_p_solar is number and eff_rt > 0 else 0 }}
           charge_power_used_kw: "{{ p_max_kw | round(2) }}"
           charge_power_measured_w: "{{ p_measured_w if p_measured_w >= c_charge_min_w else none }}"
           charge_power_set_kw: "{{ p_set_kw }}"

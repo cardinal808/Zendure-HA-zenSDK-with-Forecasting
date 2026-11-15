@@ -85,6 +85,13 @@ input_boolean:
     name: Negatieve Prijs Vooraf Ontladen
     icon: mdi:battery-arrow-down-outline
 
+  # Ontladen bij zonoverschot: vult de zon de accu straks toch vol, dan levert de accu wat het huis
+  # tot de zon niet nodig heeft vóór de zon terug (hogere prijs). Planner + automation, alleen in
+  # modus Dynamisch NOM + Forecasting.
+  zonoverschot_ontladen:
+    name: Zonoverschot Ontladen
+    icon: mdi:solar-power-variant
+
   # PV-export van de Zendure Pro (zon-ingangen) meenemen via Gielz' PV Export Uitgeschakeld
   negatieve_prijs_zendure_pv_export:
     name: Negatieve Prijs Zendure PV Export

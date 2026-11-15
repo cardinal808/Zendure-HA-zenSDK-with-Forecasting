@@ -636,6 +636,12 @@ actions:
               hours: 0
               minutes: 0
               seconds: 30
+          - alias: Not in Forecasting (there the planner exports at solar surplus, outside Gielz's most expensive period)
+            condition: not
+            conditions:
+              - condition: state
+                entity_id: input_select.zendure_operation_mode
+                state: Dynamic Smart Matching + Forecasting
         sequence:
           - action: input_boolean.turn_off
             target:
@@ -719,6 +725,41 @@ actions:
               entity_id: input_select.zendure_operation_mode
               name: " "
         alias: Dynamic Smart Matching + Forecasting charging check
+      - conditions:
+          - condition: trigger
+            id:
+              - aansturing_trigger
+          - condition: state
+            entity_id: input_select.zendure_operation_mode
+            state: Dynamic Smart Matching + Forecasting
+          - alias: Export is running, but the planner has not had an export quarter for a minute (e.g. after a restart)
+            condition: state
+            entity_id: input_boolean.dynamic_discharging_running
+            state:
+              - 'on'
+          - condition: state
+            entity_id: binary_sensor.forecast_solar_surplus_export
+            state: 'off'
+            for:
+              hours: 0
+              minutes: 1
+              seconds: 0
+        sequence:
+          - action: input_boolean.turn_off
+            target:
+              entity_id:
+                - input_boolean.dynamic_discharging_running
+            data: {}
+          - action: rest_command.zendure_stop_with_everything
+            data:
+              sn: '{{ states(''sensor.zendure_serial_number'') }}'
+          - action: logbook.log
+            data:
+              message: >-
+                ⚠️Dynamic Smart Matching + Forecasting export still running, but there is no export quarter. Stopped —
+              entity_id: input_select.zendure_operation_mode
+              name: " "
+        alias: Dynamic Smart Matching + Forecasting export check
       - conditions:
           - condition: trigger
             id:
@@ -1885,6 +1926,94 @@ actions:
               entity_id: input_select.zendure_operation_mode
               name: " "
         alias: Dynamic Smart Matching + Forecasting charging
+      - conditions:
+          - condition: trigger
+            id:
+              - aansturing_trigger
+          - condition: state
+            entity_id: input_select.zendure_operation_mode
+            state: Dynamic Smart Matching + Forecasting
+          - alias: "Planner: an export quarter now (the sun refills the battery later)"
+            condition: state
+            entity_id: binary_sensor.forecast_solar_surplus_export
+            state: 'on'
+            for:
+              hours: 0
+              minutes: 0
+              seconds: 10
+          - alias: State of charge above the minimum
+            condition: template
+            value_template: >-
+              {{ states('sensor.zendure_total_state_of_charge') | float(0) > states('sensor.zendure_minimum_state_of_charge') | float(100) + 1 }}
+          - alias: Charging and discharging are not running (off for at least 2 minutes)
+            condition: state
+            entity_id: input_boolean.dynamic_discharging_running
+            state:
+              - 'off'
+            for:
+              hours: 0
+              minutes: 2
+              seconds: 0
+          - condition: state
+            entity_id: input_boolean.dynamic_charging_running
+            state:
+              - 'off'
+        sequence:
+          - action: input_boolean.turn_on
+            data: {}
+            target:
+              entity_id:
+                - input_boolean.dynamic_discharging_running
+          - action: rest_command.zendure_save_in_ram
+            data:
+              sn: '{{ states(''sensor.zendure_serial_number'') }}'
+          - delay:
+              hours: 0
+              minutes: 0
+              seconds: 5
+              milliseconds: 0
+          - action: rest_command.zendure_quick_discharge
+            data:
+              sn: '{{ states(''sensor.zendure_serial_number'') }}'
+              outputLimit: >-
+                {{ states('input_number.zendure_setting_max_discharge_power') | int }}
+          - action: logbook.log
+            data:
+              message: >-
+                ☀️Dynamic Smart Matching + Forecasting export started (solar surplus) — {{ state_attr('sensor.zendure_forecast_plan', 'solar_surplus_kwh') }} kWh planned before the sun
+              entity_id: input_select.zendure_operation_mode
+              name: " "
+          - wait_for_trigger:
+              - alias: No export quarter any more
+                trigger: state
+                entity_id: binary_sensor.forecast_solar_surplus_export
+                to: 'off'
+                for:
+                  hours: 0
+                  minutes: 0
+                  seconds: 10
+              - alias: Minimum state of charge reached
+                trigger: template
+                value_template: >
+                  {{ states('sensor.zendure_total_state_of_charge') | float(0) <= states('sensor.zendure_minimum_state_of_charge') | float(100) }}
+              - trigger: state
+                entity_id:
+                  - input_select.zendure_operation_mode
+            continue_on_timeout: false
+          - action: input_boolean.turn_off
+            target:
+              entity_id:
+                - input_boolean.dynamic_discharging_running
+            data: {}
+          - action: rest_command.zendure_stop_with_everything
+            data:
+              sn: '{{ states(''sensor.zendure_serial_number'') }}'
+          - action: logbook.log
+            data:
+              message: ☀️Dynamic Smart Matching + Forecasting export stopped —
+              entity_id: input_select.zendure_operation_mode
+              name: " "
+        alias: Dynamic Smart Matching + Forecasting export at solar surplus
       - conditions:
           - condition: trigger
             id:

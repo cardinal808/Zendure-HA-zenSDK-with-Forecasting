@@ -643,6 +643,12 @@ actions:
             entity_id: input_boolean.dynamisch_ontladen_loopt
             state:
               - 'on'
+          - alias: Niet in Forecasting (daar levert de planner terug bij zonoverschot, buiten Gielz' duurste periode)
+            condition: not
+            conditions:
+              - condition: state
+                entity_id: input_select.zendure_2400_ac_modus_selecteren
+                state: Dynamisch NOM + Forecasting
         sequence:
           - action: input_boolean.turn_off
             target:
@@ -726,6 +732,41 @@ actions:
               entity_id: input_select.zendure_2400_ac_modus_selecteren
               name: " "
         alias: Dynamisch NOM + Forecasting laden controle
+      - conditions:
+          - condition: trigger
+            id:
+              - aansturing_trigger
+          - condition: state
+            entity_id: input_select.zendure_2400_ac_modus_selecteren
+            state: Dynamisch NOM + Forecasting
+          - alias: Terugleveren loopt, maar de planner zegt al een minuut geen terugleverkwartier (bv. na een herstart)
+            condition: state
+            entity_id: input_boolean.dynamisch_ontladen_loopt
+            state:
+              - 'on'
+          - condition: state
+            entity_id: binary_sensor.forecast_zonoverschot_terugleveren
+            state: 'off'
+            for:
+              hours: 0
+              minutes: 1
+              seconds: 0
+        sequence:
+          - action: input_boolean.turn_off
+            target:
+              entity_id:
+                - input_boolean.dynamisch_ontladen_loopt
+            data: {}
+          - action: rest_command.zendure_stop_met_alles
+            data:
+              sn: '{{ states(''sensor.zendure_2400_ac_serienummer'') }}'
+          - action: logbook.log
+            data:
+              message: >-
+                ⚠️Dynamisch NOM + Forecasting terugleveren loopt nog, maar er is geen terugleverkwartier. Gestopt —
+              entity_id: input_select.zendure_2400_ac_modus_selecteren
+              name: " "
+        alias: Dynamisch NOM + Forecasting terugleveren controle
       - conditions:
           - condition: trigger
             id:
@@ -1909,6 +1950,94 @@ actions:
               entity_id: input_select.zendure_2400_ac_modus_selecteren
               name: " "
         alias: Dynamisch NOM + Forecasting laden
+      - conditions:
+          - condition: trigger
+            id:
+              - aansturing_trigger
+          - condition: state
+            entity_id: input_select.zendure_2400_ac_modus_selecteren
+            state: Dynamisch NOM + Forecasting
+          - alias: "Planner: nu een terugleverkwartier (zon vult de accu straks weer vol)"
+            condition: state
+            entity_id: binary_sensor.forecast_zonoverschot_terugleveren
+            state: 'on'
+            for:
+              hours: 0
+              minutes: 0
+              seconds: 10
+          - alias: SOC boven het minimum
+            condition: template
+            value_template: >-
+              {{ states('sensor.zendure_2400_ac_laadpercentage') | float(0) > states('sensor.zendure_2400_ac_minimale_laadpercentage') | float(100) + 1 }}
+          - alias: Laden en ontladen lopen niet (minstens 2 minuten uit)
+            condition: state
+            entity_id: input_boolean.dynamisch_ontladen_loopt
+            state:
+              - 'off'
+            for:
+              hours: 0
+              minutes: 2
+              seconds: 0
+          - condition: state
+            entity_id: input_boolean.dynamisch_laden_loopt
+            state:
+              - 'off'
+        sequence:
+          - action: input_boolean.turn_on
+            data: {}
+            target:
+              entity_id:
+                - input_boolean.dynamisch_ontladen_loopt
+          - action: rest_command.zendure_opslaan_in_ram
+            data:
+              sn: '{{ states(''sensor.zendure_2400_ac_serienummer'') }}'
+          - delay:
+              hours: 0
+              minutes: 0
+              seconds: 5
+              milliseconds: 0
+          - action: rest_command.zendure_snel_ontladen
+            data:
+              sn: '{{ states(''sensor.zendure_2400_ac_serienummer'') }}'
+              outputLimit: >-
+                {{ states('input_number.zendure_2400_ac_max_ontlaadvermogen') | int }}
+          - action: logbook.log
+            data:
+              message: >-
+                ☀️Dynamisch NOM + Forecasting terugleveren gestart (zonoverschot) — {{ state_attr('sensor.zendure_forecast_plan', 'zonoverschot_kwh') }} kWh gepland vóór de zon
+              entity_id: input_select.zendure_2400_ac_modus_selecteren
+              name: " "
+          - wait_for_trigger:
+              - alias: Geen terugleverkwartier meer
+                trigger: state
+                entity_id: binary_sensor.forecast_zonoverschot_terugleveren
+                to: 'off'
+                for:
+                  hours: 0
+                  minutes: 0
+                  seconds: 10
+              - alias: Minimale SOC bereikt
+                trigger: template
+                value_template: >
+                  {{ states('sensor.zendure_2400_ac_laadpercentage') | float(0) <= states('sensor.zendure_2400_ac_minimale_laadpercentage') | float(100) }}
+              - trigger: state
+                entity_id:
+                  - input_select.zendure_2400_ac_modus_selecteren
+            continue_on_timeout: false
+          - action: input_boolean.turn_off
+            target:
+              entity_id:
+                - input_boolean.dynamisch_ontladen_loopt
+            data: {}
+          - action: rest_command.zendure_stop_met_alles
+            data:
+              sn: '{{ states(''sensor.zendure_2400_ac_serienummer'') }}'
+          - action: logbook.log
+            data:
+              message: ☀️Dynamisch NOM + Forecasting terugleveren gestopt —
+              entity_id: input_select.zendure_2400_ac_modus_selecteren
+              name: " "
+        alias: Dynamisch NOM + Forecasting terugleveren bij zonoverschot
       - conditions:
           - condition: trigger
             id:

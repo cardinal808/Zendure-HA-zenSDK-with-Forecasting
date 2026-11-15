@@ -86,6 +86,13 @@ input_boolean:
     name: Negative Price Pre Discharge
     icon: mdi:battery-arrow-down-outline
 
+  # Discharge at solar surplus: if the sun will fill the battery anyway, the battery exports what the
+  # house does not need until the sun before the sun (higher price). Planner + automation, only in
+  # mode Dynamic Smart Matching + Forecasting.
+  solar_surplus_discharge:
+    name: Solar Surplus Discharge
+    icon: mdi:solar-power-variant
+
   # Include the PV export of the Zendure Pro (solar inputs) via Gielz' PV Export Disabled
   negative_price_zendure_pv_export:
     name: Negative Price Zendure PV Export

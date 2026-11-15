@@ -390,6 +390,12 @@ sensor:
 template:
   # Net-tellers automatisch herkend (veld leeg, P1-meter gevonden): het dashboard verbergt dan het
   # invoerveld en toont welke sensor gebruikt wordt (attribuut sensoren).
+  # Nu terugleveren bij zonoverschot (uit de planner); de automation gebruikt de toestand met 'for'
+  - binary_sensor:
+      - name: "Forecast Zonoverschot Terugleveren"
+        unique_id: forecast_zonoverschot_terugleveren
+        icon: mdi:transmission-tower-export
+        state: "{{ state_attr('sensor.zendure_forecast_plan', 'zonoverschot_nu') == true }}"
   - binary_sensor:
       - name: "Forecast Net Import Teller Automatisch"
         unique_id: forecast_net_import_teller_automatisch
@@ -1227,6 +1233,7 @@ template:
           - input_number.forecast_betrouwbaarheid_dec
           - input_boolean.forecast_dal_ontladen_blokkeren
           - input_boolean.forecast_slim_vasthouden
+          - input_boolean.zonoverschot_ontladen
           - input_boolean.forecast_kalibratieladen
           - input_number.forecast_kalibratie_dagen
           - sensor.zendure_2400_ac_laatste_kalibratie_dagen
@@ -1260,6 +1267,9 @@ template:
       c_dek_min_kwh: 2                   # en alleen als er die dag minstens zoveel zon verwacht wordt
       c_zon_krediet: 0.75                # vooraf ontladen: verwacht zon-overschot telt maar voor 75% (forecast kan te optimistisch zijn)
       c_vo_min_kwh: 0.5                  # vooraf ontladen: pas vanaf zoveel verwacht zon-overschot in een negatief venster
+      c_zo_reserve_kwh: 0.3              # ontladen bij zonoverschot: extra reserve boven wat het huis tot de zon nodig heeft
+      c_zo_min_kwh: 0.3                  # ontladen bij zonoverschot: pas vanaf zoveel kWh
+      c_zo_marge_eur: 0.01               # ontladen bij zonoverschot: minimale winst per kWh na verlies
       c_vorm_n_vol_werkdag: 10           # vorm per kwartier telt volledig mee na zoveel complete uren (werkdag)
       c_kalibratie_dagen: 14             # kalibratieladen: standaard na zoveel dagen zonder 100% netladen
       c_dag_n_vol: 3                     # profiel per weekdag telt volledig mee na zoveel metingen (weken) van dat uur
@@ -2199,6 +2209,110 @@ template:
         {% set ns = namespace(a=false) %}
         {% for x in gekozen %}{% if x.s <= nu_ts < x.e %}{% set ns.a = true %}{% endif %}{% endfor %}
         {{ ns.a }}
+      # ---- Ontladen bij zonoverschot (terugleveren vóór de zon) ----------------
+      # Vult de zon de accu straks toch vol, dan is wat er nu meer in zit dan het huis tot de zon
+      # nodig heeft, te verkopen: vóór de zon is de terugleverprijs hoger dan tijdens de zon. Het
+      # deel dat de zon weer bijvult (met zonkrediet) gaat in de kwartieren met de hoogste
+      # terugleverprijs vóór de zon terug naar het net, met het maximale ontlaadvermogen. Loont alleen
+      # als de terugleverprijs nu hoger is dan die tijdens de zon gedeeld door het rendement.
+      zo_aan: >
+        {{ is_state('input_boolean.zonoverschot_ontladen', 'on') and prijzen_ok and eff_rt > 0
+           and not is_state('input_boolean.zendure_2400_ac_pv_export_uitgeschakeld', 'on') }}
+      # Begin en einde van het eerstvolgende zon-overschot (detailvoorspelling), en het overschot (kWh AC)
+      zo_zon: >
+        {%- set ns = namespace(s=none, e=none, o=0) -%}
+        {%- if zo_aan -%}
+          {%- for p in vo_zon if p.s + c_detail_periode_s > nu_ts -%}
+            {%- set ov = [p.pv - p.kw, 0] | max -%}
+            {%- if ov > 0.05 and ns.s is none -%}{%- set ns.s = [p.s, nu_ts] | max -%}{%- endif -%}
+            {%- if ns.s is not none and p.s < ns.s + 57600 and (ns.e is none or p.s <= ns.e + 3600) -%}
+              {%- set ns.o = ns.o + ov * c_detail_periode_s / 3600 -%}
+              {%- if ov > 0.05 -%}{%- set ns.e = p.s + c_detail_periode_s -%}{%- endif -%}
+            {%- endif -%}
+          {%- endfor -%}
+        {%- endif -%}
+        {{ {'s': ns.s, 'e': ns.e, 'kwh': ns.o | round(3)} if ns.s is not none and ns.s > nu_ts + 900 else none }}
+      # Terugleverprijs per kwartier (zoals sensor.zendure_terugleverprijs_nu, met saldering per kwartier)
+      zo_tl: >
+        {%- set ns = namespace(l=[]) -%}
+        {%- if zo_zon is mapping -%}
+          {%- set opslag = states('input_number.besparing_dyn_opslag_teruglevering') | float(0) -%}
+          {%- set bonus = states('input_number.besparing_dyn_bonus_teruglevering') | float(0) / 100 -%}
+          {%- set tp = 'sensor.zendure_terugleverprijs_nu' -%}
+          {%- set sal_tot = state_attr(tp, 'saldering_tot_ts') | float(as_timestamp('2027-01-01T00:00:00+01:00')) -%}
+          {%- set btw_f = 1 + state_attr(tp, 'btw_pct') | float(21) / 100 -%}
+          {%- set markt_f = state_attr(tp, 'markt_btw_factor') | float(btw_f) -%}
+          {%- set eb_sal = state_attr(tp, 'eb_saldering') | float(0) -%}
+          {%- set msens = states('input_text.dynamisch_marktprijs_sensor') | trim | lower -%}
+          {%- set mk = namespace(d={}) -%}
+          {%- if msens.startswith('sensor.') -%}
+            {%- for y in (state_attr(msens, 'raw_today') or []) + (state_attr(msens, 'raw_tomorrow') or []) -%}
+              {%- if y.value is number -%}{%- set mk.d = dict(mk.d, **{((as_timestamp(y.start, 0) | int) | string): y.value}) -%}{%- endif -%}
+            {%- endfor -%}
+          {%- endif -%}
+          {%- for x in pad_kand | sort(attribute='s') if x.e > nu_ts and x.s < zo_zon.e -%}
+            {%- set mq = namespace(s=0, n=0) -%}
+            {%- for k in range([((x.e - x.s) / 900) | round(0) | int, 1] | max) -%}
+              {%- set key = ((x.s | int) + k * 900) | string -%}
+              {%- if key in mk.d -%}{%- set mq.s = mq.s + mk.d[key] -%}{%- set mq.n = mq.n + 1 -%}{%- endif -%}
+            {%- endfor -%}
+            {%- set mp0 = (mq.s / mq.n) if mq.n > 0 else x.v -%}
+            {%- set sal = x.s < sal_tot -%}
+            {%- set mp = (mp0 / markt_f) * (btw_f if sal else 1) -%}
+            {%- set f = mp + bonus * ([mp, 0] | max) + opslag + (eb_sal if sal else 0) -%}
+            {%- set ns.l = ns.l + [{'s': x.s, 'e': x.e, 'f': f | round(4)}] -%}
+          {%- endfor -%}
+        {%- endif -%}
+        {{ ns.l }}
+      # Terugleverprijs tijdens de zon (gewogen naar het overschot): wat teruglevering dan oplevert
+      zo_p_zon: >
+        {%- set ns = namespace(w=0, t=0) -%}
+        {%- if zo_zon is mapping -%}
+          {%- for p in vo_zon if p.s >= zo_zon.s - c_detail_periode_s and p.s < zo_zon.e -%}
+            {%- set ov = [p.pv - p.kw, 0] | max -%}
+            {%- for x in zo_tl if x.s <= p.s < x.e -%}{%- set ns.w = ns.w + ov -%}{%- set ns.t = ns.t + ov * x.f -%}{%- endfor -%}
+          {%- endfor -%}
+        {%- endif -%}
+        {{ (ns.t / ns.w) | round(4) if ns.w > 0 else none }}
+      # Wat het huis tot de zon nodig heeft (kWh AC, na directe zon), uit het profiel
+      zo_nodig_ac: >
+        {%- set ns = namespace(k=0) -%}
+        {%- if zo_zon is mapping -%}
+          {%- set a = nu_ts -%}{%- set b = zo_zon.s -%}
+          {%- for i in range(((a - kwart_s0) // 900) | int, ((b - kwart_s0 - 0.001) // 900) | int + 1) -%}{%- set qa = kwart_s0 + i * 900 -%}{%- set ov = [qa + 900, b] | min - [qa, a] | max -%}{%- if ov > 0 -%}{%- set ns.k = ns.k + (kwart_kw[[i, 0] | max] if i < kwart_kw | length else l_uur) * ov / 3600 -%}{%- endif -%}{%- endfor -%}
+        {%- endif -%}
+        {{ ns.k | round(3) }}
+      # Hoeveel kan weg (kWh DC): boven wat het huis nodig heeft plus marge, en niet meer dan de zon
+      # (met zonkrediet) weer bijvult. Geen netladen vóór de zon gepland (dat zou elkaar tegenspreken).
+      zo_kwh_dc: >
+        {%- if zo_zon is mapping and zo_p_zon is number and (gekozen | selectattr('s', 'lt', zo_zon.s) | list | length) == 0 -%}
+          {%- set reserve = zo_nodig_ac / eff_out + marge_dc + c_zo_reserve_kwh -%}
+          {%- set ruimte0 = s_max - [s_nu - zo_nodig_ac / eff_out, 0] | max -%}
+          {%- set x = [s_nu - reserve, zo_zon.kwh * vo_krediet * eff_in - ruimte0] | min -%}
+          {{ ([x, 0] | max) | round(3) }}
+        {%- else -%}0{%- endif -%}
+      # Kwartieren met de hoogste terugleverprijs vóór de zon (alleen als dat loont), elk met het
+      # maximale ontlaadvermogen min het verbruik van het huis
+      zo_slots: >
+        {%- set ns = namespace(l=[], rest=zo_kwh_dc * eff_out) -%}
+        {%- if zo_kwh_dc >= c_zo_min_kwh -%}
+          {%- set p_out = [states('input_number.zendure_2400_ac_max_ontlaadvermogen') | float(2400), 100] | max / 1000 -%}
+          {%- set grens = zo_p_zon / eff_rt + c_zo_marge_eur -%}
+          {%- for x in zo_tl | sort(attribute='f', reverse=true) if x.e > nu_ts and x.e <= zo_zon.s + 1 and x.f > grens and ns.rest > 0.01 -%}
+            {%- set a = [x.s, nu_ts] | max -%}
+            {%- set i = ((a - kwart_s0) // 900) | int -%}
+            {%- set huis = (kwart_kw[[i, 0] | max] if i < kwart_kw | length else l_uur) -%}
+            {%- set k = [([p_out - huis, 0] | max) * (x.e - a) / 3600, ns.rest] | min -%}
+            {%- if k > 0.01 -%}
+              {%- set ns.l = ns.l + [{'s': x.s, 'e': x.e, 'f': x.f, 'kwh': k | round(3)}] -%}
+              {%- set ns.rest = ns.rest - k -%}
+            {%- endif -%}
+          {%- endfor -%}
+        {%- endif -%}
+        {{ ns.l | sort(attribute='s') }}
+      zo_nu: >
+        {{ zo_slots | selectattr('s', 'le', nu_ts) | selectattr('e', 'gt', nu_ts) | list | length > 0 and not slot_nu }}
+
       gepland_ac: "{{ ([gekozen | length * e_slot, netladen_ac] | min) | round(3) }}"
       p_gekozen_avg: >
         {% if gekozen | length > 0 %}{{ (gekozen | map(attribute='v') | sum / (gekozen | length)) | round(5) }}{% else %}0{% endif %}
@@ -2598,6 +2712,18 @@ template:
           vooraf_verwacht_kwh: "{{ vo_sim.e if vo_venster is mapping else none }}"
           vooraf_grensprijs: "{{ vo_grens }}"
           vooraf_netladen_vervallen: "{{ vo_netladen_vervallen }}"
+          zonoverschot_aan: "{{ zo_aan }}"
+          zonoverschot_nu: "{{ zo_nu }}"
+          zonoverschot_kwh: "{{ (zo_slots | map(attribute='kwh') | sum) | round(2) }}"
+          zonoverschot_slots: "{{ zo_slots }}"
+          zonoverschot_zon_vanaf: "{{ zo_zon.s | timestamp_custom('%Y-%m-%d %H:%M', true) if zo_zon is mapping else none }}"
+          zonoverschot_zon_kwh: "{{ zo_zon.kwh if zo_zon is mapping else none }}"
+          zonoverschot_nodig_kwh: "{{ zo_nodig_ac }}"
+          zonoverschot_prijs_zon: "{{ zo_p_zon }}"
+          zonoverschot_grensprijs: "{{ (zo_p_zon / eff_rt + c_zo_marge_eur) | round(4) if zo_p_zon is number and eff_rt > 0 else none }}"
+          zonoverschot_opbrengst: >
+            {%- set ns = namespace(t=0) -%}{%- for x in zo_slots -%}{%- set ns.t = ns.t + x.kwh * x.f -%}{%- endfor -%}
+            {{ (ns.t - (zo_slots | map(attribute='kwh') | sum) / eff_rt * zo_p_zon) | round(2) if zo_p_zon is number and eff_rt > 0 else 0 }}
           laadvermogen_gebruikt_kw: "{{ p_max_kw | round(2) }}"
           laadvermogen_gemeten_w: "{{ p_gemeten_w if p_gemeten_w >= c_laden_min_w else none }}"
           laadvermogen_ingesteld_kw: "{{ p_set_kw }}"
