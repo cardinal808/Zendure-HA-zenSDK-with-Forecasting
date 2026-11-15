@@ -39,7 +39,7 @@ Versies volgen `jaar.maand.volgnummer`; het volgnummer begint elke maand bij 1. 
 
 **Grafieken**
 - **Plan Tijdlijn:** de kolommen staan nu in hun eigen kwartier (eerst gecentreerd op het begin, een halve kolom te vroeg t.o.v. de verbruikslijn en de tijd). De tijdlabels onderaan zijn annotaties op het exacte tijdstip (03:00, 06:00 …, dagnaam bij middernacht); eerder kon de onderste rij verschuiven (bv. rond 12:00).
-- **Verbruiksprofiel:** de kolom van een uur staat tussen dat uur en het volgende.
+- **Verbruiksprofiel:** de kolom van een uur staat tussen dat uur en het volgende. De legenda toont geen *0,6 uur* meer (dat was de laatste staaf met de eenheid van de profielsensor). Nieuwe tweede grafiek **verbruik per dag**: verwacht verbruik per weekdag in kWh (groen werkdag, grijs weekend).
 
 **Upgraden**
 - Vervang alle bestanden, herstart en plak het dashboard opnieuw. Controleer in Negatieve Prijs: *Saldering* = Automatisch, *Marktprijs sensor is* = Inclusief btw (bij de Nordpool-sensor `_5_10_021`). Vul bij Besparing het vaste terugleveringstarief voor 2027 in.

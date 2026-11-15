@@ -39,7 +39,7 @@ Versions follow `year.month.sequence`; the sequence restarts at 1 every month. E
 
 **Charts**
 - **Plan Timeline:** the columns now sit in their own quarter hour (before they were centred on the start, half a column early compared with the usage line and the time). The time labels at the bottom are annotations at the exact time (03:00, 06:00 …, day name at midnight); before, the bottom row could shift (e.g. around 12:00).
-- **Usage Profile:** the column of an hour sits between that hour and the next.
+- **Usage Profile:** the column of an hour sits between that hour and the next. The legend no longer shows *0.6 hours* (that was the last bar with the unit of the profile sensor). New second chart **usage per day**: expected usage per weekday in kWh (green workday, grey weekend).
 
 **Upgrading**
 - Replace all files, restart and paste the dashboard again. Check at Negative Price: *Net metering* = Automatic (or No net metering outside the Netherlands), *Market price sensor is* = Including VAT (with the Nordpool sensor `_5_10_021`). Enter the fixed feed-in tariff for 2027 at Savings.

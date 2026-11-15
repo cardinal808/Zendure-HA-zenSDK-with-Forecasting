@@ -1624,6 +1624,7 @@ views:
                 color: '#01a180'
                 show:
                   in_header: false
+                  legend_value: false
                 data_generator: |
                   const d = entity.attributes.werkdag || [];
                   const base = new Date(); base.setHours(0, 0, 0, 0);
@@ -1634,6 +1635,7 @@ views:
                 color: '#a2a2a3'
                 show:
                   in_header: false
+                  legend_value: false
                 data_generator: |
                   const d = entity.attributes.weekend || [];
                   const base = new Date(); base.setHours(0, 0, 0, 0);
@@ -1642,9 +1644,88 @@ views:
               - condition: state
                 entity: input_boolean.forecast_tonen_op_dashboard
                 state: 'on'
+          - type: custom:apexcharts-card
+            graph_span: 7d
+            span:
+              start: isoWeek
+            header:
+              show: true
+              title: ''
+            apex_config:
+              noData:
+                text: Het profiel wordt nog geleerd.
+              chart:
+                height: 140px
+              plotOptions:
+                bar:
+                  columnWidth: 60%
+              legend:
+                show: false
+              tooltip:
+                x:
+                  formatter: |
+                    EVAL: (v) => new Date(v).toLocaleDateString(navigator.language, { weekday: 'long' })
+                'y':
+                  formatter: |
+                    EVAL: (val) => val === null ? '-' : `${val.toFixed(1)} kWh`
+              grid:
+                show: true
+                borderColor: color-mix(in srgb, var(--divider-color) 50%, transparent)
+                strokeDashArray: 0
+                padding:
+                  top: -10
+                  bottom: 14
+              # Weekdagnamen als annotaties midden onder elke kolom (de datum-as zet labels op middernacht)
+              annotations:
+                xaxis: >-
+                  EVAL:(() => { const a = []; const ma = new Date(); ma.setHours(12, 0, 0, 0); ma.setDate(ma.getDate() - ((ma.getDay() + 6) % 7)); for (let d = 0; d < 7; d++) { const t = ma.getTime() + d * 86400000; a.push({ x: t, borderColor: 'transparent', label: { text: new Date(t).toLocaleDateString(navigator.language, { weekday: 'short' }), borderWidth: 0, orientation: 'horizontal', position: 'bottom', offsetY: 18, style: { background: 'transparent', color: 'grey', fontSize: '11px' } } }); } return a; })()
+              xaxis:
+                labels:
+                  show: false
+                axisTicks:
+                  show: false
+              yaxis:
+                - decimalsInFloat: 0
+                  min: 0
+                  labels:
+                    style:
+                      colors: >-
+                        color-mix(in srgb, var(--primary-text-color) 75%,
+                        transparent)
+            series:
+              - entity: sensor.forecast_verbruiksprofiel
+                name: Verbruik per dag
+                type: column
+                color: '#01a180'
+                show:
+                  in_header: false
+                  legend_value: false
+                data_generator: |
+                  // Verwacht verbruik per weekdag (kWh): het profiel per uur opgeteld, per weekdag gemengd zoals de
+                  // planner doet (eigen weekdagprofiel weegt mee naar aantal metingen / 3). Groen = werkdag, grijs = weekend.
+                  const a = entity.attributes;
+                  const wd = a.werkdag || [], we = a.weekend || [], pd = a.per_dag || [], n = a.n_per_dag || [];
+                  if (wd.length !== 24 || we.length !== 24) return [];
+                  const ma = new Date(); ma.setHours(12, 0, 0, 0); ma.setDate(ma.getDate() - ((ma.getDay() + 6) % 7));
+                  const out = [];
+                  for (let d = 0; d < 7; d++) {
+                    const base = d < 5 ? wd : we;
+                    let t = 0;
+                    for (let h = 0; h < 24; h++) {
+                      const w = Math.min(((n[d] || [])[h] || 0) / 3, 1);
+                      const v = (pd[d] || [])[h] ?? base[h];
+                      t += w * v + (1 - w) * base[h];
+                    }
+                    out.push({ x: ma.getTime() + d * 86400000, y: Math.round(t * 10) / 10, fillColor: d < 5 ? '#01a180' : '#a2a2a3' });
+                  }
+                  return out;
+            visibility:
+              - condition: state
+                entity: input_boolean.forecast_tonen_op_dashboard
+                state: 'on'
           - type: markdown
             content: >-
-              <ha-alert alert-type="info">Help</ha-alert>Gemiddeld verbruik per uur, geleerd uit je eigen meting. Wordt na ongeveer een week bruikbaar.
+              <ha-alert alert-type="info">Help</ha-alert>Bovenste grafiek: gemiddeld verbruik per uur (kWh), geleerd uit je eigen meting, voor werkdag (groen) en weekend (grijs). Wordt na ongeveer een week bruikbaar. Onderste grafiek: verwacht verbruik per weekdag (kWh); het eigen profiel per weekdag telt na 3 weken volledig mee.
             text_only: true
             visibility:
               - condition: state
