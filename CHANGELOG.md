@@ -12,7 +12,6 @@ Versions follow `year.month.sequence`; the sequence restarts at 1 every month. E
 - Energy tax and VAT % come from the Nordpool package. Without that package: new field **Energy tax under net metering (incl. VAT)** (`input_number.negative_price_net_metering_energy_tax`).
 - `sensor.zendure_feedin_price_now` has new attributes `net_metering_active`, `net_metering_until`, `net_metering_until_ts`, `vat_pct`, `market_vat_factor`, `energy_tax_net_metering`; the savings and the planner (pre-discharge) use them per quarter hour.
 - **Savings, fixed contract:** while net metering applies, export counts at the supply tariff. The field is now called **Fixed contract feed-in tariff (without net metering)**: enter your contract's feed-in tariff for 2027.
-- Net metering only covers your annual consumption. If you export more than you import over the year, choose *No net metering*.
 
 **Fix: Solcast detail for today with Dutch entity names**
 - With HA in Dutch the Solcast sensor is called `…_resterende_voorspelling_vandaag`. The planner only looked for today's detailed forecast under the English name (`…_remaining_today` → `…_today`), and found nothing with the Dutch name. As a result there was no solar for the rest of today in the Plan Timeline, the state of charge line ran empty during the day and the path check used *sunrise + 3 hours*. Now also `…_voorspelling_vandaag`, and as a fallback all Solcast sensors (only if you use Solcast). Also in the diagnostics export.
