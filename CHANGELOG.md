@@ -5,7 +5,7 @@ Versions follow `year.month.sequence`; the sequence restarts at 1 every month. E
 ## 2026.11.7 (in development) — based on Gielz v20261113
 
 **Feed-in price: Dutch net metering (salderingsregeling) until the end of 2026, then without VAT (switches by itself on 1 January 2027)**
-- New setting **Net metering** (`input_select.negative_price_net_metering`) in Forecasting Configuration (Negative Price): *Automatic (NL, until 31-12-2026)* (default), *Net metering* or *No net metering*. Outside the Netherlands choose *No net metering* (or *Net metering* if your country has it).
+- **Net metering until 31-12-2026, then without** (no choice): every quarter hour that starts before 1 January 2027 00:00 counts with net metering, after that without. Outside the Netherlands: leave the energy tax at 0.
 - While net metering applies: feed-in price = market price **with** VAT + energy tax (incl. VAT) + bonus + markup. Through net metering you get the energy tax back; it did not count before. As a result *no export at negative price* now only steps in when the market price drops below about −€0.11 (before already below €0, while exporting still earned money), and the savings value export higher.
 - From 1 January 2027 (per quarter hour, so pre-discharge for quarters after midnight too): market price **without** VAT (private households pay and receive no VAT on export) + bonus + markup, no energy tax.
 - New setting **Market price sensor is** (`input_select.negative_price_market_price_vat`): *Including VAT* (default, like the sensor of the Nordpool package) or *Excluding VAT*.
@@ -29,7 +29,7 @@ Versions follow `year.month.sequence`; the sequence restarts at 1 every month. E
 - **Grid counters:** when they are detected automatically (HomeWizard, SlimmeLezer, DSMR), the dashboard hides the input fields and shows which sensor is used (*Grid import counter (detected automatically)*). New `binary_sensor.forecast_grid_import_counter_automatic` and `..._export_...` (attribute `sensors`).
 - **No more "unknown" in empty input fields:** a field that was never filled in is emptied (not Gielz's own fields). Solar fields and grid counters that are still empty show **(please fill in)**.
 - **Extra planner charge margin %** was called *Battery charge margin %*.
-- Negative Price: section *Discharge battery ahead of negative prices* is now **Discharge battery at**, the switch *Pre-discharge* is now **Negative prices** (same entity).
+- The block is now called **Forecasting Configuration (Battery discharge and Negative Price)**. At the top **Discharge battery at** with the switches **Negative prices** (was *Pre-discharge*, same entity) and **Solar surplus**; below it **Negative price** with *No export at negative price*.
 - **No more "(0 = …)":** the default value is now really in the field: *Calibration after days* 14, EV *Charging power kW* 2.3, *Threshold W* 300, *Ready by* 07:00, HVAC *Threshold power W* 50, *Solar forecast reliability %* 100. That 100 does not count as *filled in*: without a value of your own, pre-discharge still uses 75% of the solar surplus. The month fields are now called *January %* etc.; 0 still means *the general value* there. If you set a field to 0, the default comes back (automations `forecast_default_values`, `ev_default_values`, `hvac_default_values`).
 - **Calibration charging** is now an on switch (was *Calibration charging off*) and is on by default, also if you turned it off before: turn it off again after the upgrade if needed.
 - **Missing cards notice:** if apexcharts-card, card-mod or button-card is missing (detected via HACS), the dashboard says which to install.
@@ -50,7 +50,7 @@ Versions follow `year.month.sequence`; the sequence restarts at 1 every month. E
 - **Usage Profile:** the column of an hour sits between that hour and the next. The legend no longer shows *0.6 hours* (that was the last bar with the unit of the profile sensor). New second chart **usage per day**: expected usage per weekday in kWh (green workday, grey weekend).
 
 **Upgrading**
-- Replace all files, restart and paste the dashboard again. Check at Negative Price: *Net metering* = Automatic (or No net metering outside the Netherlands), *Market price sensor is* = Including VAT (with the Nordpool sensor `_5_10_021`). Enter the fixed feed-in tariff for 2027 at Savings.
+- Replace all files, restart and paste the dashboard again. Check at Battery discharge and Negative Price: *Market price sensor is* = Including VAT (with the Nordpool sensor `_5_10_021`). Enter the fixed feed-in tariff for 2027 at Savings.
 
 ## 2026.11.6 — based on Gielz v20261113
 

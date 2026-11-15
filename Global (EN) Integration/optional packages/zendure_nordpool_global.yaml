@@ -13,7 +13,7 @@
 #    Then leave Dynamic Supply Markup (Savings) at 0.
 # 2. Bare market price including VAT, for export
 #    -> sensor.nordpool_kwh_nl_eur_5_10_021
-#    Filled in automatically in Forecasting Configuration (Negative Price), field Market price sensor
+#    Filled in automatically in Forecasting Configuration (Battery discharge and Negative Price), field Market price sensor
 #    (when that is empty; see the automation at the bottom).
 #    You only pay energy tax and markup for supply, not for export.
 #    The VAT does not need to come out: the feed-in price (negative price package) removes it
@@ -85,7 +85,7 @@ sensor:
 
 # ---------------------------------------------------------------------
 # Fill in the market price sensor (feed-in) automatically
-# If the Market price sensor field in Forecasting Configuration (Negative Price) is empty, this
+# If the Market price sensor field in Forecasting Configuration (Battery discharge and Negative Price) is empty, this
 # package fills in the bare Nord Pool sensor (sensor.nordpool_kwh_nl_eur_5_10_021, or
 # sensor.nordpool_kwh_nl_eur_5_10_0 with VAT: False). The field then shows which sensor is used.
 # Entering another sensor is fine; it stays.

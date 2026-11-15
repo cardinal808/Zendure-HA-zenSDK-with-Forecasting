@@ -13,7 +13,7 @@
 #    Laat dan Dynamisch Opslag Levering (Besparing) op 0 staan.
 # 2. Kale marktprijs inclusief btw, voor teruglevering
 #    -> sensor.nordpool_kwh_nl_eur_5_10_021
-#    Wordt automatisch ingevuld bij Forecasting Configuratie (Negatieve Prijs), veld Marktprijs sensor
+#    Wordt automatisch ingevuld bij Forecasting Configuratie (Accu ontladen en Negatieve Prijs), veld Marktprijs sensor
 #    (als dat leeg is; zie de automatisering onderaan).
 #    Energiebelasting en opslag betaal je alleen bij levering, niet bij teruglevering.
 #    De btw hoeft er niet uit: de terugleverprijs (negatieve-prijspakket) haalt hem er zelf uit
@@ -86,7 +86,7 @@ sensor:
 
 # ---------------------------------------------------------------------
 # Marktprijs sensor (teruglevering) automatisch invullen
-# Is het veld Marktprijs sensor in Forecasting Configuratie (Negatieve Prijs) leeg, dan vult dit
+# Is het veld Marktprijs sensor in Forecasting Configuratie (Accu ontladen en Negatieve Prijs) leeg, dan vult dit
 # pakket de kale Nord Pool-sensor in (sensor.nordpool_kwh_nl_eur_5_10_021, of
 # sensor.nordpool_kwh_nl_eur_5_10_0 met VAT: False). Zo staat in het veld welke sensor gebruikt wordt.
 # Een andere sensor invullen kan gewoon; die blijft staan.

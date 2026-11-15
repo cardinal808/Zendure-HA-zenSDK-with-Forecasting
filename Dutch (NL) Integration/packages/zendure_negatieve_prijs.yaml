@@ -133,15 +133,6 @@ input_select:
       - Productielimiet (SolarEdge, Hoymiles, APsystems, Fronius)
       - Exportlimiet (GoodWe, Growatt)
 
-  # Saldering: Automatisch = tot 1 januari 2027 (einde salderingsregeling in Nederland)
-  teruglevering_saldering:
-    name: Teruglevering Saldering
-    icon: mdi:scale-balance
-    options:
-      - Automatisch (t/m 31-12-2026)
-      - Saldering
-      - Geen saldering
-
   # Bevat de marktprijs-sensor btw? (sensor.nordpool_kwh_nl_eur_5_10_021 van het Nordpool-pakket: ja)
   teruglevering_marktprijs_btw:
     name: Teruglevering Marktprijs Btw
@@ -255,8 +246,8 @@ template:
           {%- endif -%}
           {%- if ns.p is number -%}
             {#- Zelfde instellingen als in de attributen hieronder (hier herhaald: geen afhankelijkheid van this) -#}
-            {%- set k = states('input_select.teruglevering_saldering') -%}
-            {%- set sal = k == 'Saldering' or (k != 'Geen saldering' and nu < as_timestamp('2027-01-01T00:00:00+01:00')) -%}
+            {#- Saldering t/m 31-12-2026, daarna niet meer (geen keuze) -#}
+            {%- set sal = nu < as_timestamp('2027-01-01T00:00:00+01:00') -%}
             {%- set v = states('input_number.nordpool_btw_percentage') | float(-1) -%}
             {%- set btw = (v if v >= 0 else 21) / 100 -%}
             {%- set fm = 1 if is_state('input_select.teruglevering_marktprijs_btw', 'Zonder btw') else 1 + btw -%}
@@ -286,19 +277,11 @@ template:
           marktprijs_bron: "{{ states('input_text.dynamisch_marktprijs_sensor') | trim if (states('input_text.dynamisch_marktprijs_sensor') | trim | lower).startswith('sensor.') else states('input_text.dynamisch_nordpool_sensor') | trim }}"
           opslag_teruglevering: "{{ states('input_number.besparing_dyn_opslag_teruglevering') | float(0) }}"
           bonus_teruglevering_pct: "{{ states('input_number.besparing_dyn_bonus_teruglevering') | float(0) }}"
-          # Saldering geldt voor kwartieren die beginnen vóór dit moment (0 = geen saldering).
-          # Automatisch: 1 januari 2027 00:00 (Nederlandse tijd).
-          saldering_tot_ts: >
-            {%- set k = states('input_select.teruglevering_saldering') -%}
-            {%- if k == 'Saldering' -%}9999999999
-            {%- elif k == 'Geen saldering' -%}0
-            {%- else -%}{{ as_timestamp('2027-01-01T00:00:00+01:00') | int }}{%- endif -%}
-          saldering_actief: >
-            {%- set k = states('input_select.teruglevering_saldering') -%}
-            {{ k == 'Saldering' or (k != 'Geen saldering' and now() < as_datetime('2027-01-01T00:00:00+01:00')) }}
-          saldering_tot: >
-            {%- set k = states('input_select.teruglevering_saldering') -%}
-            {{ 'altijd' if k == 'Saldering' else ('geen' if k == 'Geen saldering' else '2027-01-01') }}
+          # Saldering geldt voor kwartieren die beginnen vóór 1 januari 2027 00:00 (Nederlandse tijd),
+          # het einde van de salderingsregeling. Geen keuze: daarna altijd zonder saldering.
+          saldering_tot_ts: "{{ as_timestamp('2027-01-01T00:00:00+01:00') | int }}"
+          saldering_actief: "{{ now() < as_datetime('2027-01-01T00:00:00+01:00') }}"
+          saldering_tot: "2027-01-01"
           # Btw %: uit het Nordpool-pakket als dat geladen is, anders 21
           btw_pct: >
             {%- set v = states('input_number.nordpool_btw_percentage') | float(-1) -%}

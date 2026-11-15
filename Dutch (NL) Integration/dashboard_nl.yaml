@@ -4379,7 +4379,7 @@ views:
                 state: 'on'
           - type: heading
             icon: ''
-            heading: Forecasting Configuratie (Negatieve Prijs)
+            heading: Forecasting Configuratie (Accu ontladen en Negatieve Prijs)
             heading_style: title
             visibility:
               - condition: state
@@ -4428,16 +4428,14 @@ views:
               Nordpool-sensor van Gielz; die klopt niet als hij all-in is.
 
 
-              **Saldering** (*Automatisch* = tot en met 31-12-2026): zolang
+              **Saldering** (tot en met 31-12-2026, daarna vanzelf zonder): zolang
               saldering geldt krijg je voor teruggeleverde stroom de marktprijs
               met btw én de energiebelasting terug. De energiebelasting (incl.
               btw) telt dan mee, dus teruglevering blokkeert pas als de
               marktprijs onder ongeveer −€ 0,11 zakt. Vanaf 1 januari 2027
               rekent hij vanzelf met de marktprijs zonder btw (als particulier
               betaal en krijg je geen btw over teruglevering) en zonder
-              energiebelasting. Saldering geldt alleen tot je jaarverbruik: lever
-              je over het jaar meer terug dan je afneemt, kies dan *Geen
-              saldering*. De energiebelasting komt uit het Nordpool-pakket;
+              energiebelasting. De energiebelasting komt uit het Nordpool-pakket;
               zonder dat pakket vul je hem hier zelf in. **Opslag
               teruglevering**: wat je leverancier per kWh bijtelt (positief) of
               inhoudt (negatief).
@@ -4528,6 +4526,14 @@ views:
                     above: 0.1
           - type: entities
             entities:
+              - type: section
+                label: Accu ontladen bij
+              - entity: input_boolean.negatieve_prijs_vooraf_ontladen
+                name: Negatieve prijzen
+              - entity: input_boolean.zonoverschot_ontladen
+                name: Zonoverschot (terugleveren vóór de zon)
+              - type: section
+                label: Negatieve prijs
               - entity: input_boolean.negatieve_prijs_export_blokkeren
                 name: Niet terugleveren bij negatieve prijs
               - type: conditional
@@ -4545,25 +4551,15 @@ views:
                   entity: input_boolean.negatieve_prijs_zendure_pv_export
                   name: PV-export uitschakelen bij negatieve prijzen
               - type: section
-                label: Accu ontladen bij
-              - entity: input_boolean.negatieve_prijs_vooraf_ontladen
-                name: Negatieve prijzen
-              - entity: input_boolean.zonoverschot_ontladen
-                name: Zonoverschot (terugleveren vóór de zon)
-              - type: section
                 label: Terugleverprijs
               - entity: input_text.dynamisch_marktprijs_sensor
                 name: Marktprijs sensor (kale marktprijs)
               - entity: input_select.teruglevering_marktprijs_btw
                 name: Marktprijs sensor is
-              - entity: input_select.teruglevering_saldering
-                name: Saldering
               - type: conditional
                 conditions:
                   - entity: input_number.nordpool_energiebelasting
                     state: unavailable
-                  - entity: input_select.teruglevering_saldering
-                    state_not: Geen saldering
                 row:
                   entity: input_number.teruglevering_energiebelasting
                   name: Energiebelasting bij saldering (incl. btw)
@@ -4640,7 +4636,7 @@ views:
               Dynamisch opslag levering op 0. Kale marktprijs incl. btw
               (teruglevering): sensor.nordpool_kwh_nl_eur_5_10_021, wordt
               automatisch ingevuld bij Marktprijs sensor in Forecasting
-              Configuratie (Negatieve Prijs) als dat veld leeg is. Energiebelasting 2026: € 0,09161
+              Configuratie (Accu ontladen en Negatieve Prijs) als dat veld leeg is. Energiebelasting 2026: € 0,09161
               per kWh zonder btw.
             text_only: true
             visibility:
@@ -4689,14 +4685,14 @@ views:
               met een vast of variabel contract zou betalen en krijgen, alleen
               voor de vergelijking. Vul bij teruglevering de
               terugleververgoeding zónder saldering in (die van 2027): zolang
-              saldering geldt (zie Saldering bij Negatieve Prijs) rekent de
+              saldering geldt (tot en met 31-12-2026) rekent de
               besparing teruglevering vanzelf tegen het leveringstarief. Bij
               dynamisch wordt de prijs
               uit de Nordpool-sensor gebruikt plus de **opslag levering**: is je
               sensor al all-in, laat die op 0 staan (met het Nordpool-pakket is
               het veld verborgen, want die sensor is al all-in). De
               terugleverprijs (marktprijs-sensor, opslag en bonus teruglevering)
-              stel je in bij Forecasting Configuratie (Negatieve Prijs). Met de
+              stel je in bij Forecasting Configuratie (Accu ontladen en Negatieve Prijs). Met de
               knop begint alleen het totaal opnieuw.
 
 

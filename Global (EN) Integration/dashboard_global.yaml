@@ -4373,7 +4373,7 @@ views:
                 state: 'on'
           - type: heading
             icon: ''
-            heading: Forecasting Configuration (Negative Price)
+            heading: Forecasting Configuration (Battery discharge and Negative Price)
             heading_style: title
             visibility:
               - condition: state
@@ -4421,17 +4421,14 @@ views:
               Gielz' Nordpool sensor, which is wrong if it is all-in.
 
 
-              **Net metering** (*Automatic* = the Dutch salderingsregeling, until
-              31-12-2026): while net metering applies you get the market price
+              **Net metering** (the Dutch salderingsregeling, until 31-12-2026,
+              then automatically without): while net metering applies you get the market price
               with VAT and the energy tax back for exported power. The energy
               tax (incl. VAT) then counts, so export is only blocked when the
               market price drops below about −€0.11. From 1 January 2027 it
               automatically uses the market price without VAT (a private
               household pays and receives no VAT on export) and no energy tax.
-              Net metering only covers your annual consumption: if you export
-              more than you import over the year, choose *No net metering*.
-              Outside the Netherlands: choose *No net metering* (or *Net
-              metering* if your country has it). The energy tax comes from the
+              Outside the Netherlands: leave the energy tax at 0. The energy tax comes from the
               Nordpool package; without it you enter it here. **Feed-in
               markup**: what your supplier adds (positive) or deducts
               (negative) per kWh.
@@ -4521,6 +4518,14 @@ views:
                     above: 0.1
           - type: entities
             entities:
+              - type: section
+                label: Discharge battery at
+              - entity: input_boolean.negative_price_pre_discharge
+                name: Negative prices
+              - entity: input_boolean.solar_surplus_discharge
+                name: Solar surplus (export before the sun)
+              - type: section
+                label: Negative price
               - entity: input_boolean.negative_price_block_export
                 name: No export at negative price
               - type: conditional
@@ -4538,25 +4543,15 @@ views:
                   entity: input_boolean.negative_price_zendure_pv_export
                   name: Disable PV export at negative prices
               - type: section
-                label: Discharge battery at
-              - entity: input_boolean.negative_price_pre_discharge
-                name: Negative prices
-              - entity: input_boolean.solar_surplus_discharge
-                name: Solar surplus (export before the sun)
-              - type: section
                 label: Feed-in price
               - entity: input_text.dynamic_setting_market_price_sensor
                 name: Market price sensor (bare market price)
               - entity: input_select.negative_price_market_price_vat
                 name: Market price sensor is
-              - entity: input_select.negative_price_net_metering
-                name: Net metering
               - type: conditional
                 conditions:
                   - entity: input_number.nordpool_setting_energy_tax
                     state: unavailable
-                  - entity: input_select.negative_price_net_metering
-                    state_not: No net metering
                 row:
                   entity: input_number.negative_price_net_metering_energy_tax
                   name: Energy tax under net metering (incl. VAT)
@@ -4632,7 +4627,7 @@ views:
               sensor in Gielz Configuration (Dynamic) and set Dynamic supply
               markup to 0. Bare market price incl. VAT (export):
               sensor.nordpool_kwh_nl_eur_5_10_021, filled in automatically at
-              Market price sensor in Forecasting Configuration (Negative Price)
+              Market price sensor in Forecasting Configuration (Battery discharge and Negative Price)
               when that field is empty.
             text_only: true
             visibility:
@@ -4680,14 +4675,14 @@ views:
               **Fixed contract supply tariff** and **feed-in tariff**: what you
               would pay and receive with a fixed or variable contract, only for
               the comparison. Enter the feed-in tariff without net metering
-              (the 2027 one): while net metering applies (see Net metering at
-              Negative Price) the savings value export at the supply tariff
+              (the 2027 one): while net metering applies (until 31-12-2026)
+              the savings value export at the supply tariff
               automatically. For dynamic, the price from the Nordpool
               sensor is used plus the **supply markup**: if your sensor is
               already all-in, leave it at 0 (with the Nordpool package the field
               is hidden, because that sensor is all-in). The feed-in price
               (market price sensor, feed-in markup and bonus) is set in
-              Forecasting Configuration (Negative Price). The button only
+              Forecasting Configuration (Battery discharge and Negative Price). The button only
               restarts the total.
 
 

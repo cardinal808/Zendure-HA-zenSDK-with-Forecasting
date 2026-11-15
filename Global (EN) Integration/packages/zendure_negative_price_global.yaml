@@ -134,15 +134,6 @@ input_select:
       - Production limit (SolarEdge, Hoymiles, APsystems, Fronius)
       - Export limit (GoodWe, Growatt)
 
-  # Net metering: Automatic = until 1 January 2027 (end of the Dutch salderingsregeling)
-  negative_price_net_metering:
-    name: Negative Price Net Metering
-    icon: mdi:scale-balance
-    options:
-      - Automatic (NL, until 31-12-2026)
-      - Net metering
-      - No net metering
-
   # Does the market price sensor include VAT? (sensor.nordpool_kwh_nl_eur_5_10_021 of the Nordpool package: yes)
   negative_price_market_price_vat:
     name: Negative Price Market Price VAT
@@ -256,8 +247,8 @@ template:
           {%- endif -%}
           {%- if ns.p is number -%}
             {#- Same settings as in the attributes below (repeated here: no dependency on this) -#}
-            {%- set k = states('input_select.negative_price_net_metering') -%}
-            {%- set nm = k == 'Net metering' or (k == 'Automatic (NL, until 31-12-2026)' and now_ts < as_timestamp('2027-01-01T00:00:00+01:00')) -%}
+            {#- Net metering until 31-12-2026, not after (no choice) -#}
+            {%- set nm = now_ts < as_timestamp('2027-01-01T00:00:00+01:00') -%}
             {%- set v = states('input_number.nordpool_setting_vat_percentage') | float(-1) -%}
             {%- set vat = (v if v >= 0 else 21) / 100 -%}
             {%- set fm = 1 if is_state('input_select.negative_price_market_price_vat', 'Excluding VAT') else 1 + vat -%}
@@ -287,19 +278,11 @@ template:
           market_price_source: "{{ states('input_text.dynamic_setting_market_price_sensor') | trim if (states('input_text.dynamic_setting_market_price_sensor') | trim | lower).startswith('sensor.') else states('input_text.dynamic_setting_nordpool_sensor') | trim }}"
           feedin_markup: "{{ states('input_number.savings_setting_dynamic_feedin_markup') | float(0) }}"
           feedin_bonus_pct: "{{ states('input_number.savings_setting_dynamic_feedin_bonus') | float(0) }}"
-          # Net metering applies to quarters starting before this moment (0 = no net metering).
-          # Automatic: 1 January 2027 00:00 (Dutch time), end of net metering in the Netherlands.
-          net_metering_until_ts: >
-            {%- set k = states('input_select.negative_price_net_metering') -%}
-            {%- if k == 'Net metering' -%}9999999999
-            {%- elif k == 'Automatic (NL, until 31-12-2026)' -%}{{ as_timestamp('2027-01-01T00:00:00+01:00') | int }}
-            {%- else -%}0{%- endif -%}
-          net_metering_active: >
-            {%- set k = states('input_select.negative_price_net_metering') -%}
-            {{ k == 'Net metering' or (k == 'Automatic (NL, until 31-12-2026)' and now() < as_datetime('2027-01-01T00:00:00+01:00')) }}
-          net_metering_until: >
-            {%- set k = states('input_select.negative_price_net_metering') -%}
-            {{ 'always' if k == 'Net metering' else ('2027-01-01' if k == 'Automatic (NL, until 31-12-2026)' else 'none') }}
+          # Net metering applies to quarters starting before 1 January 2027 00:00 (Dutch time), the end
+          # of the Dutch net metering scheme. No choice: always without net metering after that.
+          net_metering_until_ts: "{{ as_timestamp('2027-01-01T00:00:00+01:00') | int }}"
+          net_metering_active: "{{ now() < as_datetime('2027-01-01T00:00:00+01:00') }}"
+          net_metering_until: "2027-01-01"
           # VAT %: from the Nordpool package when loaded, otherwise 21
           vat_pct: >
             {%- set v = states('input_number.nordpool_setting_vat_percentage') | float(-1) -%}

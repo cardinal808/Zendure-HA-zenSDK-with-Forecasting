@@ -5,14 +5,13 @@ Versies volgen `jaar.maand.volgnummer`; het volgnummer begint elke maand bij 1. 
 ## 2026.11.7 (in ontwikkeling) — gebaseerd op Gielz v20261113
 
 **Terugleverprijs: saldering tot en met 2026, daarna zonder btw (schakelt vanzelf om op 1 januari 2027)**
-- Nieuwe instelling **Saldering** (`input_select.teruglevering_saldering`) in Forecasting Configuratie (Negatieve Prijs): *Automatisch (t/m 31-12-2026)* (standaard), *Saldering* of *Geen saldering*.
+- **Saldering t/m 31-12-2026, daarna zonder** (geen keuze): elk kwartier dat vóór 1 januari 2027 00:00 begint telt met saldering, daarna zonder.
 - Zolang saldering geldt: terugleverprijs = marktprijs **met** btw + energiebelasting (incl. btw) + bonus + opslag. Via saldering krijg je de energiebelasting terug; die telde eerst niet mee. Gevolg: *niet terugleveren bij negatieve prijs* grijpt nu pas in als de marktprijs onder ongeveer −€ 0,11 zakt (eerst al onder € 0, terwijl terugleveren dan nog geld opleverde), en de besparing waardeert teruglevering hoger.
 - Vanaf 1 januari 2027 (per kwartier, dus ook vooraf ontladen voor kwartieren ná middernacht): marktprijs **zonder** btw (particulieren betalen en krijgen geen btw over teruglevering) + bonus + opslag, zonder energiebelasting.
 - Nieuwe instelling **Marktprijs sensor is** (`input_select.teruglevering_marktprijs_btw`): *Inclusief btw* (standaard, zoals de sensor van het Nordpool-pakket) of *Zonder btw*.
 - Energiebelasting en btw-% komen uit het Nordpool-pakket. Zonder dat pakket: nieuw veld **Energiebelasting bij saldering (incl. btw)** (`input_number.teruglevering_energiebelasting`).
 - `sensor.zendure_terugleverprijs_nu` heeft nieuwe attributen `saldering_actief`, `saldering_tot`, `saldering_tot_ts`, `btw_pct`, `markt_btw_factor`, `eb_saldering`; de besparing en de planner (vooraf ontladen) rekenen daarmee per kwartier.
 - **Besparing, vast contract:** zolang saldering geldt telt teruglevering tegen het leveringstarief. Het veld heet nu **Vast contract tarief teruglevering (zonder saldering)**: vul de terugleververgoeding van je contract voor 2027 in.
-- Saldering geldt tot je jaarverbruik. Lever je over het jaar meer terug dan je afneemt, kies dan *Geen saldering*.
 
 **Fix: Solcast-detail voor vandaag met Nederlandse entiteitnamen**
 - Met HA in het Nederlands heet de Solcast-sensor `…_resterende_voorspelling_vandaag`. De planner zocht de detailvoorspelling van vandaag alleen bij de Engelse naam (`…_remaining_today` → `…_today`), en vond met de Nederlandse naam niets. Gevolg: geen zon voor de rest van vandaag in de Plan Tijdlijn, de laadpercentage-lijn liep overdag leeg en de pad-check rekende met *zonsopkomst + 3 uur*. Nu ook `…_voorspelling_vandaag`, en als vangnet alle Solcast-sensoren (alleen als je Solcast gebruikt). Ook in de diagnose-export.
@@ -29,7 +28,7 @@ Versies volgen `jaar.maand.volgnummer`; het volgnummer begint elke maand bij 1. 
 - **Net-tellers:** worden ze automatisch herkend (HomeWizard, SlimmeLezer, DSMR), dan verbergt het dashboard de invoervelden en toont het welke sensor gebruikt wordt (*Net import teller (automatisch herkend)*). Nieuwe `binary_sensor.forecast_net_import_teller_automatisch` en `..._export_...` (attribuut `sensoren`).
 - **Geen "unknown" meer in lege invoervelden:** een veld dat nooit is ingevuld wordt leeg gemaakt (niet bij Gielz' eigen velden). Zon-velden en net-tellers die nog leeg zijn, tonen **(graag invullen)**.
 - **Extra planner laadmarge %** heette *Batterij laadmarge %*.
-- Negatieve Prijs: sectie *Accu ontladen voor negatieve prijzen* heet nu **Accu ontladen bij**, de schakelaar *Vooraf ontladen* heet **Negatieve prijzen** (zelfde entiteit).
+- Het blok heet nu **Forecasting Configuratie (Accu ontladen en Negatieve Prijs)**. Bovenaan staat **Accu ontladen bij** met de schakelaars **Negatieve prijzen** (was *Vooraf ontladen*, zelfde entiteit) en **Zonoverschot**; daaronder **Negatieve prijs** met *Niet terugleveren bij negatieve prijs*.
 - **Geen "(0 = …)" meer:** de standaardwaarde staat nu echt in het veld: *Kalibratie na dagen* 14, EV *Laadvermogen kW* 2,3, *Drempel W* 300, *Klaar om* 07:00, HVAC *Drempel vermogen W* 50, *Betrouwbaarheid zonvoorspelling %* 100. Die 100 telt niet als *ingevuld*: zonder eigen waarde rekent vooraf ontladen nog met 75% van het zon-overschot. De maandvelden heten nu *Januari %* enz.; 0 blijft daar *de algemene waarde*. Zet je een veld op 0, dan komt de standaardwaarde terug (automatiseringen `forecast_standaardwaarden`, `ev_standaardwaarden`, `hvac_standaardwaarden`).
 - **Kalibratieladen** is nu een aan-schakelaar (was *Kalibratieladen uit*) en staat standaard aan, ook als je hem eerder uit had gezet: zet hem na de upgrade zo nodig opnieuw uit.
 - **Melding ontbrekende kaarten:** mist apexcharts-card, card-mod of button-card (herkend via HACS), dan zegt het dashboard welke je moet installeren.
@@ -50,7 +49,7 @@ Versies volgen `jaar.maand.volgnummer`; het volgnummer begint elke maand bij 1. 
 - **Verbruiksprofiel:** de kolom van een uur staat tussen dat uur en het volgende. De legenda toont geen *0,6 uur* meer (dat was de laatste staaf met de eenheid van de profielsensor). Nieuwe tweede grafiek **verbruik per dag**: verwacht verbruik per weekdag in kWh (groen werkdag, grijs weekend).
 
 **Upgraden**
-- Vervang alle bestanden, herstart en plak het dashboard opnieuw. Controleer in Negatieve Prijs: *Saldering* = Automatisch, *Marktprijs sensor is* = Inclusief btw (bij de Nordpool-sensor `_5_10_021`). Vul bij Besparing het vaste terugleveringstarief voor 2027 in.
+- Vervang alle bestanden, herstart en plak het dashboard opnieuw. Controleer in Accu ontladen en Negatieve Prijs: *Marktprijs sensor is* = Inclusief btw (bij de Nordpool-sensor `_5_10_021`). Vul bij Besparing het vaste terugleveringstarief voor 2027 in.
 
 ## 2026.11.6 — gebaseerd op Gielz v20261113
 
