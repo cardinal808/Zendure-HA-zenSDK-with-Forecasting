@@ -616,12 +616,18 @@ template:
               value: "{{ option }}"
   # Net-tellers automatisch herkend (veld leeg, P1-meter gevonden): het dashboard verbergt dan het
   # invoerveld en toont welke sensor gebruikt wordt (attribuut sensoren).
-  # Nu terugleveren bij zonoverschot (uit de planner); de automation gebruikt de toestand met 'for'
+  # Nu terugleveren uit de accu (uit de planner): bij zonoverschot of vóór negatieve prijzen.
+  # De automation gebruikt de toestand met 'for'. Naam ongewijzigd (entiteit-ID blijft gelijk).
   - binary_sensor:
       - name: "Forecast Zonoverschot Terugleveren"
         unique_id: forecast_zonoverschot_terugleveren
         icon: mdi:transmission-tower-export
-        state: "{{ state_attr('sensor.zendure_forecast_plan', 'zonoverschot_nu') == true }}"
+        state: >
+          {{ state_attr('sensor.zendure_forecast_plan', 'zonoverschot_nu') == true
+             or state_attr('sensor.zendure_forecast_plan', 'vooraf_terugleveren_nu') == true }}
+        attributes:
+          reden: >
+            {{ 'negatieve prijzen' if state_attr('sensor.zendure_forecast_plan', 'vooraf_terugleveren_nu') == true else 'zonoverschot' }}
   - binary_sensor:
       - name: "Forecast Net Import Teller Automatisch"
         unique_id: forecast_net_import_teller_automatisch
@@ -1512,8 +1518,9 @@ template:
       p_set_kw: "{{ [states('input_number.zendure_2400_ac_max_oplaadvermogen') | float(2400), 100] | max / 1000 }}"
       # Gemeten gemiddeld netlaadvermogen (W); onbekend of onder c_laden_min_w = nog niet bruikbaar
       p_gemeten_w: "{{ states('sensor.forecast_gemeten_laadvermogen') | float(0) }}"
-      # Rekenen met wat de accu echt haalt, nooit meer dan de ingestelde maximum
-      p_max_kw: "{{ ([p_set_kw, p_gemeten_w / 1000] | min) if p_gemeten_w >= c_laden_min_w else p_set_kw }}"
+      # Rekenen met het ingestelde Max. Oplaadvermogen van Gielz (de meting kwam steeds te laag uit:
+      # aanloop, wisselende zon, balanceren). De meting staat alleen nog ter informatie op het dashboard.
+      p_max_kw: "{{ p_set_kw }}"
       e_slot: "{{ (p_max_kw * dt_h) | round(4) }}"
       cap: "{{ states('sensor.zendure_2400_ac_totale_capaciteit') | float(0) }}"
       soc: "{{ states('sensor.zendure_2400_ac_laadpercentage') | float(0) }}"
@@ -2341,7 +2348,7 @@ template:
       # Vrije simulatie tot het venster: accu ontlaadt in elk kwartier voor het huis, zon laadt
       # bij, geen netladen en geen vasthouden. Per slot wat de accu dan levert (kWh AC).
       vo_sim: >
-        {%- set ns = namespace(e=s_nu, l=[]) -%}
+        {%- set ns = namespace(e=s_nu, l=[], sp=0) -%}
         {%- if vo_venster is mapping -%}
           {%- for x in pad_kand | sort(attribute='s') -%}
             {%- if x.e > nu_ts and x.s < vo_venster.s -%}
@@ -2355,6 +2362,8 @@ template:
                   {%- set nz.o = nz.o + ([p.pv - p.kw, 0] | max) * (pb - pa) / 3600 -%}
                 {%- endif -%}
               {%- endfor -%}
+              {#- sp: zon die er niet meer in past (accu vol) vóór het venster -#}
+              {%- set ns.sp = ns.sp + [ns.e + nz.o * eff_in - s_max, 0] | max -%}
               {%- set ns.e = [ns.e + nz.o * eff_in, s_max] | min -%}
               {%- set lever = [[nk.k - nz.d, 0] | max, ns.e * eff_out] | min -%}
               {%- set ns.e = ns.e - (lever / eff_out if eff_out > 0 else 0) -%}
@@ -2362,7 +2371,7 @@ template:
             {%- endif -%}
           {%- endfor -%}
         {%- endif -%}
-        {{ {'e': ns.e | round(3), 'l': ns.l} }}
+        {{ {'e': ns.e | round(3), 'l': ns.l, 'sp': ns.sp | round(3)} }}
       # ---- Totaal netladen en definitieve slots ------------------------------
       # Het gewone plan en de pad-check overlappen: het gat zit al in de totale energiebalans.
       # Daarom telt het grootste van de twee, niet de som.
@@ -2467,7 +2476,9 @@ template:
       # Terugleverprijs per kwartier (zoals sensor.zendure_terugleverprijs_nu, met saldering per kwartier)
       zo_tl: >
         {%- set ns = namespace(l=[]) -%}
-        {%- if zo_zon is mapping -%}
+        {#- Tot het einde van de zon (zonoverschot) of het begin van het negatieve venster (vooraf ontladen) -#}
+        {%- set tl_eind = [zo_zon.e if zo_zon is mapping else 0, vo_venster.s if vo_aan and vo_venster is mapping else 0] | max -%}
+        {%- if tl_eind > nu_ts -%}
           {%- set opslag = states('input_number.besparing_dyn_opslag_teruglevering') | float(0) -%}
           {%- set bonus = states('input_number.besparing_dyn_bonus_teruglevering') | float(0) / 100 -%}
           {%- set tp = 'sensor.zendure_terugleverprijs_nu' -%}
@@ -2486,7 +2497,7 @@ template:
               {%- if y.value is number -%}{%- set mk.d = dict(mk.d, **{((as_timestamp(y.start, 0) | int) | string): y.value}) -%}{%- endif -%}
             {%- endfor -%}
           {%- endif -%}
-          {%- for x in pad_kand | sort(attribute='s') if x.e > nu_ts and x.s < zo_zon.e -%}
+          {%- for x in pad_kand | sort(attribute='s') if x.e > nu_ts and x.s < tl_eind -%}
             {%- set mq = namespace(s=0, n=0) -%}
             {%- for k in range([((x.e - x.s) / 900) | round(0) | int, 1] | max) -%}
               {%- set key = ((x.s | int) + k * 900) | string -%}
@@ -2551,6 +2562,29 @@ template:
         {{ ns.l | sort(attribute='s') }}
       zo_nu: >
         {{ zo_slots | selectattr('s', 'le', nu_ts) | selectattr('e', 'gt', nu_ts) | list | length > 0 and not slot_nu }}
+      # ---- Vooraf ontladen: actief terugleveren vóór het negatieve venster ----
+      # Zit er bij het begin van het venster nog meer in de accu dan het doel (ook als hij tot dan
+      # alles voor het huis levert), dan gaat het verschil met vol vermogen terug naar het net, in de
+      # kwartieren met de hoogste positieve terugleverprijs vóór het venster. Stopt als het doel gehaald is.
+      vo_terug_dc: "{{ ([vo_sim.e + vo_sim.sp - vo_doel_dc, 0] | max) | round(3) if vo_aan and vo_venster is mapping else 0 }}"
+      vo_terug_slots: >
+        {%- set ns = namespace(l=[], rest=vo_terug_dc * eff_out) -%}
+        {%- if vo_terug_dc >= c_zo_min_kwh -%}
+          {%- set p_out = [states('input_number.zendure_2400_ac_max_ontlaadvermogen') | float(2400), 100] | max / 1000 -%}
+          {%- for x in zo_tl | sort(attribute='f', reverse=true) if x.e > nu_ts and x.e <= vo_venster.s + 1 and x.f > 0 and ns.rest > 0.01 -%}
+            {%- set a = [x.s, nu_ts] | max -%}
+            {%- set i = ((a - kwart_s0) // 900) | int -%}
+            {%- set huis = (kwart_kw[[i, 0] | max] if i < kwart_kw | length else l_uur) -%}
+            {%- set k = [([p_out - huis, 0] | max) * (x.e - a) / 3600, ns.rest] | min -%}
+            {%- if k > 0.01 -%}
+              {%- set ns.l = ns.l + [{'s': x.s, 'e': x.e, 'f': x.f, 'kwh': k | round(3)}] -%}
+              {%- set ns.rest = ns.rest - k -%}
+            {%- endif -%}
+          {%- endfor -%}
+        {%- endif -%}
+        {{ ns.l | sort(attribute='s') }}
+      vo_terug_nu: >
+        {{ vo_terug_slots | selectattr('s', 'le', nu_ts) | selectattr('e', 'gt', nu_ts) | list | length > 0 and not slot_nu }}
 
       gepland_ac: "{{ ([gekozen | length * e_slot, netladen_ac] | min) | round(3) }}"
       p_gekozen_avg: >
@@ -2951,6 +2985,9 @@ template:
           vooraf_verwacht_kwh: "{{ vo_sim.e if vo_venster is mapping else none }}"
           vooraf_grensprijs: "{{ vo_grens }}"
           vooraf_netladen_vervallen: "{{ vo_netladen_vervallen }}"
+          vooraf_terugleveren_nu: "{{ vo_terug_nu }}"
+          vooraf_terugleveren_kwh: "{{ (vo_terug_slots | map(attribute='kwh') | sum) | round(2) }}"
+          vooraf_terugleveren_slots: "{{ vo_terug_slots }}"
           zonoverschot_aan: "{{ zo_aan }}"
           zonoverschot_nu: "{{ zo_nu }}"
           zonoverschot_kwh: "{{ (zo_slots | map(attribute='kwh') | sum) | round(2) }}"

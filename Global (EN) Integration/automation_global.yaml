@@ -1933,7 +1933,7 @@ actions:
           - condition: state
             entity_id: input_select.zendure_operation_mode
             state: Dynamic Smart Matching + Forecasting
-          - alias: "Planner: an export quarter now (the sun refills the battery later)"
+          - alias: "Planner: an export quarter now (solar surplus or before negative prices)"
             condition: state
             entity_id: binary_sensor.forecast_solar_surplus_export
             state: 'on'
@@ -1980,7 +1980,7 @@ actions:
           - action: logbook.log
             data:
               message: >-
-                ☀️Dynamic Smart Matching + Forecasting export started (solar surplus) — {{ state_attr('sensor.zendure_forecast_plan', 'solar_surplus_export_kwh') }} kWh planned before the sun
+                ☀️Dynamic Smart Matching + Forecasting export started ({{ state_attr('binary_sensor.forecast_solar_surplus_export', 'reason') }}) — {% if state_attr('sensor.zendure_forecast_plan', 'pre_discharge_export_now') %}{{ state_attr('sensor.zendure_forecast_plan', 'pre_discharge_export_kwh') }} kWh planned before the negative prices{% else %}{{ state_attr('sensor.zendure_forecast_plan', 'solar_surplus_export_kwh') }} kWh planned before the sun{% endif %}
               entity_id: input_select.zendure_operation_mode
               name: " "
           - wait_for_trigger:
@@ -2013,7 +2013,7 @@ actions:
               message: ☀️Dynamic Smart Matching + Forecasting export stopped —
               entity_id: input_select.zendure_operation_mode
               name: " "
-        alias: Dynamic Smart Matching + Forecasting export at solar surplus
+        alias: Dynamic Smart Matching + Forecasting export at solar surplus or before negative prices
       - conditions:
           - condition: trigger
             id:

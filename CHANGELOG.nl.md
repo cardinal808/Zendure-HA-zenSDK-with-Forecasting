@@ -22,6 +22,11 @@ Versies volgen `jaar.maand.volgnummer`; het volgnummer begint elke maand bij 1. 
 **Fix: Solcast-detail voor vandaag met Nederlandse entiteitnamen**
 - Met HA in het Nederlands heet de Solcast-sensor `…_resterende_voorspelling_vandaag`. De planner zocht de detailvoorspelling van vandaag alleen bij de Engelse naam (`…_remaining_today` → `…_today`), en vond met de Nederlandse naam niets. Gevolg: geen zon voor de rest van vandaag in de Plan Tijdlijn, de laadpercentage-lijn liep overdag leeg en de pad-check rekende met *zonsopkomst + 3 uur*. Nu ook `…_voorspelling_vandaag`, en als vangnet alle Solcast-sensoren (alleen als je Solcast gebruikt). Ook in de diagnose-export.
 
+**Accu ontladen bij negatieve prijzen: nu actief terugleveren**
+- Schakelaar heet **Negatieve prijzen (terugleveren voordat)**. Zit er bij het begin van een venster met negatieve terugleverprijs meer in de accu dan het doel (ruimte voor het verwachte zon-overschot), dan levert de accu het verschil **met vol vermogen** terug, in de kwartieren met de hoogste positieve terugleverprijs vóór het venster, tot het doel gehaald is. Eerst hief hij alleen vasthouden op en beperkte hij netladen.
+- Telt nu ook mee als de ochtendzon de accu vóór het venster al vol zou maken (wat er niet meer in past, moet er vooraf uit). Eerst deed vooraf ontladen dan niets.
+- Planner: attributen `vooraf_terugleveren_nu`, `vooraf_terugleveren_kwh`, `vooraf_terugleveren_slots`. `binary_sensor.forecast_zonoverschot_terugleveren` staat ook aan bij terugleveren vóór negatieve prijzen (attribuut `reden`); de automation-tak terugleveren doet beide. Plan vandaag: regel **Negatieve prijzen** met venster, doel en terugleveren.
+
 **Nieuw: accu ontladen bij zonoverschot (terugleveren vóór de zon)**
 - Schakelaar **Zonoverschot** (`input_boolean.zonoverschot_ontladen`) in Forecasting Configuratie (Accu ontladen en Negatieve Prijs), onder *Accu ontladen bij*. Standaard uit.
 - Vult de zon de accu straks toch vol, dan levert de accu wat het huis tot de zon niet nodig heeft (plus marge) vóór de zon terug aan het net: in de kwartieren met de hoogste terugleverprijs, met het maximale ontlaadvermogen. Voorbeeld: accu 40%, 20% nodig tot de zon, de zon vult de accu vol → ongeveer 20% terugleveren in de duurste kwartieren vóór de zon.
@@ -47,13 +52,13 @@ Versies volgen `jaar.maand.volgnummer`; het volgnummer begint elke maand bij 1. 
 - **Melding ontbrekende kaarten:** mist apexcharts-card, card-mod of button-card (herkend via HACS), dan zegt het dashboard welke je moet installeren.
 - **Upgrade-melding:** past het dashboard niet bij de versie van de pakketten, dan zegt het plan wat je moet vervangen (dashboard plakken of pakketten vervangen). Staat er een nieuwe versie op GitHub, dan staat dat er ook.
 
-**Gemeten laadvermogen: 90e percentiel**
-- De statistiek telt per wijziging, niet per minuut: aanloop en laden met wisselende zon gaven veel lage metingen, het volle vermogen weinig. De mediaan kwam daardoor te laag uit (bv. 1,4 kW bij 2,4 kW echt). Nu het 90e percentiel. *Uit het net laden* toont erbij als hij met het gemeten vermogen rekent en wat ingesteld is.
+**Laadvermogen: de ingestelde waarde**
+- De planner rekent nu met het **Max. Oplaadvermogen** van Gielz (`input_number.zendure_2400_ac_max_oplaadvermogen`). Het gemeten laadvermogen kwam ondanks de reparaties steeds te laag uit (aanloop, wisselende zon, balanceren; bv. 1,4–1,6 kW bij 2,4 kW echt), waardoor hij te veel kwartieren plande. De meting (nu het 90e percentiel) staat alleen nog ter informatie bij Verzamelde gegevens.
 
 **Plan op het dashboard duidelijker**
 - *Plan van vandaag loopt tot* zonder de vaste uitleg erachter.
 - *Verwacht verbruik tot einde overbrugging*: nu met de opsplitsing accu nu + zon naar de accu + gepland laden (na verlies), en hoeveel het huis direct inkoopt.
-- Laadblokken van vannacht ná middernacht staan bij *Vandaag* als *voorlopig* als er een indicatie voor morgen is (na middernacht plant hij opnieuw); bij *Morgen* heten ze *Verwacht laden morgen*. Schakelaar *Negatieve prijzen* heet nu *Negatieve prijzen (terugleveren voordat)*.
+- Laadblokken van vannacht ná middernacht staan niet meer bij *Vandaag* als er een indicatie voor morgen is (om 00:00 plant hij opnieuw); daar staat *Laden na middernacht: zie de voorlopige planning bij Morgen*. Bij *Morgen* heten de laadregels *Voorlopige planning: laden morgen …*.
 - *Prijs nu* weg (staat al in de grafiek en de badges); houdt de accu vast, dan staat de reden in de regel **Accu houdt nu vast**.
 - **Planning** en **Morgen**: duidelijk dat na middernacht opnieuw gepland wordt voor de dure uren van morgen, en dat de indicatie voor morgen het laden van vannacht vervangt.
 - **Verzamelde gegevens:** nieuwe regel **Verbruik per dag** (kWh per weekdag uit het profiel). Het eigen profiel per weekdag toont hoeveel weken gemeten zijn (*ma 1/3*) in plaats van *0 van 24 geleerd*.

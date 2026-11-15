@@ -22,6 +22,11 @@ Versions follow `year.month.sequence`; the sequence restarts at 1 every month. E
 **Fix: Solcast detail for today with Dutch entity names**
 - With HA in Dutch the Solcast sensor is called `…_resterende_voorspelling_vandaag`. The planner only looked for today's detailed forecast under the English name (`…_remaining_today` → `…_today`), and found nothing with the Dutch name. As a result there was no solar for the rest of today in the Plan Timeline, the state of charge line ran empty during the day and the path check used *sunrise + 3 hours*. Now also `…_voorspelling_vandaag`, and as a fallback all Solcast sensors (only if you use Solcast). Also in the diagnostics export.
 
+**Discharge battery at negative prices: now actively exports**
+- The switch is called **Negative prices (export before)**. If the battery holds more than the target at the start of a window with a negative feed-in price (room for the expected solar surplus), it exports the difference **at full power**, in the quarter hours with the highest positive feed-in price before the window, until the target is reached. Before, it only lifted holding and limited grid charging.
+- Now also counts when the morning sun would fill the battery before the window (what no longer fits has to go out beforehand). Before, pre-discharge then did nothing.
+- Planner: attributes `pre_discharge_export_now`, `pre_discharge_export_kwh`, `pre_discharge_export_slots`. `binary_sensor.forecast_solar_surplus_export` is also on when exporting before negative prices (attribute `reason`); the automation's export branch handles both. Plan for today: line **Negative prices** with window, target and export.
+
 **New: discharge battery at solar surplus (export before the sun)**
 - Switch **Solar surplus** (`input_boolean.solar_surplus_discharge`) in Forecasting Configuration (Battery discharge and Negative Price), under *Discharge battery at*. Off by default.
 - If the sun will fill the battery anyway, the battery exports what the house does not need until the sun (plus margin) to the grid before the sun: in the quarter hours with the highest feed-in price, at maximum discharge power. Example: battery 40%, 20% needed until the sun, the sun fills the battery → about 20% exported in the most expensive quarter hours before the sun.
@@ -47,13 +52,13 @@ Versions follow `year.month.sequence`; the sequence restarts at 1 every month. E
 - **Missing cards notice:** if apexcharts-card, card-mod or button-card is missing (detected via HACS), the dashboard says which to install.
 - **Upgrade notice:** if the dashboard does not match the version of the packages, the plan says what to replace (paste the dashboard or replace the packages). If a new version is on GitHub, it says so too.
 
-**Measured charge power: 90th percentile**
-- The statistic counts per change, not per minute: ramp-up and charging with changing solar gave many low readings, full power few. The median therefore came out too low (e.g. 1.4 kW for a real 2.4 kW). Now the 90th percentile. *Charge from the grid* adds when it uses the measured power and what is configured.
+**Charge power: the configured value**
+- The planner now uses the **Max Charge Power** from Gielz. Despite the fixes, the measured charge power kept coming out too low (ramp-up, changing sun, balancing; e.g. 1.4–1.6 kW for a real 2.4 kW), so it planned too many quarter hours. The measurement (now the 90th percentile) is only shown for information under Collected data.
 
 **Clearer plan on the dashboard**
 - *Today's plan runs until* without the fixed explanation after it.
 - *Expected usage until end of bridge*: now split into battery now + solar to the battery + planned charging (after losses), and how much the house buys directly.
-- Charge blocks of tonight after midnight show as *provisional* under *Today* when there is an indication for tomorrow (it plans again after midnight); under *Tomorrow* they are called *Expected charging tomorrow*. Switch *Negative prices* is now *Negative prices (export before)*.
+- Charge blocks of tonight after midnight no longer show under *Today* when there is an indication for tomorrow (it plans again at 00:00); instead *Charging after midnight: see the provisional plan under Tomorrow*. Under *Tomorrow* the charge lines are called *Provisional plan: charge tomorrow …*.
 - *Price now* removed (already in the chart and badges); when the battery holds, the reason is in the line **Battery is holding now**.
 - **Planning** and **Tomorrow**: clear that it plans again after midnight for tomorrow's expensive hours, and that tomorrow's estimate replaces tonight's charging.
 - **Collected data:** new line **Usage per day** (kWh per weekday from the profile). The own profile per weekday shows how many weeks have been measured (*Mon 1/3*) instead of *0 of 24 learned*.

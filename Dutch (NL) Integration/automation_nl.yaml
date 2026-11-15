@@ -1957,7 +1957,7 @@ actions:
           - condition: state
             entity_id: input_select.zendure_2400_ac_modus_selecteren
             state: Dynamisch NOM + Forecasting
-          - alias: "Planner: nu een terugleverkwartier (zon vult de accu straks weer vol)"
+          - alias: "Planner: nu een terugleverkwartier (zonoverschot of vóór negatieve prijzen)"
             condition: state
             entity_id: binary_sensor.forecast_zonoverschot_terugleveren
             state: 'on'
@@ -2004,7 +2004,7 @@ actions:
           - action: logbook.log
             data:
               message: >-
-                ☀️Dynamisch NOM + Forecasting terugleveren gestart (zonoverschot) — {{ state_attr('sensor.zendure_forecast_plan', 'zonoverschot_kwh') }} kWh gepland vóór de zon
+                ☀️Dynamisch NOM + Forecasting terugleveren gestart ({{ state_attr('binary_sensor.forecast_zonoverschot_terugleveren', 'reden') }}) — {% if state_attr('sensor.zendure_forecast_plan', 'vooraf_terugleveren_nu') %}{{ state_attr('sensor.zendure_forecast_plan', 'vooraf_terugleveren_kwh') }} kWh gepland vóór de negatieve prijzen{% else %}{{ state_attr('sensor.zendure_forecast_plan', 'zonoverschot_kwh') }} kWh gepland vóór de zon{% endif %}
               entity_id: input_select.zendure_2400_ac_modus_selecteren
               name: " "
           - wait_for_trigger:
@@ -2037,7 +2037,7 @@ actions:
               message: ☀️Dynamisch NOM + Forecasting terugleveren gestopt —
               entity_id: input_select.zendure_2400_ac_modus_selecteren
               name: " "
-        alias: Dynamisch NOM + Forecasting terugleveren bij zonoverschot
+        alias: Dynamisch NOM + Forecasting terugleveren bij zonoverschot of vóór negatieve prijzen
       - conditions:
           - condition: trigger
             id:
