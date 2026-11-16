@@ -2,7 +2,7 @@
 
 Versies volgen `jaar.maand.volgnummer`; het volgnummer begint elke maand bij 1. Elke versie vermeldt op welke Gielz-versie hij is gebaseerd. [English](CHANGELOG.md)
 
-## 2026.11.7 (in ontwikkeling) — gebaseerd op Gielz v20261113
+## 2026.11.7 — gebaseerd op Gielz v20261113
 
 **Helios Forecast als zonvoorspelling, met detail per kwartier**
 - [Helios Forecast](https://github.com/ReikanYsora/Helios-Forecast) werkt nu net zo goed als Solcast. Vul bij **Zon resterend vandaag** `sensor.<naam>_energy_today_remaining` in en bij **Zon morgen** `sensor.<naam>_energy_day_2` (day 1 is vandaag, day 2 is morgen).
@@ -93,13 +93,13 @@ Versies volgen `jaar.maand.volgnummer`; het volgnummer begint elke maand bij 1. 
 **Nieuw: accu ontladen bij zonoverschot (terugleveren vóór de zon)**
 - Schakelaar **Zonoverschot** (`input_boolean.zonoverschot_ontladen`) in Forecasting Configuratie (Accu ontladen en Negatieve Prijs), onder *Accu ontladen bij*. Standaard uit.
 - Vult de zon de accu straks toch vol, dan levert de accu wat het huis tot de zon niet nodig heeft (plus marge) vóór de zon terug aan het net: in de kwartieren met de hoogste terugleverprijs, met het maximale ontlaadvermogen. Voorbeeld: accu 40%, 20% nodig tot de zon, de zon vult de accu vol → ongeveer 20% terugleveren in de duurste kwartieren vóór de zon.
-- Alleen als het loont: terugleverprijs nu > terugleverprijs tijdens de zon / rendement (+ €0,01). Niet als er vóór de zon netladen gepland is, en alleen met een zon-detailvoorspelling (Solcast). Zonder ingevulde betrouwbaarheid telt 75% van het verwachte overschot.
+- Alleen als het loont: terugleverprijs nu > terugleverprijs tijdens de zon / rendement (+ €0,01). Niet als er vóór de zon netladen gepland is, en alleen met een zon-detailvoorspelling (Solcast of Helios). Zonder ingevulde betrouwbaarheid telt 75% van het verwachte overschot.
 - Planner: attributen `zonoverschot_*` (kWh, kwartieren, zon vanaf, prijs tijdens de zon, grensprijs, opbrengst); `binary_sensor.forecast_zonoverschot_terugleveren`. Automation: nieuwe takken *Dynamisch NOM + Forecasting terugleveren bij zonoverschot* (Gielz' `zendure_snel_ontladen`, stopt bij geen kwartier meer of minimale SOC) en *… terugleveren controle* (na een herstart). Gielz' *Dynamisch ontladen controle* geldt niet in Forecasting-modus.
-- Plan vandaag: regel **Terugleveren vóór de zon** met kWh, tijden, prijs en geschatte opbrengst. De Plan Tijdlijn toont het terugleveren nog niet.
+- Plan vandaag: regel **Terugleveren vóór de zon** met kWh, tijden, prijs en geschatte opbrengst. De Plan Tijdlijn toont het terugleveren in rood.
 
 **Configuratie makkelijker**
 - **Sensoren automatisch herkennen:** de set zoekt zelf de sensoren voor de vijf sensorvelden in Forecasting Configuratie (Basis):
-  - *Zon resterend vandaag* en *Zon morgen*: Solcast, anders Forecast.Solar.
+  - *Zon resterend vandaag* en *Zon morgen*: Solcast, daarna Helios Forecast, daarna Forecast.Solar.
   - *Zonnepanelen productie sensor*: de totaal-teller (kWh) van een omvormer-integratie (SolarEdge, Enphase, Growatt, SMA, Huawei, Fronius, GoodWe, Solax, Solarman, APsystems, Hoymiles e.a.), daarna HomeWizard- of Shelly-meters met zon/pv/omvormer in de naam.
   - *Net import/export teller*: HomeWizard P1, DSMR-integratie, P1 Monitor, SlimmeLezer (ESPHome), DSMR Reader; daarna Shelly-energiemeters (Pro 3EM, 3EM, EM). Tarief 1 + 2 of per fase als komma-lijst.
   - **Eén kandidaat:** een leeg veld wordt ingevuld met de volledige sensor (een Shelly alleen als de naam op het net wijst, bv. *Hoofdmeter*). Een zelf ingevuld veld blijft staan; elke invulling staat in het logboek.
@@ -111,7 +111,7 @@ Versies volgen `jaar.maand.volgnummer`; het volgnummer begint elke maand bij 1. 
 - **Geen "unknown" meer in lege invoervelden:** een veld dat nooit is ingevuld wordt leeg gemaakt (niet bij Gielz' eigen velden). Zon-velden en net-tellers die nog leeg zijn, tonen **(graag invullen)**.
 - **Extra planner laadmarge %** heette *Batterij laadmarge %*.
 - Het blok heet nu **Forecasting Configuratie (Accu ontladen en Negatieve Prijs)**. Bovenaan staat **Accu ontladen bij** met de schakelaars **Negatieve prijzen** (was *Vooraf ontladen*, zelfde entiteit) en **Zonoverschot**; daaronder **Negatieve prijs** met *Niet terugleveren bij negatieve prijs*.
-- **Geen "(0 = …)" meer:** de standaardwaarde staat nu echt in het veld: *Kalibratie na dagen* 14, EV *Laadvermogen kW* 2,3, *Drempel W* 300, *Klaar om* 07:00, HVAC *Drempel vermogen W* 50, *Betrouwbaarheid zonvoorspelling %* 100. Die 100 telt niet als *ingevuld*: zonder eigen waarde rekent vooraf ontladen nog met 75% van het zon-overschot. De maandvelden heten nu *Januari %* enz.; 0 blijft daar *de algemene waarde*. Zet je een veld op 0, dan komt de standaardwaarde terug (automatiseringen `forecast_standaardwaarden`, `ev_standaardwaarden`, `hvac_standaardwaarden`).
+- **Geen "(0 = …)" meer:** de standaardwaarde staat nu echt in het veld: *Kalibratie na dagen* 21, EV *Laadvermogen kW* 2,3, *Drempel W* 300, *Klaar om* 07:00, HVAC *Drempel vermogen W* 50, *Betrouwbaarheid zonvoorspelling %* 100. Die 100 telt niet als *ingevuld*: zonder eigen waarde rekent vooraf ontladen nog met 75% van het zon-overschot. De maandvelden heten nu *Januari %* enz.; 0 blijft daar *de algemene waarde*. Zet je een veld op 0, dan komt de standaardwaarde terug (automatiseringen `forecast_standaardwaarden`, `ev_standaardwaarden`, `hvac_standaardwaarden`).
 - **Maandwaarde automatisch invullen** (was *Maandwaarde niet automatisch invullen*, `input_boolean.forecast_betrouwbaarheid_automatisch`) staat standaard aan. Had je de oude schakelaar aan (niet invullen), zet de nieuwe dan na de upgrade uit.
 - **Kalibratieladen** is nu een aan-schakelaar (was *Kalibratieladen uit*) en staat standaard aan, ook als je hem eerder uit had gezet: zet hem na de upgrade zo nodig opnieuw uit.
 - **Melding ontbrekende kaarten:** mist apexcharts-card, card-mod of button-card (herkend via HACS), dan zegt het dashboard welke je moet installeren.
@@ -133,7 +133,15 @@ Versies volgen `jaar.maand.volgnummer`; het volgnummer begint elke maand bij 1. 
 - **Verbruiksprofiel:** de kolom van een uur staat tussen dat uur en het volgende. De legenda toont geen *0,6 uur* meer (dat was de laatste staaf met de eenheid van de profielsensor). Nieuwe tweede grafiek **verbruik per dag**: verwacht verbruik per weekdag in kWh (groen werkdag, grijs weekend).
 
 **Upgraden**
-- Vervang alle bestanden, herstart en plak het dashboard opnieuw. Controleer in Accu ontladen en Negatieve Prijs: *Marktprijs sensor is* = Inclusief btw (bij de Nordpool-sensor `_5_10_021`). Vul bij Besparing het vaste terugleveringstarief voor 2027 in.
+- Vervang **alle** bestanden (ook de optionele pakketten die je gebruikt en de automation), **herstart** Home Assistant (nieuwe helpers) en plak het dashboard opnieuw via de Raw configuratie-editor. Past het dashboard niet bij de pakketten, dan meldt de plan-kaart dat.
+- **Na de herstart nalopen:**
+  - *Kalibratie na dagen*: een eerder ingestelde waarde blijft staan; zet hem op 21 als je de nieuwe standaard wilt.
+  - *Kalibratieladen* staat weer aan, ook als je hem uit had: zet hem zo nodig opnieuw uit.
+  - *Maandwaarde automatisch invullen* staat aan: had je de oude schakelaar *niet automatisch invullen* aan, zet de nieuwe dan uit.
+  - *Marktprijs sensor is* toont nu wat de set uit de sensornaam haalt (bv. *incl. 21% btw*); geen instelling meer.
+  - Besparing: vul het vaste terugleveringstarief voor 2027 in (*Vast contract tarief teruglevering (zonder saldering)*).
+  - De sensorvelden worden waar mogelijk vanzelf ingevuld; een veld dat je zelf invulde blijft staan.
+- **Kan weg** (verweesd, als HA ze nog toont): `input_boolean.forecast_tonen_op_dashboard`, `input_boolean.forecast_kalibratie_uit`, `input_boolean.forecast_betrouwbaarheid_niet_automatisch`, `input_select.teruglevering_saldering`, `input_select.teruglevering_marktprijs_btw` en de automatisering `forecast_zon_sensoren_invullen` (uit een testversie).
 
 ## 2026.11.6 — gebaseerd op Gielz v20261113
 

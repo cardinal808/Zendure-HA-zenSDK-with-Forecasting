@@ -1,4 +1,4 @@
-# Zendure zenSDK (Gielz) + Forecasting 2026.11.6 | based on Gielz v20261113
+# Zendure zenSDK (Gielz) + Forecasting 2026.11.7 | based on Gielz v20261113
 # Based on Gielz1986/Zendure-HA-zenSDK (Michiel Hofker). See README.md for license and changes.
 views:
   - type: sections
@@ -2165,7 +2165,7 @@ views:
                 text: Recalculate
           - type: markdown
             content: |-
-              {% set dash_version = '2026.11.6' %}{% set pv = states('sensor.forecasting_version') %}{% macro vnum(x) %}{% set q = (x | string | replace('v', '')).split('.') %}{{ '%04d%02d%03d' | format(q[0] | int(0), q[1] | int(0), q[2] | int(0)) if q | length == 3 else '' }}{% endmacro %}{% set differs = vnum(pv) != '' and vnum(pv) != vnum(dash_version) %}{% if differs %}<ha-alert alert-type="warning">The dashboard is version **{{ dash_version }}**, the packages version **{{ pv }}**. {% if vnum(pv) > vnum(dash_version) %}Paste the {{ pv }} dashboard via **Edit dashboard → Raw configuration editor**.{% else %}Replace the packages with those of {{ dash_version }} and restart Home Assistant.{% endif %}</ha-alert>{% endif %}{% for m in state_attr('sensor.forecast_notices', 'notices') or [] if not (differs and m.id == 'release') %}<ha-alert alert-type="{{ m.level }}">{{ m.text }}</ha-alert>{% endfor %}{% set p = 'sensor.zendure_forecast_plan' %}{% if states[p] is none %}<ha-alert alert-type="warning">The planner (sensor.zendure_forecast_plan) does not exist yet. Put the files in the packages folder and restart Home Assistant.</ha-alert>{% else %}{% set a = states[p].attributes %}
+              {% set dash_version = '2026.11.7' %}{% set pv = states('sensor.forecasting_version') %}{% macro vnum(x) %}{% set q = (x | string | replace('v', '')).split('.') %}{{ '%04d%02d%03d' | format(q[0] | int(0), q[1] | int(0), q[2] | int(0)) if q | length == 3 else '' }}{% endmacro %}{% set differs = vnum(pv) != '' and vnum(pv) != vnum(dash_version) %}{% if differs %}<ha-alert alert-type="warning">The dashboard is version **{{ dash_version }}**, the packages version **{{ pv }}**. {% if vnum(pv) > vnum(dash_version) %}Paste the {{ pv }} dashboard via **Edit dashboard → Raw configuration editor**.{% else %}Replace the packages with those of {{ dash_version }} and restart Home Assistant.{% endif %}</ha-alert>{% endif %}{% for m in state_attr('sensor.forecast_notices', 'notices') or [] if not (differs and m.id == 'release') %}<ha-alert alert-type="{{ m.level }}">{{ m.text }}</ha-alert>{% endfor %}{% set p = 'sensor.zendure_forecast_plan' %}{% if states[p] is none %}<ha-alert alert-type="warning">The planner (sensor.zendure_forecast_plan) does not exist yet. Put the files in the packages folder and restart Home Assistant.</ha-alert>{% else %}{% set a = states[p].attributes %}
               **Status:** {{ states(p) }}
 
               **Scenario:** {{ a.scenario }}

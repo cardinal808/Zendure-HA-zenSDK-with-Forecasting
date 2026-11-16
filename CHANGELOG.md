@@ -2,7 +2,7 @@
 
 Versions follow `year.month.sequence`; the sequence restarts at 1 every month. Each version states which Gielz version it is based on. [Nederlands](CHANGELOG.nl.md)
 
-## 2026.11.7 (in development) — based on Gielz v20261113
+## 2026.11.7 — based on Gielz v20261113
 
 **Helios Forecast as solar forecast, with detail per quarter hour**
 - [Helios Forecast](https://github.com/ReikanYsora/Helios-Forecast) now works just as well as Solcast. Enter `sensor.<name>_energy_today_remaining` at **Solar remaining today** and `sensor.<name>_energy_day_2` at **Solar tomorrow** (day 1 is today, day 2 is tomorrow).
@@ -93,13 +93,13 @@ Versions follow `year.month.sequence`; the sequence restarts at 1 every month. E
 **New: discharge battery at solar surplus (export before the sun)**
 - Switch **Solar surplus** (`input_boolean.solar_surplus_discharge`) in Forecasting Configuration (Battery discharge and Negative Price), under *Discharge battery at*. Off by default.
 - If the sun will fill the battery anyway, the battery exports what the house does not need until the sun (plus margin) to the grid before the sun: in the quarter hours with the highest feed-in price, at maximum discharge power. Example: battery 40%, 20% needed until the sun, the sun fills the battery → about 20% exported in the most expensive quarter hours before the sun.
-- Only when it pays off: feed-in price now > feed-in price during the sun / efficiency (+ €0.01). Not when grid charging is planned before the sun, and only with a detailed solar forecast (Solcast). Without a filled-in reliability, 75% of the expected surplus counts.
+- Only when it pays off: feed-in price now > feed-in price during the sun / efficiency (+ €0.01). Not when grid charging is planned before the sun, and only with a detailed solar forecast (Solcast or Helios). Without a filled-in reliability, 75% of the expected surplus counts.
 - Planner: attributes `solar_surplus_*` (kWh, quarter hours, sun from, price during the sun, threshold price, revenue); `binary_sensor.forecast_solar_surplus_export`. Automation: new branches *Dynamic Smart Matching + Forecasting export at solar surplus* (Gielz's `zendure_quick_discharge`, stops when there is no export quarter left or at minimum state of charge) and *… export check* (after a restart). Gielz's *Dynamic discharging check* does not apply in Forecasting mode.
-- Plan today: line **Export before the sun** with kWh, times, price and estimated revenue. The Plan Timeline does not show the export yet.
+- Plan today: line **Export before the sun** with kWh, times, price and estimated revenue. The Plan Timeline shows the export in red.
 
 **Easier configuration**
 - **Sensors detected automatically:** the set looks for the sensors for the five sensor fields in Forecasting Configuration (Basic) itself:
-  - *Solar remaining today* and *Solar tomorrow*: Solcast, otherwise Forecast.Solar.
+  - *Solar remaining today* and *Solar tomorrow*: Solcast, then Helios Forecast, then Forecast.Solar.
   - *Solar production sensor*: the total counter (kWh) of an inverter integration (SolarEdge, Enphase, Growatt, SMA, Huawei, Fronius, GoodWe, Solax, Solarman, APsystems, Hoymiles and others), then HomeWizard or Shelly meters with solar/pv/inverter in the name.
   - *Grid import/export counter*: HomeWizard P1, DSMR integration, P1 Monitor, SlimmeLezer (ESPHome), DSMR Reader; then Shelly energy meters (Pro 3EM, 3EM, EM). Tariff 1 + 2 or per phase as a comma list.
   - **One candidate:** an empty field is filled in with the full sensor (a Shelly only when its name points to the grid, e.g. *Main meter*). A field you filled in yourself is kept; every fill-in is in the logbook.
@@ -111,7 +111,7 @@ Versions follow `year.month.sequence`; the sequence restarts at 1 every month. E
 - **No more "unknown" in empty input fields:** a field that was never filled in is emptied (not Gielz's own fields). Solar fields and grid counters that are still empty show **(please fill in)**.
 - **Extra planner charge margin %** was called *Battery charge margin %*.
 - The block is now called **Forecasting Configuration (Battery discharge and Negative Price)**. At the top **Discharge battery at** with the switches **Negative prices** (was *Pre-discharge*, same entity) and **Solar surplus**; below it **Negative price** with *No export at negative price*.
-- **No more "(0 = …)":** the default value is now really in the field: *Calibration after days* 14, EV *Charging power kW* 2.3, *Threshold W* 300, *Ready by* 07:00, HVAC *Threshold power W* 50, *Solar forecast reliability %* 100. That 100 does not count as *filled in*: without a value of your own, pre-discharge still uses 75% of the solar surplus. The month fields are now called *January %* etc.; 0 still means *the general value* there. If you set a field to 0, the default comes back (automations `forecast_default_values`, `ev_default_values`, `hvac_default_values`).
+- **No more "(0 = …)":** the default value is now really in the field: *Calibration after days* 21, EV *Charging power kW* 2.3, *Threshold W* 300, *Ready by* 07:00, HVAC *Threshold power W* 50, *Solar forecast reliability %* 100. That 100 does not count as *filled in*: without a value of your own, pre-discharge still uses 75% of the solar surplus. The month fields are now called *January %* etc.; 0 still means *the general value* there. If you set a field to 0, the default comes back (automations `forecast_default_values`, `ev_default_values`, `hvac_default_values`).
 - **Fill in the monthly value automatically** (was *Do not fill in the monthly value automatically*, `input_boolean.forecast_setting_reliability_auto_fill`) is on by default. Had you turned the old switch on (do not fill in), turn the new one off after the upgrade.
 - **Calibration charging** is now an on switch (was *Calibration charging off*) and is on by default, also if you turned it off before: turn it off again after the upgrade if needed.
 - **Missing cards notice:** if apexcharts-card, card-mod or button-card is missing (detected via HACS), the dashboard says which to install.
@@ -134,7 +134,15 @@ Versions follow `year.month.sequence`; the sequence restarts at 1 every month. E
 - **Usage Profile:** the column of an hour sits between that hour and the next. The legend no longer shows *0.6 hours* (that was the last bar with the unit of the profile sensor). New second chart **usage per day**: expected usage per weekday in kWh (green workday, grey weekend).
 
 **Upgrading**
-- Replace all files, restart and paste the dashboard again. Check at Battery discharge and Negative Price: *Market price sensor is* = Including VAT (with the Nordpool sensor `_5_10_021`). Enter the fixed feed-in tariff for 2027 at Savings.
+- Replace **all** files (including the optional packages you use and the automation), **restart** Home Assistant (new helpers) and paste the dashboard again via the Raw configuration editor. If the dashboard does not match the packages, the plan card says so.
+- **Check after the restart:**
+  - *Calibration after days*: a value set earlier stays; set it to 21 if you want the new default.
+  - *Calibration charging* is on again, also if you had turned it off: turn it off again if needed.
+  - *Fill in the monthly value automatically* is on: if you had the old *do not fill in automatically* switch on, turn the new one off.
+  - *Market price sensor is* now shows what the set reads from the sensor name (e.g. *incl. 21% VAT*); no longer a setting.
+  - Savings: enter the fixed feed-in tariff for 2027 (*Fixed contract feed-in tariff (without net metering)*).
+  - Sensor fields are filled in automatically where possible; a field you filled in yourself stays.
+- **Can be removed** (orphaned, if HA still shows them): `input_boolean.dashboard_setting_show_forecasting`, `input_boolean.forecast_setting_calibration_off`, `input_boolean.forecast_setting_reliability_no_auto_fill`, `input_select.negative_price_net_metering`, `input_select.negative_price_market_price_vat` and the automation `forecast_solar_sensors_fill` (from a test version).
 
 ## 2026.11.6 — based on Gielz v20261113
 
