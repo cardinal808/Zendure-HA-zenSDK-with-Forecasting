@@ -68,10 +68,12 @@ sensor:
     low_price_cutoff: 0.9
     price_in_cents: false
     price_type: kWh
+    # Shortly after a restart the input fields can still be unknown: then use the default values (NL 2026)
+    # instead of 0, otherwise the all-in price briefly equals the bare market price.
     additional_costs: >
-      {% set vat = states('input_number.nordpool_setting_vat_percentage') | float(0) / 100 %}
-      {% set tax = states('input_number.nordpool_setting_energy_tax') | float(0) %}
-      {% set markup = states('input_number.nordpool_setting_supplier_markup') | float(0) %}
+      {% set vat = states('input_number.nordpool_setting_vat_percentage') | float(21) / 100 %}
+      {% set tax = states('input_number.nordpool_setting_energy_tax') | float(0.09161) %}
+      {% set markup = states('input_number.nordpool_setting_supplier_markup') | float(0.02) %}
       {{ ((current_price + tax + markup) * (1 + vat)) - current_price }}
 
   # 2. Bare market price including VAT, for export

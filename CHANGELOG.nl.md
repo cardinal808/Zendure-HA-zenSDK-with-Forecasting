@@ -49,6 +49,33 @@ Versies volgen `jaar.maand.volgnummer`; het volgnummer begint elke maand bij 1. 
 - Een volle accu (98%) bleef 's ochtends in een duur kwartier (€0,407) in stand-by, omdat er om 13:15 een restje van 0,24 kWh bijladen gepland stond (€0,357 / 84,5% rendement = €0,423). Wat de accu nu levert, wordt dan niet bijgeladen maar gewoon eerder gebruikt; het plan zelf rekende ook al met ontladen.
 - Vasthouden tussen laadslots geldt nu pas bij minstens 0,5 kWh gepland netladen later (dezelfde grens als slim vasthouden), en de prijs nu moet minstens €0,01 onder de laadprijs na verlies liggen.
 
+**Nieuw: laden bij een negatieve inkoopprijs (16-11)**
+- Is de all-in leveringsprijs negatief (je krijgt betaald om af te nemen), dan laadt de accu in al die kwartieren tot vol, met vol vermogen. Buiten rendementsfilter en minimale spread; de zon van later telt niet mee. Alleen in de modus *Dynamisch NOM + Forecasting*.
+- Regel **Negatieve inkoopprijs** in het plan; attributen `negatief_inkoop_laden`, `_kwartieren`, `_van`, `_tot`, `_prijs`.
+
+**Beslissingslog: de echte reden bij *Ontladen gestopt* (16-11)**
+- Was altijd *goedkoop dal of HVAC aan*, ook bij slim vasthouden. Nu bv. *slim vasthouden, accu bewaard voor prijzen vanaf €0,405 (nu €0,397)*, *vasthouden tot het volgende laadslot, bijladen kost na verlies €0,423*, *goedkoop dal (onder €0,316)* of *airco aan*. Nieuw plan-attribuut `tussen_laden_grensprijs`.
+
+**Fix: prijs kort na een herstart (16-11)**
+- Na een herstart rekende de Nord Pool-sensor van het Nordpool-pakket soms even zonder energiebelasting, opslag en btw (de invoervelden waren nog niet geladen): in de export van 16-11 o.a. €0,137 om 14:15 terwijl het €0,28 had moeten zijn. Het pakket gebruikt dan de standaardwaarden (btw 21%, energiebelasting €0,09161, opslag €0,02).
+- **Besparing:** een all-in prijs onder de kale marktprijs (kan niet) wordt niet meer bewaard; dat kwartier wordt afgerekend met de prijs van de volgende meting.
+
+**HVAC: aanpak per airco-modus (16-11)**
+- Onder *Aanpak per modus* kies je per modus *Standaard*, *Niet ontladen* of *Airco niet uit accu* (bv. Koelen: Airco niet uit accu, Verwarmen: Niet ontladen). *Standaard* = de algemene aanpak. Nieuwe `input_select.hvac_aanpak_verwarmen` / `_koelen` / `_drogen` / `_ventileren` / `_auto` en `sensor.hvac_aanpak_nu` (de aanpak die nu geldt).
+
+**Besparing per bron als losse sensoren (16-11)**
+- `sensor.zendure_besparing_zonnepanelen`, `_dynamische_tarief` en `_accu_en_slim_laden` (totaal, zelfde getallen als de attributen van `sensor.zendure_besparing`). Nieuwe gestapelde grafiek **Besparing per bron per dag** op tab Besparing; telt vanaf deze update.
+
+**Plan Tijdlijn en verbruiksprofiel (16-11)**
+- **Plan Tijdlijn:** terugleveren uit de accu (bij zonoverschot of vóór negatieve prijzen) staat in de accu-rij in rood, en het net toont de teruglevering; gepland laden van de auto (EV-pakket, *Nacht*) staat als paarse lijn bij Zon en verbruik en telt mee in het net. EV-pakket: nieuw attribuut `laadslots` op `sensor.ev_laadplan`.
+- **Verbruiksprofiel per kwartier:** nieuwe grafiek onder het profiel per uur (werkdag en weekend, kWh per kwartier, met de geleerde vorm binnen het uur). Attributen `verbruik_per_kwartier_werkdag_kwh` en `_weekend_kwh` op `sensor.zendure_forecast_grafiek`.
+
+**Diagnose: Flash-teller (16-11)**
+- `sensor.zendure_flash_schrijfacties` (diagnose-export-pakket) telt hoe vaak de Zendure per dag naar *Opslaan in Flash* gaat; `per_dag` bewaart 14 dagen en staat in de export (`flash_schrijfacties`). Regel *Omzetten naar Flash (vandaag)* in het blok Diagnose-export.
+
+**Tools (16-11)**
+- `tools/planner_sim.py` en `vergelijk.py` werken weer met de planner van 2026.11.7 (`integration_entities` e.d. nagebootst).
+
 **Fix: zonnebonus alleen overdag, over kale marktprijs + opslag (zoals Zonneplan)**
 - De bonus teruglevering (nu **Zonnebonus % (overdag)**) telde over de marktprijs **inclusief** btw en de hele dag. Zonneplan geeft de zonnebonus over de kale marktprijs (zonder btw) plus de verkoopvergoeding, alleen tussen zonsopkomst en zonsondergang en alleen als dat bedrag positief is.
 - Nu: zonnebonus = bonus % × max(kale marktprijs + opslag teruglevering, 0), alleen als de zon op is (`sun.sun`; voor kwartieren in de planning en de besparing het midden van het kwartier tussen zonsopkomst en zonsondergang).

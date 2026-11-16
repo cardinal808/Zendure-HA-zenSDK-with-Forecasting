@@ -14,9 +14,11 @@ import planner_sim
 
 SLEUTELS = {
     'NL': ['netladen_vandaag_kwh', 'gepland_netladen_kwh', 'padcheck_tekort_dure_slots_kwh',
-           'padcheck_netladen_kwh', 'morgen_netladen_indicatie_kwh', 'geplande_slots', 'morgen_laadmomenten', 'plan_uitleg'],
+           'padcheck_netladen_kwh', 'morgen_netladen_indicatie_kwh', 'geplande_slots', 'morgen_laadmomenten', 'plan_uitleg',
+           'ontladen_vasthouden', 'negatief_inkoop_laden'],
     'EN': ['grid_charge_today_kwh', 'planned_grid_charge_kwh', 'pathcheck_shortfall_expensive_slots_kwh',
-           'pathcheck_grid_charge_kwh', 'tomorrow_grid_charge_estimate_kwh', 'planned_slots', 'tomorrow_charge_moments', 'plan_explanation'],
+           'pathcheck_grid_charge_kwh', 'tomorrow_grid_charge_estimate_kwh', 'planned_slots', 'tomorrow_charge_moments', 'plan_explanation',
+           'hold_discharge', 'negative_purchase_charge'],
 }
 
 

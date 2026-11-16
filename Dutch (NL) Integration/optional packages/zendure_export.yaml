@@ -161,6 +161,37 @@ template:
           kolommen: "{{ ['van', 'tot', 'aantal', 'niveau', 'logger', 'melding', 'bron'] }}"
           regels: "{{ f_regels }}"
 
+  # Flash-schrijfacties: hoe vaak de Zendure per dag van RAM naar Flash gaat (Gielz zet de
+  # opslagmodus op Flash als de accu een tijd stilstaat, bv. tijdens vasthouden). Telt elke
+  # overgang naar "Opslaan in Flash"; per_dag bewaart de laatste 14 dagen.
+  - trigger:
+      - platform: state
+        entity_id: sensor.zendure_2400_ac_opslagmodus
+        to: "Opslaan in Flash"
+        id: flash
+      - platform: time
+        at: "00:00:00"
+        id: nieuwe_dag
+    sensor:
+      - name: "Zendure Flash Schrijfacties"
+        unique_id: zendure_flash_schrijfacties
+        icon: mdi:memory
+        state_class: measurement
+        state: >-
+          {%- set vandaag = now().strftime('%Y-%m-%d') -%}
+          {%- set dag = this.attributes.get('dag') -%}
+          {%- set n = (this.state | int(0)) if dag == vandaag else 0 -%}
+          {{ n + (1 if trigger.id == 'flash' else 0) }}
+        attributes:
+          dag: "{{ now().strftime('%Y-%m-%d') }}"
+          per_dag: >-
+            {%- set vandaag = now().strftime('%Y-%m-%d') -%}
+            {%- set dag = this.attributes.get('dag') -%}
+            {%- set oud = this.attributes.get('per_dag') or {} -%}
+            {%- set n = (this.state | int(0)) if dag == vandaag else 0 -%}
+            {%- set lijst = ((oud.items() | list) | rejectattr('0', 'eq', vandaag) | list) + [(vandaag, n + (1 if trigger.id == 'flash' else 0))] -%}
+            {{ dict((lijst | sort(attribute='0'))[-14:]) }}
+
 script:
   zendure_diagnose_export:
     alias: Zendure Diagnose Exporteren
@@ -289,6 +320,7 @@ script:
                    'kolommen': state_attr('sensor.zendure_diagnose_momentopnames', 'kolommen'),
                    'regels': state_attr('sensor.zendure_diagnose_momentopnames', 'regels') or []
                  },
+                 'flash_schrijfacties': state_attr('sensor.zendure_flash_schrijfacties', 'per_dag') or {},
                  'fouten': {
                    'kolommen': state_attr('sensor.zendure_diagnose_fouten', 'kolommen'),
                    'regels': state_attr('sensor.zendure_diagnose_fouten', 'regels') or []

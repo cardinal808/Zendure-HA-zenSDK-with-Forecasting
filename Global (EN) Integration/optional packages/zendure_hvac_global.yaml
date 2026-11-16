@@ -58,6 +58,27 @@ input_select:
     options:
       - No discharging
       - AC not from battery
+  # Approach per AC mode (optional). Default = the approach above.
+  hvac_approach_heating:
+    name: HVAC Approach Heating
+    icon: mdi:fire
+    options: [Default, No discharging, AC not from battery]
+  hvac_approach_cooling:
+    name: HVAC Approach Cooling
+    icon: mdi:snowflake
+    options: [Default, No discharging, AC not from battery]
+  hvac_approach_drying:
+    name: HVAC Approach Drying
+    icon: mdi:water-percent
+    options: [Default, No discharging, AC not from battery]
+  hvac_approach_fan:
+    name: HVAC Approach Fan
+    icon: mdi:fan
+    options: [Default, No discharging, AC not from battery]
+  hvac_approach_auto:
+    name: HVAC Approach Auto
+    icon: mdi:thermostat-auto
+    options: [Default, No discharging, AC not from battery]
 
 input_number:
   hvac_threshold_power:
@@ -290,6 +311,18 @@ template:
             {{ ([v * 1000 if u == 'kW' else v, 0] | max) | round(0) }}
           {% endif %}
 
+      # Approach that applies now: that of the mode the AC runs in, or the general approach
+      - name: "HVAC Approach Now"
+        unique_id: hvac_approach_now
+        icon: mdi:battery-sync-outline
+        state: >
+          {% set per = {'Heating': 'input_select.hvac_approach_heating', 'Cooling': 'input_select.hvac_approach_cooling',
+                        'Drying': 'input_select.hvac_approach_drying', 'Fan': 'input_select.hvac_approach_fan',
+                        'Auto': 'input_select.hvac_approach_auto'} %}
+          {% set m = states('sensor.hvac_mode') %}
+          {% set v = states(per[m]) if m in per else 'Default' %}
+          {{ v if v in ['No discharging', 'AC not from battery'] else (states('input_select.hvac_approach') if states('input_select.hvac_approach') in ['No discharging', 'AC not from battery'] else 'No discharging') }}
+
       # What the Smart Matching discharge blocks subtract from the grid meter (approach AC not from battery)
       - name: "HVAC Discharge Correction"
         unique_id: hvac_discharge_correction
@@ -299,7 +332,7 @@ template:
         state_class: measurement
         state: >
           {{ states('sensor.hvac_power') | float(0)
-             if is_state('binary_sensor.hvac_not_from_battery', 'on') and is_state('input_select.hvac_approach', 'AC not from battery')
+             if is_state('binary_sensor.hvac_not_from_battery', 'on') and is_state('sensor.hvac_approach_now', 'AC not from battery')
              else 0 }}
 
       # Usage counted separately (not in the usage profile): the AC while it may not run from the
@@ -357,7 +390,7 @@ template:
         icon: mdi:battery-off-outline
         state: >
           {{ is_state('binary_sensor.hvac_not_from_battery', 'on')
-             and not (is_state('input_select.hvac_approach', 'AC not from battery') and has_value('sensor.hvac_power')) }}
+             and not (is_state('sensor.hvac_approach_now', 'AC not from battery') and has_value('sensor.hvac_power')) }}
         attributes:
           reason: >
             {% set m = states('sensor.hvac_mode') %}
@@ -373,9 +406,9 @@ template:
             {% elif is_state('input_boolean.hvac_allow_discharge_in_expensive_hour', 'on')
                     and is_state('sensor.dynamic_highest_price_period', 'Yes') %}
               {{ m }}, but expensive hour: discharging allowed
-            {% elif is_state('input_select.hvac_approach', 'AC not from battery') and has_value('sensor.hvac_power') %}
+            {% elif is_state('sensor.hvac_approach_now', 'AC not from battery') and has_value('sensor.hvac_power') %}
               {{ m }}: battery supplies the house, not the AC ({{ states('sensor.hvac_power') | float(0) | round(0) | int }} W)
-            {% elif is_state('input_select.hvac_approach', 'AC not from battery') %}
+            {% elif is_state('sensor.hvac_approach_now', 'AC not from battery') %}
               {{ m }}: charging only (no power measurement, so no correction possible)
             {% else %}
               {{ m }}: charging only

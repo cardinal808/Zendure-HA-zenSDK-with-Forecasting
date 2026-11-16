@@ -59,6 +59,27 @@ input_select:
     options:
       - Niet ontladen
       - Airco niet uit accu
+  # Aanpak per airco-modus (optioneel). Standaard = de aanpak hierboven.
+  hvac_aanpak_verwarmen:
+    name: HVAC Aanpak Verwarmen
+    icon: mdi:fire
+    options: [Standaard, Niet ontladen, Airco niet uit accu]
+  hvac_aanpak_koelen:
+    name: HVAC Aanpak Koelen
+    icon: mdi:snowflake
+    options: [Standaard, Niet ontladen, Airco niet uit accu]
+  hvac_aanpak_drogen:
+    name: HVAC Aanpak Drogen
+    icon: mdi:water-percent
+    options: [Standaard, Niet ontladen, Airco niet uit accu]
+  hvac_aanpak_ventileren:
+    name: HVAC Aanpak Ventileren
+    icon: mdi:fan
+    options: [Standaard, Niet ontladen, Airco niet uit accu]
+  hvac_aanpak_auto:
+    name: HVAC Aanpak Auto
+    icon: mdi:thermostat-auto
+    options: [Standaard, Niet ontladen, Airco niet uit accu]
 
 input_number:
   hvac_drempel_vermogen:
@@ -291,6 +312,18 @@ template:
             {{ ([v * 1000 if u == 'kW' else v, 0] | max) | round(0) }}
           {% endif %}
 
+      # Aanpak die nu geldt: die van de modus waarin de airco draait, of de algemene aanpak
+      - name: "HVAC Aanpak Nu"
+        unique_id: hvac_aanpak_nu
+        icon: mdi:battery-sync-outline
+        state: >
+          {% set per = {'Verwarmen': 'input_select.hvac_aanpak_verwarmen', 'Koelen': 'input_select.hvac_aanpak_koelen',
+                        'Drogen': 'input_select.hvac_aanpak_drogen', 'Ventileren': 'input_select.hvac_aanpak_ventileren',
+                        'Auto': 'input_select.hvac_aanpak_auto'} %}
+          {% set m = states('sensor.hvac_modus') %}
+          {% set v = states(per[m]) if m in per else 'Standaard' %}
+          {{ v if v in ['Niet ontladen', 'Airco niet uit accu'] else (states('input_select.hvac_aanpak') if states('input_select.hvac_aanpak') in ['Niet ontladen', 'Airco niet uit accu'] else 'Niet ontladen') }}
+
       # Wat de NOM-ontlaadblokken van de P1-meter aftrekken (aanpak Airco niet uit accu)
       - name: "HVAC Ontlaad Correctie"
         unique_id: hvac_ontlaad_correctie
@@ -300,7 +333,7 @@ template:
         state_class: measurement
         state: >
           {{ states('sensor.hvac_vermogen') | float(0)
-             if is_state('binary_sensor.hvac_niet_uit_accu', 'on') and is_state('input_select.hvac_aanpak', 'Airco niet uit accu')
+             if is_state('binary_sensor.hvac_niet_uit_accu', 'on') and is_state('sensor.hvac_aanpak_nu', 'Airco niet uit accu')
              else 0 }}
 
       # Verbruik dat apart geteld wordt (niet in het verbruiksprofiel): de airco zolang hij
@@ -358,7 +391,7 @@ template:
         icon: mdi:battery-off-outline
         state: >
           {{ is_state('binary_sensor.hvac_niet_uit_accu', 'on')
-             and not (is_state('input_select.hvac_aanpak', 'Airco niet uit accu') and has_value('sensor.hvac_vermogen')) }}
+             and not (is_state('sensor.hvac_aanpak_nu', 'Airco niet uit accu') and has_value('sensor.hvac_vermogen')) }}
         attributes:
           reden: >
             {% set m = states('sensor.hvac_modus') %}
@@ -374,9 +407,9 @@ template:
             {% elif is_state('input_boolean.hvac_ontladen_bij_duur_uur', 'on')
                     and is_state('sensor.dynamisch_duurste_periode', 'Ja') %}
               {{ m }}, maar duur uur: ontladen toegestaan
-            {% elif is_state('input_select.hvac_aanpak', 'Airco niet uit accu') and has_value('sensor.hvac_vermogen') %}
+            {% elif is_state('sensor.hvac_aanpak_nu', 'Airco niet uit accu') and has_value('sensor.hvac_vermogen') %}
               {{ m }}: accu ontlaadt voor het huis, niet voor de airco ({{ states('sensor.hvac_vermogen') | float(0) | round(0) | int }} W)
-            {% elif is_state('input_select.hvac_aanpak', 'Airco niet uit accu') %}
+            {% elif is_state('sensor.hvac_aanpak_nu', 'Airco niet uit accu') %}
               {{ m }}: alleen laden (geen vermogensmeting, dus geen correctie mogelijk)
             {% else %}
               {{ m }}: alleen laden

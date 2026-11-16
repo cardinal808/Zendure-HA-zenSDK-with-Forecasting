@@ -317,6 +317,11 @@ template:
           remaining_kwh: "{{ remaining | round(2) }}"
           daytime_kwh: "{{ remaining | round(2) if daytime else 0 }}"
           charging_power_kw: "{{ kw }}"
+          # Planned slots (start, end, kWh) for the Plan Timeline; only with Night
+          charge_slots: >-
+            {%- set ns = namespace(l=[]) -%}
+            {%- for x in (chosen if night else []) -%}{%- set ns.l = ns.l + [[x.s, x.e, x.kwh]] -%}{%- endfor -%}
+            {{ ns.l }}
           end: "{{ (end_ts | timestamp_custom('%Y-%m-%d %H:%M', true)) if active and end_ts > 0 else none }}"
           tomorrow_prices_known: "{{ tomorrow_known }}"
           prices_available: "{{ cand | length > 0 }}"

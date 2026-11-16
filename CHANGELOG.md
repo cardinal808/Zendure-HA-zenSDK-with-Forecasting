@@ -49,6 +49,33 @@ Versions follow `year.month.sequence`; the sequence restarts at 1 every month. E
 - A full battery (98%) stayed in standby in the morning in an expensive quarter (€0.407), because a remainder of 0.24 kWh charging was planned at 13:15 (€0.357 / 84.5% efficiency = €0.423). What the battery supplies now is then not charged back but simply used earlier; the plan itself already counted on discharging.
 - Hold between charge slots now only applies with at least 0.5 kWh planned grid charging later (the same limit as smart hold), and the price now must be at least €0.01 below the charge price after loss.
 
+**New: charging at a negative purchase price (16-11)**
+- When the all-in supply price is negative (you get paid to take power), the battery charges in all those quarter hours until full, at full power. Outside the efficiency filter and minimal spread; later solar does not count. Only in the mode *Dynamic Smart Matching + Forecasting*.
+- **Negative purchase price** line in the plan; attributes `negative_purchase_charge`, `_quarters`, `_from`, `_until`, `_price`.
+
+**Decision log: the real reason for *Discharging stopped* (16-11)**
+- Always said *cheap dip or HVAC on*, also with smart hold. Now e.g. *smart hold, battery saved for prices from €0.405 (now €0.397)*, *holding until the next charge slot, topping up costs €0.423 after losses*, *cheap dip (below €0.316)* or *AC on*. New plan attribute `between_charge_threshold_price`.
+
+**Fix: price shortly after a restart (16-11)**
+- After a restart the Nord Pool sensor of the Nordpool package sometimes briefly calculated without energy tax, markup and VAT (the input fields were not loaded yet): in an export of 16-11 e.g. €0.137 at 14:15 where it should have been €0.28. The package now uses the default values then (VAT 21%, energy tax €0.09161, markup €0.02).
+- **Savings:** an all-in price below the bare market price (impossible) is no longer stored; that quarter is settled at the price of the next measurement.
+
+**HVAC: approach per AC mode (16-11)**
+- Under *Approach per mode* choose *Default*, *No discharging* or *AC not from battery* per mode (e.g. Cooling: AC not from battery, Heating: No discharging). *Default* = the general approach. New `input_select.hvac_approach_heating` / `_cooling` / `_drying` / `_fan` / `_auto` and `sensor.hvac_approach_now` (the approach that applies now).
+
+**Savings per source as separate sensors (16-11)**
+- `sensor.zendure_savings_solar_panels`, `_dynamic_tariff` and `_battery_and_smart_charging` (total, same numbers as the attributes of `sensor.zendure_savings`). New stacked chart **Savings per source per day** on the Savings tab; counts from this update.
+
+**Plan Timeline and usage profile (16-11)**
+- **Plan Timeline:** export from the battery (at solar surplus or ahead of negative prices) shows red in the battery row and the grid shows the export; planned car charging (EV package, *Night*) shows as a purple line under Solar and usage and counts in the grid. EV package: new attribute `charge_slots` on `sensor.ev_charge_plan`.
+- **Usage profile per quarter hour:** new chart below the hourly profile (workday and weekend, kWh per quarter, with the learned shape within the hour). Attributes `usage_per_quarter_workday_kwh` and `_weekend_kwh` on `sensor.zendure_forecast_chart`.
+
+**Diagnostics: Flash counter (16-11)**
+- `sensor.zendure_flash_writes` (diagnostics export package) counts how often per day the Zendure switches to *Flash Memory*; `per_day` keeps 14 days and is in the export (`flash_writes`). Row *Switches to Flash (today)* in the Diagnostics export block.
+
+**Tools (16-11)**
+- `tools/planner_sim.py` and `vergelijk.py` work again with the 2026.11.7 planner (`integration_entities` etc. emulated).
+
 **Fix: solar bonus only in daylight, on bare market price + markup (like Zonneplan)**
 - The feed-in bonus (now **Solar bonus % (daytime)**) counted on the market price **including** VAT, all day. Zonneplan gives the solar bonus on the bare market price (without VAT) plus the sales fee, only between sunrise and sunset and only when that amount is positive.
 - Now: solar bonus = bonus % × max(bare market price + feed-in markup, 0), only while the sun is up (`sun.sun`; for quarter hours in the plan and the savings the middle of the quarter between sunrise and sunset).

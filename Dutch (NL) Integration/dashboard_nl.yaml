@@ -774,7 +774,7 @@ views:
             heading_style: title
           - type: markdown
             content: >-
-              <ha-alert alert-type="info">Helptekst</ha-alert>Voorspelling per prijsslot voor de komende 36 uur. Prijs (kleuren zoals Gielz): blauw = gepland laden uit het net, rood = duur (duurste periodes van Gielz), grijs = overig, lichtgrijs = prijs nog onbekend. Accu: blauw = laden uit het net, geel = laden uit zon, oranje = ontladen; witte lijn = laadpercentage (0–100%). Net: blauw = accu laden uit het net, paars = huis uit het net, grijs = teruglevering. Het laden van morgen is indicatief; de dal-blokkade zit niet in deze voorspelling. Zon alleen met een detailvoorspelling (Solcast of Helios Forecast).
+              <ha-alert alert-type="info">Helptekst</ha-alert>Voorspelling per prijsslot voor de komende 36 uur. Prijs (kleuren zoals Gielz): blauw = gepland laden uit het net, rood = duur (duurste periodes van Gielz), grijs = overig, lichtgrijs = prijs nog onbekend. Accu: blauw = laden uit het net, geel = laden uit zon, oranje = ontladen, rood = terugleveren aan het net (bij zonoverschot of vóór negatieve prijzen); witte lijn = laadpercentage (0–100%). Net: blauw = accu laden uit het net, paars = huis (en auto) uit het net, grijs = teruglevering. Paarse lijn bij Zon en verbruik = gepland laden van de auto (EV-pakket, Nacht). Het laden van morgen is indicatief; de dal-blokkade zit niet in deze voorspelling. Zon alleen met een detailvoorspelling (Solcast of Helios Forecast).
 
 
               Let op: mod-card (card-mod, HACS) benodigd.
@@ -1032,6 +1032,19 @@ views:
                         const d = entity.attributes.tijdlijn;
                         if (!d || !d.t) return [];
                         return d.t.map((t, i) => ({ x: t * 1000, y: d.verbruik_kw[i] }));
+                    - entity: sensor.zendure_forecast_grafiek
+                      name: Auto
+                      type: line
+                      color: '#c06bd6'
+                      stroke_width: 1.5
+                      curve: stepline
+                      float_precision: 2
+                      show:
+                        in_header: false
+                      data_generator: |
+                        const d = entity.attributes.tijdlijn;
+                        if (!d || !d.t || !d.ev_kw || !d.ev_kw.some(v => v > 0)) return [];
+                        return d.t.map((t, i) => ({ x: t * 1000, y: d.ev_kw[i] }));
                   card_mod:
                     style: |
                       ha-card {
@@ -1150,7 +1163,7 @@ views:
                         if (!d || !d.t) return [];
                         return d.t.map((t, i) => {
                           const v = d.accu_kw[i];
-                          const c = v < 0 ? '#e8743b' : (d.laden[i] ? '#2e7dd7' : '#f2c037');
+                          const c = v < 0 ? ((d.terugleveren && d.terugleveren[i]) ? '#c0392b' : '#e8743b') : (d.laden[i] ? '#2e7dd7' : '#f2c037');
                           return { x: (t + ((d.t[i + 1] ?? t + 900) - t) / 2) * 1000, y: v, fillColor: c };
                         });
                     - entity: sensor.zendure_forecast_grafiek
@@ -1626,6 +1639,78 @@ views:
                   const base = new Date(); base.setHours(0, 0, 0, 0);
                   return d.map((v, i) => [base.getTime() + i * 3600000 + 1800000, v]);
           - type: custom:apexcharts-card
+            graph_span: 24h
+            span:
+              start: day
+            header:
+              show: true
+              title: ''
+            apex_config:
+              noData:
+                text: Nog geen profiel per kwartier.
+              chart:
+                height: 140px
+              plotOptions:
+                bar:
+                  columnWidth: 90%
+              legend:
+                show: true
+                floating: true
+                horizontalAlign: left
+                offsetY: 17
+              tooltip:
+                x:
+                  format: HH:mm
+                  show: true
+                'y':
+                  formatter: |
+                    EVAL: (val) => val === null ? '-' : `${val.toFixed(3)} kWh`
+              grid:
+                show: true
+                borderColor: color-mix(in srgb, var(--divider-color) 50%, transparent)
+                strokeDashArray: 0
+                padding:
+                  top: -10
+              xaxis:
+                labels:
+                  show: true
+                  format: HH
+                  style:
+                    colors: grey
+                axisTicks:
+                  show: false
+              yaxis:
+                - decimalsInFloat: 2
+                  min: 0
+                  labels:
+                    style:
+                      colors: >-
+                        color-mix(in srgb, var(--primary-text-color) 75%,
+                        transparent)
+            series:
+              - entity: sensor.zendure_forecast_grafiek
+                name: Werkdag (per kwartier)
+                type: column
+                color: '#01a180'
+                show:
+                  in_header: false
+                  legend_value: false
+                data_generator: |
+                  const d = entity.attributes.verbruik_per_kwartier_werkdag_kwh || [];
+                  const base = new Date(); base.setHours(0, 0, 0, 0);
+                  return d.map((v, i) => [base.getTime() + i * 900000 + 450000, v]);
+              - entity: sensor.zendure_forecast_grafiek
+                name: Weekend (per kwartier)
+                type: column
+                color: '#a2a2a3'
+                show:
+                  in_header: false
+                  legend_value: false
+                data_generator: |
+                  const d = entity.attributes.verbruik_per_kwartier_weekend_kwh || [];
+                  const base = new Date(); base.setHours(0, 0, 0, 0);
+                  return d.map((v, i) => [base.getTime() + i * 900000 + 450000, v]);
+          - type: custom:apexcharts-card
             graph_span: 7d
             span:
               start: isoWeek
@@ -2091,7 +2176,10 @@ views:
               **Scenario:** {{ a.scenario }}
 
               **Plan:** {{ a.plan_uitleg }}
-              {% set ks = a.kalibratie_status %}{% if ks %}
+              {% if (a.negatief_inkoop_kwartieren | int(0)) > 0 %}
+
+              **Negatieve inkoopprijs:** {{ a.negatief_inkoop_kwartieren }} kwartier(en) {{ (a.negatief_inkoop_van or '')[11:] }}–{{ (a.negatief_inkoop_tot or '')[11:] }} (gemiddeld €{{ '%.3f' | format(a.negatief_inkoop_prijs | float(0)) }}): {% if a.negatief_inkoop_laden %}de accu laadt dan tot vol met vol vermogen, want afnemen levert geld op.{% else %}de accu is (bijna) vol.{% endif %}
+              {% endif %}{% set ks = a.kalibratie_status %}{% if ks %}
 
               **Kalibratie:** {{ a.kalibratie_dagen }} dagen geleden (drempel {{ a.kalibratie_drempel }}). {% if ks == 'max_te_laag' %}Max. Laadpercentage staat op {{ states('sensor.zendure_2400_ac_maximale_laadpercentage') }}%: de Zendure kalibreert alleen bij 100%.{% elif ks == 'zon_vandaag' %}De zon vult de accu vandaag; dan kalibreert hij vanzelf.{% elif ks == 'zon_morgen' %}Wacht op zon: morgen wordt genoeg zon verwacht om de accu vol te krijgen. Anders laadt hij vanaf dag {{ a.kalibratie_drempel }} vol uit het net.{% elif ks == 'wachten' %}Wacht op een zonnige dag; anders laadt hij vanaf dag {{ a.kalibratie_drempel }} vol uit het net.{% elif ks == 'laden' %}De accu wordt tot 100% geladen uit het net in de goedkoopste kwartieren (ongeveer {{ '%.1f' | format(a.kalibratie_extra_kwh | float(0)) | replace('.', ',') }} kWh).{% else %}De accu is (bijna) vol; de Zendure kalibreert zodra hij 100% haalt.{% endif %}{% endif %}
 
@@ -2393,6 +2481,95 @@ views:
               columns: full
           - type: heading
             icon: ''
+            heading: Besparing per bron per dag
+            heading_style: title
+          - type: custom:apexcharts-card
+            graph_span: 30d
+            span:
+              end: day
+            cache: false
+            header:
+              show: false
+            apex_config:
+              chart:
+                height: 180px
+                stacked: true
+              legend:
+                show: true
+                fontSize: 11px
+              plotOptions:
+                bar:
+                  columnWidth: 80%
+              tooltip:
+                shared: true
+                intersect: false
+                x:
+                  format: d/MM
+                  show: true
+                'y':
+                  formatter: |
+                    EVAL: (val) => val === null ? '-' : `€ ${val.toFixed(2)}`
+              grid:
+                show: true
+                borderColor: color-mix(in srgb, var(--divider-color) 50%, transparent)
+                strokeDashArray: 0
+                padding:
+                  top: -10
+              xaxis:
+                labels:
+                  show: false
+                axisTicks:
+                  show: false
+                axisBorder:
+                  color: color-mix(in srgb, var(--divider-color) 50%, transparent)
+              yaxis:
+                - decimalsInFloat: 2
+                  labels:
+                    style:
+                      colors: >-
+                        color-mix(in srgb, var(--primary-text-color) 75%,
+                        transparent)
+            series:
+              - entity: sensor.zendure_besparing_zonnepanelen
+                name: Zonnepanelen
+                type: column
+                color: '#f4b400'
+                float_precision: 2
+                statistics:
+                  type: change
+                  period: day
+                  align: start
+                show:
+                  in_header: false
+                  legend_value: false
+              - entity: sensor.zendure_besparing_dynamische_tarief
+                name: Dynamische tarief
+                type: column
+                color: '#1e88e5'
+                float_precision: 2
+                statistics:
+                  type: change
+                  period: day
+                  align: start
+                show:
+                  in_header: false
+                  legend_value: false
+              - entity: sensor.zendure_besparing_accu_en_slim_laden
+                name: Accu en slim laden
+                type: column
+                color: '#01a180'
+                float_precision: 2
+                statistics:
+                  type: change
+                  period: day
+                  align: start
+                show:
+                  in_header: false
+                  legend_value: false
+            grid_options:
+              columns: full
+          - type: heading
+            icon: ''
             heading: Besparing per maand
             heading_style: title
           - type: custom:apexcharts-card
@@ -2454,7 +2631,9 @@ views:
               <ha-alert alert-type="info">Helptekst</ha-alert>De grafieken komen uit
               de statistics (LTS) van de totaalbesparing en lopen daardoor gemiddeld
               een uur achter. Na "Totaal opnieuw beginnen" staat die dag een
-              negatieve waarde.
+              negatieve waarde. *Besparing per bron per dag* telt pas vanaf de
+              update naar 2026.11.7 (de sensoren per bron zijn nieuw); samen geven
+              de drie kleuren de besparing van die dag.
             text_only: true
             visibility:
               - condition: state
@@ -4860,7 +5039,10 @@ views:
               Shelly; leeg = de HVAC sensor als dat een vermogenssensor is). Een
               kWh-teller van de airco kan ook (neem de totaalteller, niet die per
               cyclus): het vermogen wordt dan uit de stappen van de teller
-              berekend en loopt een paar minuten achter.
+              berekend en loopt een paar minuten achter. Onder **Aanpak per
+              modus** kies je eventueel per modus een andere aanpak (bv. Koelen:
+              Airco niet uit accu, Verwarmen: Niet ontladen); *Standaard* = de
+              aanpak hierboven.
               Met een vermogensmeting telt het airco-verbruik in die tijd ook
               niet mee in het verbruiksprofiel en het dagverbruik, zodat de
               planner niet rekent met stroom die de accu toch niet levert.
@@ -4897,9 +5079,23 @@ views:
               - entity: input_boolean.hvac_ontladen_bij_duur_uur
                 name: Duur uur (in elke modus)
               - type: section
+                label: Aanpak per modus (Standaard = de aanpak hierboven)
+              - entity: input_select.hvac_aanpak_verwarmen
+                name: Verwarmen
+              - entity: input_select.hvac_aanpak_koelen
+                name: Koelen
+              - entity: input_select.hvac_aanpak_drogen
+                name: Drogen
+              - entity: input_select.hvac_aanpak_ventileren
+                name: Ventileren
+              - entity: input_select.hvac_aanpak_auto
+                name: Auto
+              - type: section
                 label: Status
               - entity: sensor.hvac_modus
                 name: Airco modus
+              - entity: sensor.hvac_aanpak_nu
+                name: Aanpak nu
               - entity: binary_sensor.hvac_actief
                 name: Airco actief
               - entity: sensor.hvac_vermogen
@@ -5052,6 +5248,8 @@ views:
                 name: Momentopnames (laatste 24 uur)
               - entity: sensor.zendure_diagnose_fouten
                 name: Foutmeldingen (laatste 20)
+              - entity: sensor.zendure_flash_schrijfacties
+                name: Omzetten naar Flash (vandaag)
             visibility:
               - condition: state
                 entity: script.zendure_diagnose_export

@@ -319,6 +319,11 @@ template:
           rest_kwh: "{{ rest | round(2) }}"
           overdag_kwh: "{{ rest | round(2) if overdag else 0 }}"
           laadvermogen_kw: "{{ kw }}"
+          # Geplande slots (begin, eind, kWh) voor de Plan Tijdlijn; alleen bij Nacht
+          laadslots: >-
+            {%- set ns = namespace(l=[]) -%}
+            {%- for x in (gekozen if nacht else []) -%}{%- set ns.l = ns.l + [[x.s, x.e, x.kwh]] -%}{%- endfor -%}
+            {{ ns.l }}
           eind: "{{ (eind_ts | timestamp_custom('%Y-%m-%d %H:%M', true)) if actief and eind_ts > 0 else none }}"
           prijzen_morgen_bekend: "{{ morgen_bekend }}"
           prijzen_beschikbaar: "{{ kand | length > 0 }}"

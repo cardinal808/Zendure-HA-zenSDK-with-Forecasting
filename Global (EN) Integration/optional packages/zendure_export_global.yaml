@@ -162,6 +162,37 @@ template:
           columns: "{{ ['from', 'until', 'count', 'level', 'logger', 'message', 'source'] }}"
           rows: "{{ e_rows }}"
 
+  # Flash writes: how often per day the Zendure switches from RAM to Flash (Gielz sets the storage
+  # mode to Flash when the battery is idle for a while, e.g. while holding). Counts every change to
+  # "Flash Memory"; per_day keeps the last 14 days.
+  - trigger:
+      - platform: state
+        entity_id: sensor.zendure_storage_mode
+        to: "Flash Memory"
+        id: flash
+      - platform: time
+        at: "00:00:00"
+        id: new_day
+    sensor:
+      - name: "Zendure Flash Writes"
+        unique_id: zendure_flash_writes
+        icon: mdi:memory
+        state_class: measurement
+        state: >-
+          {%- set today = now().strftime('%Y-%m-%d') -%}
+          {%- set day = this.attributes.get('day') -%}
+          {%- set n = (this.state | int(0)) if day == today else 0 -%}
+          {{ n + (1 if trigger.id == 'flash' else 0) }}
+        attributes:
+          day: "{{ now().strftime('%Y-%m-%d') }}"
+          per_day: >-
+            {%- set today = now().strftime('%Y-%m-%d') -%}
+            {%- set day = this.attributes.get('day') -%}
+            {%- set old = this.attributes.get('per_day') or {} -%}
+            {%- set n = (this.state | int(0)) if day == today else 0 -%}
+            {%- set items = ((old.items() | list) | rejectattr('0', 'eq', today) | list) + [(today, n + (1 if trigger.id == 'flash' else 0))] -%}
+            {{ dict((items | sort(attribute='0'))[-14:]) }}
+
 script:
   zendure_diagnostics_export:
     alias: Zendure Diagnostics Export
@@ -290,6 +321,7 @@ script:
                    'kolommen': state_attr('sensor.zendure_diagnostics_snapshots', 'columns'),
                    'regels': state_attr('sensor.zendure_diagnostics_snapshots', 'rows') or []
                  },
+                 'flash_writes': state_attr('sensor.zendure_flash_writes', 'per_day') or {},
                  'errors': {
                    'kolommen': state_attr('sensor.zendure_diagnostics_errors', 'columns'),
                    'regels': state_attr('sensor.zendure_diagnostics_errors', 'rows') or []

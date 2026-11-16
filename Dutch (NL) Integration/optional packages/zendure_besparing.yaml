@@ -329,11 +329,41 @@ template:
           marktprijs_laatste_interval: "{{ p_markt }}"
           laatste_interval_verrekend: "{{ inc is mapping }}"
           # Tellerstanden en prijs van nu, voor de berekening over een kwartier
+          # Een all-in prijs onder de kale marktprijs kan niet (energiebelasting en opslag zijn positief).
+          # Dat gebeurt kort na een herstart als de Nord Pool-sensor nog zonder opslagen rekent: dan die
+          # prijs niet bewaren, zodat het kwartier met de prijs van de volgende meting wordt afgerekend.
           meting: >
+            {%- set p_ok = slot_nu.p if not (slot_nu.p is number and markt_nu is number and slot_nu.p < markt_nu) else none -%}
             {% if meting_ok %}{{ {'ts': nu_ts | round(0), 'imp': t_imp, 'exp': t_exp, 'prod': prod_nu,
-                                  'laden': t_laden, 'ontl': t_ontl, 'p': slot_nu.p, 'pm': markt_nu,
+                                  'laden': t_laden, 'ontl': t_ontl, 'p': p_ok, 'pm': markt_nu,
                                   'f': zon_aandeel, 'e': accu_nu} }}
             {% else %}{{ none }}{% endif %}
+
+      # Besparing per bron als losse totaaltellers (zelfde getallen als de attributen van
+      # sensor.zendure_besparing). Met statistiek "change" per dag of maand geven ze een gestapelde grafiek.
+      - name: "Zendure Besparing Zonnepanelen"
+        unique_id: zendure_besparing_zonnepanelen
+        icon: mdi:solar-power-variant
+        unit_of_measurement: "€"
+        device_class: monetary
+        state_class: total
+        state: "{{ (emmers.totaal.geen_vast - emmers.totaal.zon_vast + emmers.totaal.zon_accu) | round(2) }}"
+
+      - name: "Zendure Besparing Dynamische Tarief"
+        unique_id: zendure_besparing_dynamische_tarief
+        icon: mdi:chart-bell-curve-cumulative
+        unit_of_measurement: "€"
+        device_class: monetary
+        state_class: total
+        state: "{{ (emmers.totaal.zon_vast - emmers.totaal.zon_dyn) | round(2) }}"
+
+      - name: "Zendure Besparing Accu En Slim Laden"
+        unique_id: zendure_besparing_accu_en_slim_laden
+        icon: mdi:battery-charging-high
+        unit_of_measurement: "€"
+        device_class: monetary
+        state_class: total
+        state: "{{ (emmers.totaal.zon_dyn - emmers.totaal.nu_dyn - emmers.totaal.zon_accu) | round(2) }}"
 
       - name: "Zendure Besparing Vandaag"
         unique_id: zendure_besparing_vandaag

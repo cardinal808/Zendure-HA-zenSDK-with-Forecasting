@@ -1528,7 +1528,21 @@ actions:
               sn: '{{ states(''sensor.zendure_2400_ac_serienummer'') }}'
           - action: logbook.log
             data:
-              message: 🌀Ontladen gestopt (goedkoop dal of HVAC aan, alleen laden toegestaan) —
+              message: >-
+                {%- set a = states.sensor.zendure_forecast_plan.attributes if states.sensor.zendure_forecast_plan is not none else {} -%}
+                {%- set p = a.get('prijs_nu') -%}
+                {%- set nu = (' (nu €' ~ ('%.3f' | format(p | float(0)) | replace('.', ',')) ~ ')') if p is number else '' -%}
+                🌀Ontladen gestopt, alleen laden toegestaan: {% if is_state('binary_sensor.hvac_ontladen_geblokkeerd', 'on') and not a.get('ontladen_vasthouden', false) -%}
+                airco aan
+                {%- elif a.get('slim_vasthouden') and a.get('vasthouden_grensprijs') is number -%}
+                slim vasthouden, accu bewaard voor prijzen vanaf €{{ '%.3f' | format(a.get('vasthouden_grensprijs')) | replace('.', ',') }}{{ nu }}
+                {%- elif a.get('tussen_laden_vasthouden') and a.get('tussen_laden_grensprijs') is number -%}
+                vasthouden tot het volgende laadslot, bijladen kost na verlies €{{ '%.3f' | format(a.get('tussen_laden_grensprijs')) | replace('.', ',') }}{{ nu }}
+                {%- elif a.get('in_dal') -%}
+                goedkoop dal (onder €{{ '%.3f' | format(a.get('dal_drempel') | float(0)) | replace('.', ',') }}){{ nu }}
+                {%- else -%}
+                goedkoop dal of airco aan
+                {%- endif %} —
               entity_id: input_select.zendure_2400_ac_modus_selecteren
               name: " "
         alias: Ontladen stoppen (goedkoop dal of HVAC aan, alleen laden toegestaan)

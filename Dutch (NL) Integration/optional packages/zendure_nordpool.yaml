@@ -69,10 +69,12 @@ sensor:
     low_price_cutoff: 0.9
     price_in_cents: false
     price_type: kWh
+    # Kort na een herstart kunnen de invoervelden nog onbekend zijn: dan de standaardwaarden (2026)
+    # gebruiken in plaats van 0, anders staat de all-in prijs even op de kale marktprijs.
     additional_costs: >
-      {% set vat = states('input_number.nordpool_btw_percentage') | float(0) / 100 %}
-      {% set belasting = states('input_number.nordpool_energiebelasting') | float(0) %}
-      {% set opslag = states('input_number.nordpool_opslag_leverancier') | float(0) %}
+      {% set vat = states('input_number.nordpool_btw_percentage') | float(21) / 100 %}
+      {% set belasting = states('input_number.nordpool_energiebelasting') | float(0.09161) %}
+      {% set opslag = states('input_number.nordpool_opslag_leverancier') | float(0.02) %}
       {{ ((current_price + belasting + opslag) * (1 + vat)) - current_price }}
 
   # 2. Kale marktprijs inclusief btw, voor teruglevering

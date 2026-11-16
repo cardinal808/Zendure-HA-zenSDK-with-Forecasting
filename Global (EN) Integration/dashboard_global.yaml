@@ -774,7 +774,7 @@ views:
             heading_style: title
           - type: markdown
             content: >-
-              <ha-alert alert-type="info">Help</ha-alert>Forecast per price slot for the next 36 hours. Price (colours as in Gielz): blue = planned grid charging, red = expensive (Gielz's most expensive periods), grey = other, light grey = price not known yet. Battery: blue = charging from the grid, yellow = charging from solar, orange = discharging; white line = state of charge (0–100%). Grid: blue = battery charging from the grid, purple = house from the grid, grey = export. Tomorrow's charging is indicative; the cheap-dip hold is not part of this forecast. Solar only with a detailed forecast (Solcast or Helios Forecast).
+              <ha-alert alert-type="info">Help</ha-alert>Forecast per price slot for the next 36 hours. Price (colours as in Gielz): blue = planned grid charging, red = expensive (Gielz's most expensive periods), grey = other, light grey = price not known yet. Battery: blue = charging from the grid, yellow = charging from solar, orange = discharging, red = export to the grid (at solar surplus or ahead of negative prices); white line = state of charge (0–100%). Grid: blue = battery charging from the grid, purple = house (and car) from the grid, grey = export. Purple line under Solar and usage = planned car charging (EV package, Night). Tomorrow's charging is indicative; the cheap-dip hold is not part of this forecast. Solar only with a detailed forecast (Solcast or Helios Forecast).
 
 
               Note: needs mod-card (card-mod, HACS).
@@ -1032,6 +1032,19 @@ views:
                         const d = entity.attributes.timeline;
                         if (!d || !d.t) return [];
                         return d.t.map((t, i) => ({ x: t * 1000, y: d.usage_kw[i] }));
+                    - entity: sensor.zendure_forecast_chart
+                      name: Car
+                      type: line
+                      color: '#c06bd6'
+                      stroke_width: 1.5
+                      curve: stepline
+                      float_precision: 2
+                      show:
+                        in_header: false
+                      data_generator: |
+                        const d = entity.attributes.timeline;
+                        if (!d || !d.t || !d.ev_kw || !d.ev_kw.some(v => v > 0)) return [];
+                        return d.t.map((t, i) => ({ x: t * 1000, y: d.ev_kw[i] }));
                   card_mod:
                     style: |
                       ha-card {
@@ -1150,7 +1163,7 @@ views:
                         if (!d || !d.t) return [];
                         return d.t.map((t, i) => {
                           const v = d.battery_kw[i];
-                          const c = v < 0 ? '#e8743b' : (d.charge[i] ? '#2e7dd7' : '#f2c037');
+                          const c = v < 0 ? ((d.export && d.export[i]) ? '#c0392b' : '#e8743b') : (d.charge[i] ? '#2e7dd7' : '#f2c037');
                           return { x: (t + ((d.t[i + 1] ?? t + 900) - t) / 2) * 1000, y: v, fillColor: c };
                         });
                     - entity: sensor.zendure_forecast_chart
@@ -1622,6 +1635,78 @@ views:
                   const base = new Date(); base.setHours(0, 0, 0, 0);
                   return d.map((v, i) => [base.getTime() + i * 3600000 + 1800000, v]);
           - type: custom:apexcharts-card
+            graph_span: 24h
+            span:
+              start: day
+            header:
+              show: true
+              title: ''
+            apex_config:
+              noData:
+                text: No profile per quarter hour yet.
+              chart:
+                height: 140px
+              plotOptions:
+                bar:
+                  columnWidth: 90%
+              legend:
+                show: true
+                floating: true
+                horizontalAlign: left
+                offsetY: 17
+              tooltip:
+                x:
+                  format: HH:mm
+                  show: true
+                'y':
+                  formatter: |
+                    EVAL: (val) => val === null ? '-' : `${val.toFixed(3)} kWh`
+              grid:
+                show: true
+                borderColor: color-mix(in srgb, var(--divider-color) 50%, transparent)
+                strokeDashArray: 0
+                padding:
+                  top: -10
+              xaxis:
+                labels:
+                  show: true
+                  format: HH
+                  style:
+                    colors: grey
+                axisTicks:
+                  show: false
+              yaxis:
+                - decimalsInFloat: 2
+                  min: 0
+                  labels:
+                    style:
+                      colors: >-
+                        color-mix(in srgb, var(--primary-text-color) 75%,
+                        transparent)
+            series:
+              - entity: sensor.zendure_forecast_chart
+                name: Workday (per quarter)
+                type: column
+                color: '#01a180'
+                show:
+                  in_header: false
+                  legend_value: false
+                data_generator: |
+                  const d = entity.attributes.usage_per_quarter_workday_kwh || [];
+                  const base = new Date(); base.setHours(0, 0, 0, 0);
+                  return d.map((v, i) => [base.getTime() + i * 900000 + 450000, v]);
+              - entity: sensor.zendure_forecast_chart
+                name: Weekend (per quarter)
+                type: column
+                color: '#a2a2a3'
+                show:
+                  in_header: false
+                  legend_value: false
+                data_generator: |
+                  const d = entity.attributes.usage_per_quarter_weekend_kwh || [];
+                  const base = new Date(); base.setHours(0, 0, 0, 0);
+                  return d.map((v, i) => [base.getTime() + i * 900000 + 450000, v]);
+          - type: custom:apexcharts-card
             graph_span: 7d
             span:
               start: isoWeek
@@ -2086,7 +2171,10 @@ views:
               **Scenario:** {{ a.scenario }}
 
               **Plan:** {{ a.plan_explanation }}
-              {% set ks = a.calibration_status %}{% if ks %}
+              {% if (a.negative_purchase_quarters | int(0)) > 0 %}
+
+              **Negative purchase price:** {{ a.negative_purchase_quarters }} quarter hour(s) {{ (a.negative_purchase_from or '')[11:] }}–{{ (a.negative_purchase_until or '')[11:] }} (average €{{ '%.3f' | format(a.negative_purchase_price | float(0)) }}): {% if a.negative_purchase_charge %}the battery charges to full at full power, because taking power earns money.{% else %}the battery is (almost) full.{% endif %}
+              {% endif %}{% set ks = a.calibration_status %}{% if ks %}
 
               **Calibration:** {{ a.calibration_days }} days ago (threshold {{ a.calibration_threshold }}). {% if ks == 'max_too_low' %}Max. State Of Charge is set to {{ states('sensor.zendure_maximum_state_of_charge') }}%: the Zendure only calibrates at 100%.{% elif ks == 'sun_today' %}The sun fills the battery today; it then calibrates by itself.{% elif ks == 'sun_tomorrow' %}Waiting for sun: enough sun is expected tomorrow to fill the battery. Otherwise it charges full from the grid from day {{ a.calibration_threshold }}.{% elif ks == 'waiting' %}Waiting for a sunny day; otherwise it charges full from the grid from day {{ a.calibration_threshold }}.{% elif ks == 'charge' %}The battery is charged to 100% from the grid in the cheapest quarter hours (about {{ '%.1f' | format(a.calibration_extra_kwh | float(0)) }} kWh).{% else %}The battery is (almost) full; the Zendure calibrates as soon as it reaches 100%.{% endif %}{% endif %}
 
@@ -2388,6 +2476,95 @@ views:
               columns: full
           - type: heading
             icon: ''
+            heading: Savings per source per day
+            heading_style: title
+          - type: custom:apexcharts-card
+            graph_span: 30d
+            span:
+              end: day
+            cache: false
+            header:
+              show: false
+            apex_config:
+              chart:
+                height: 180px
+                stacked: true
+              legend:
+                show: true
+                fontSize: 11px
+              plotOptions:
+                bar:
+                  columnWidth: 80%
+              tooltip:
+                shared: true
+                intersect: false
+                x:
+                  format: d/MM
+                  show: true
+                'y':
+                  formatter: |
+                    EVAL: (val) => val === null ? '-' : `€ ${val.toFixed(2)}`
+              grid:
+                show: true
+                borderColor: color-mix(in srgb, var(--divider-color) 50%, transparent)
+                strokeDashArray: 0
+                padding:
+                  top: -10
+              xaxis:
+                labels:
+                  show: false
+                axisTicks:
+                  show: false
+                axisBorder:
+                  color: color-mix(in srgb, var(--divider-color) 50%, transparent)
+              yaxis:
+                - decimalsInFloat: 2
+                  labels:
+                    style:
+                      colors: >-
+                        color-mix(in srgb, var(--primary-text-color) 75%,
+                        transparent)
+            series:
+              - entity: sensor.zendure_savings_solar_panels
+                name: Solar panels
+                type: column
+                color: '#f4b400'
+                float_precision: 2
+                statistics:
+                  type: change
+                  period: day
+                  align: start
+                show:
+                  in_header: false
+                  legend_value: false
+              - entity: sensor.zendure_savings_dynamic_tariff
+                name: Dynamic tariff
+                type: column
+                color: '#1e88e5'
+                float_precision: 2
+                statistics:
+                  type: change
+                  period: day
+                  align: start
+                show:
+                  in_header: false
+                  legend_value: false
+              - entity: sensor.zendure_savings_battery_and_smart_charging
+                name: Battery and smart charging
+                type: column
+                color: '#01a180'
+                float_precision: 2
+                statistics:
+                  type: change
+                  period: day
+                  align: start
+                show:
+                  in_header: false
+                  legend_value: false
+            grid_options:
+              columns: full
+          - type: heading
+            icon: ''
             heading: Savings per month
             heading_style: title
           - type: custom:apexcharts-card
@@ -2449,7 +2626,9 @@ views:
               <ha-alert alert-type="info">Help text</ha-alert>The charts come from
               the statistics (LTS) of the total savings and therefore run about
               an hour behind on average. After "Restart total" that day shows a
-              negative value.
+              negative value. *Savings per source per day* only counts from the
+              update to 2026.11.7 (the per-source sensors are new); together the
+              three colours make up that day's savings.
             text_only: true
             visibility:
               - condition: state
@@ -4851,7 +5030,9 @@ views:
               the HVAC sensor if that is a power sensor). A kWh counter of the
               AC works too (use the total counter, not the per-cycle one): the
               power is then calculated from the counter's steps and lags a few
-              minutes. With a power
+              minutes. Under **Approach per mode** you can choose a different
+              approach per mode (e.g. Cooling: AC not from battery, Heating: No
+              discharging); *Default* = the approach above. With a power
               measurement the AC usage during that time also does not count in
               the usage profile and the daily usage, so the planner does not
               count on power the battery will not supply anyway.
@@ -4888,9 +5069,23 @@ views:
               - entity: input_boolean.hvac_allow_discharge_in_expensive_hour
                 name: Expensive hour (in any mode)
               - type: section
+                label: Approach per mode (Default = the approach above)
+              - entity: input_select.hvac_approach_heating
+                name: Heating
+              - entity: input_select.hvac_approach_cooling
+                name: Cooling
+              - entity: input_select.hvac_approach_drying
+                name: Drying
+              - entity: input_select.hvac_approach_fan
+                name: Fan
+              - entity: input_select.hvac_approach_auto
+                name: Auto
+              - type: section
                 label: Status
               - entity: sensor.hvac_mode
                 name: AC mode
+              - entity: sensor.hvac_approach_now
+                name: Approach now
               - entity: binary_sensor.hvac_active
                 name: AC active
               - entity: sensor.hvac_power
@@ -5042,6 +5237,8 @@ views:
                 name: Snapshots (last 24 hours)
               - entity: sensor.zendure_diagnostics_errors
                 name: Errors (last 20)
+              - entity: sensor.zendure_flash_writes
+                name: Switches to Flash (today)
             visibility:
               - condition: state
                 entity: script.zendure_diagnostics_export

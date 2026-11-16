@@ -28,6 +28,8 @@ python3 tools/vergelijk.py /tmp/oud.yaml "Dutch (NL) Integration/packages/zendur
 
 - De functies van Home Assistant zijn nagebootst. Kleine verschillen met HA zijn mogelijk; vergelijk daarom vooral oud met nieuw.
 - `sun.sun` staat niet in de export en wordt grof geschat (Amsterdam, begin november).
+- `integration_entities()` en `device_attr()` kunnen niet uit een export: integraties worden herkend aan de naam van de entiteit (bv. `solcast` in de entity_id). Bijgewerkt voor de planner van 2026.11.7.
+- Een export van de NL-set werkt alleen met de NL-planner, en een EN-export met de EN-planner (andere entiteitnamen).
 - De zon-detailvoorspelling (Solcast) staat pas vanaf Forecasting 2026.11.3 in de export. Zonder die voorspelling rekent de planner met *zonsopkomst + 3 uur* als zon-dekking.
 - Een export bevat IP-adressen en serienummers niet, maar wel je instellingen en verbruik: deel hem alleen met wie je vertrouwt.
 
@@ -42,4 +44,4 @@ Requires Python 3.11+ with `jinja2` and `pyyaml`.
 - `planner_sim.py <forecasting.yaml> <export.json> [entity=value ...] [--tijd YYYY-MM-DDTHH:MM]` calculates the plan; `entity=value` overrides a state, `--tijd` sets the time of day.
 - `vergelijk.py <old.yaml> <new.yaml> <export.json> [entity=value ...] [--varieer entity=v1,v2,...]` compares two planner versions on the same export, optionally for a range of values of one setting.
 
-Limitations: Home Assistant functions are emulated (compare old against new rather than trusting absolute values); `sun.sun` is estimated roughly; the detailed solar forecast (Solcast) is only in exports from Forecasting 2026.11.3 on.
+Limitations: Home Assistant functions are emulated (compare old against new rather than trusting absolute values); `sun.sun` is estimated roughly; `integration_entities()` is approximated from entity names; the detailed solar forecast (Solcast) is only in exports from Forecasting 2026.11.3 on; an NL export only works with the NL planner and an EN export with the EN planner.

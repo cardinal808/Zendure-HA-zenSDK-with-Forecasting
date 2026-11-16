@@ -182,13 +182,27 @@ def build_env(st):
         def __call__(self, e):
             return states(e)
 
+    # Integraties staan niet in de export: benadering via de entity_id (bv. 'solcast' in de naam)
+    INT_HINT = {'solcast_solar': 'solcast', 'helios_forecast': 'helios', 'helios': 'helios',
+                'forecast_solar': 'energy_production', 'nordpool': 'nordpool', 'homewizard': 'p1_meter'}
+
+    def integration_entities(name):
+        hint = INT_HINT.get(name)
+        return sorted(k for k in st if hint and hint in k) if hint else []
+
+    def iif(c, t=True, f=False, n=None):
+        return n if c is None else (t if c else f)
+
     g = env.globals
+    g.update(integration_entities=integration_entities, device_id=lambda *a, **k: None,
+             device_attr=lambda *a, **k: None, area_name=lambda *a, **k: None, iif=iif,
+             zip=lambda *a: list(zip(*a)), bool=lambda v, d=None: str(v).lower() in ('1', 'true', 'on', 'yes'))
     g.update(states=States(), state_attr=state_attr, is_state=is_state, is_state_attr=is_state_attr,
              has_value=has_value, as_timestamp=as_timestamp, now=lambda: NOW, today_at=today_at,
              timedelta=timedelta, expand=expand, min=fmin, max=fmax, float=ffloat, int=fint,
              as_datetime=lambda v, d=None: datetime.fromisoformat(str(v)) if v else d,
              as_local=lambda d: d.astimezone(TZ))
-    env.filters.update(float=ffloat, int=fint, round=fround, timestamp_custom=timestamp_custom,
+    env.filters.update(iif=iif, float=ffloat, int=fint, round=fround, timestamp_custom=timestamp_custom,
                        regex_match=regex_match, regex_search=regex_search, regex_replace=regex_replace,
                        multiply=multiply, as_timestamp=as_timestamp, states=states, has_value=has_value,
                        to_json=lambda v, **k: json.dumps(v, default=str),
