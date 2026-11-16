@@ -614,8 +614,8 @@ views:
                   action: more-info
             visibility:
               - condition: state
-                entity: input_boolean.dashboard_setting_show_pv
-                state: 'on'
+                entity: binary_sensor.zendure_has_pv_inputs
+                state_not: 'off'
           - type: custom:apexcharts-card
             experimental:
               hidden_by_default: true
@@ -766,8 +766,8 @@ views:
                   size: 0
             visibility:
               - condition: state
-                entity: input_boolean.dashboard_setting_show_pv
-                state: 'on'
+                entity: binary_sensor.zendure_has_pv_inputs
+                state_not: 'off'
           - type: heading
             icon: ''
             heading: Plan Timeline
@@ -2554,8 +2554,8 @@ views:
                 name: Offgrid Mode
               - type: conditional
                 conditions:
-                  - entity: input_boolean.dashboard_setting_show_pv
-                    state: 'on'
+                  - entity: binary_sensor.zendure_has_pv_inputs
+                    state_not: 'off'
                 row:
                   entity: sensor.zendure_pv_export_mode
                   name: PV Export Mode
@@ -3966,16 +3966,16 @@ views:
                   action: more-info
             visibility:
               - condition: state
-                entity: input_boolean.dashboard_setting_show_pv
-                state: 'on'
+                entity: binary_sensor.zendure_has_pv_inputs
+                state_not: 'off'
           - type: entities
             entities:
               - entity: input_boolean.zendure_setting_pv_export_disabled
                 name: PV Export Disabled
             visibility:
               - condition: state
-                entity: input_boolean.dashboard_setting_show_pv
-                state: 'on'
+                entity: binary_sensor.zendure_has_pv_inputs
+                state_not: 'off'
           - type: heading
             icon: ''
             heading: Gielz Configuration (Optional)
@@ -4931,8 +4931,10 @@ views:
           - type: markdown
             content: >-
               <ha-alert alert-type="info">Help text</ha-alert>Here you can set
-              whether you want to show or hide the help texts and the PV
-              information. The dynamic information and the Forecasting section are always on the dashboard.
+              whether you want to show or hide the help texts. The PV
+              information appears automatically on a Zendure with solar inputs
+              (Pro, Plus or Hyper). The dynamic information and the Forecasting
+              section are always on the dashboard.
             text_only: true
             visibility:
               - condition: state
@@ -4941,7 +4943,6 @@ views:
           - type: entities
             entities:
               - entity: input_boolean.dashboard_setting_show_help
-              - entity: input_boolean.dashboard_setting_show_pv
           - type: heading
             heading: Logbook (last 4 hours)
             heading_style: title

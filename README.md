@@ -212,7 +212,7 @@ homeassistant:
 | `dynamic_setting_15_minute_interval` | Enable this if you want to use 15-minute intervals. |
 | **Configuration (Dashboard)** | **Information** |
 | `dashboard_setting_show_help` | Enable to show help text on the dashboard. |
-| `dashboard_setting_show_pv` | Enable to show connected (offgrid/mppt) PV on the dashboard. |
+| `dashboard_setting_show_pv` | No longer used in this set: the PV information appears automatically on a Zendure with solar inputs (Pro, Plus or Hyper). |
 
 ---
 

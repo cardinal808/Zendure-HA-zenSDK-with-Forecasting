@@ -211,7 +211,7 @@ homeassistant:
 | `dynamisch_15_minuten` | Vink dit aan wanneer je gebruik wilt maken van 15 minuten periodes.  |  
 | **Configuratie (Dashboard)** |**Informatie**|  
 | `help_tonen_op_dashboard` | Vink dit aan om de helpteksten te tonen bij de meest relevante onderdelen.  | 
-| `pv_tonen_op_dashboard` | Vink dit aan om de verbonden (offgrid/mppt) PV te tonen op het dashboard.  |  
+| `pv_tonen_op_dashboard` | Niet meer in gebruik in deze set: de PV-informatie staat vanzelf op het dashboard bij een Zendure met zon-ingangen (Pro, Plus of Hyper). |  
 
 ---
 

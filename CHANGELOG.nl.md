@@ -14,7 +14,11 @@ Versies volgen `jaar.maand.volgnummer`; het volgnummer begint elke maand bij 1. 
 - **Besparing, vast contract:** zolang saldering geldt telt teruglevering tegen het leveringstarief. Het veld heet nu **Vast contract tarief teruglevering (zonder saldering)**: vul de terugleververgoeding van je contract voor 2027 in.
 
 **Dynamisch en Forecasting altijd op het dashboard**
-- De schakelaars *Dynamisch Tonen Op Dashboard* en *Forecasting Tonen Op Dashboard* zijn weg; de dynamische informatie en de Forecasting-sectie (en -instellingen) staan altijd op het dashboard. `input_boolean.forecast_tonen_op_dashboard` is verwijderd; Gielz' `input_boolean.dynamisch_tonen_op_dashboard` blijft in zijn pakket bestaan maar wordt niet meer gebruikt. *Help* en *PV Tonen Op Dashboard* blijven.
+- De schakelaars *Dynamisch Tonen Op Dashboard* en *Forecasting Tonen Op Dashboard* zijn weg; de dynamische informatie en de Forecasting-sectie (en -instellingen) staan altijd op het dashboard. `input_boolean.forecast_tonen_op_dashboard` is verwijderd; Gielz' `input_boolean.dynamisch_tonen_op_dashboard` blijft in zijn pakket bestaan maar wordt niet meer gebruikt. *Help* blijft.
+
+**PV-informatie vanzelf bij een Zendure met zon-ingangen**
+- De schakelaar *PV Tonen Op Dashboard* is weg. De PV-grafiek en -badges (tab Zendure), *Gielz Configuratie (PV)* en *PV Export Modus* (tab Gezondheid) staan nu op het dashboard als de Zendure zon-ingangen heeft (Pro, Plus of Hyper, `binary_sensor.zendure_heeft_pv_ingangen`; onbekend = zichtbaar). Bij een 2400 AC of AC+ verdwijnen ze vanzelf.
+- Gielz' `input_boolean.pv_tonen_op_dashboard` blijft in zijn pakket bestaan maar wordt niet meer gebruikt.
 
 **Fix: controle van alle bestanden (15-11)**
 - EN-dashboard: Gielz' grafiek *Import | Export* was beschadigd bij het toevoegen van het verbruiksprofiel (de Export-reeks miste statistiek, kolom en kleur; de tellerkaart stond onderaan). Hersteld zoals bij Gielz.

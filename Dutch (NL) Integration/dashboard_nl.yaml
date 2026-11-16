@@ -614,8 +614,8 @@ views:
                   action: more-info
             visibility:
               - condition: state
-                entity: input_boolean.pv_tonen_op_dashboard
-                state: 'on'
+                entity: binary_sensor.zendure_heeft_pv_ingangen
+                state_not: 'off'
           - type: custom:apexcharts-card
             experimental:
               hidden_by_default: true
@@ -766,8 +766,8 @@ views:
                   size: 0
             visibility:
               - condition: state
-                entity: input_boolean.pv_tonen_op_dashboard
-                state: 'on'
+                entity: binary_sensor.zendure_heeft_pv_ingangen
+                state_not: 'off'
           - type: heading
             icon: ''
             heading: Plan Tijdlijn
@@ -2559,8 +2559,8 @@ views:
                 name: Offgrid Modus
               - type: conditional
                 conditions:
-                  - entity: input_boolean.pv_tonen_op_dashboard
-                    state: 'on'
+                  - entity: binary_sensor.zendure_heeft_pv_ingangen
+                    state_not: 'off'
                 row:
                   entity: sensor.zendure_2400_ac_pv_export_modus
                   name: PV Export Modus
@@ -3976,16 +3976,16 @@ views:
                   action: more-info
             visibility:
               - condition: state
-                entity: input_boolean.pv_tonen_op_dashboard
-                state: 'on'
+                entity: binary_sensor.zendure_heeft_pv_ingangen
+                state_not: 'off'
           - type: entities
             entities:
               - entity: input_boolean.zendure_2400_ac_pv_export_uitgeschakeld
                 name: PV Export Uitgeschakeld
             visibility:
               - condition: state
-                entity: input_boolean.pv_tonen_op_dashboard
-                state: 'on'
+                entity: binary_sensor.zendure_heeft_pv_ingangen
+                state_not: 'off'
           - type: heading
             icon: ''
             heading: Gielz Configuratie (Optioneel)
@@ -4940,8 +4940,10 @@ views:
           - type: markdown
             content: >-
               <ha-alert alert-type="info">Helptekst</ha-alert>Hier stel je in of
-              je de helpteksten en de PV-informatie wilt tonen of verbergen. De
-              Dynamische informatie en de Forecasting-sectie staan altijd op het dashboard.
+              je de helpteksten wilt tonen of verbergen. De PV-informatie staat
+              vanzelf op het dashboard bij een Zendure met zon-ingangen (Pro, Plus
+              of Hyper). De Dynamische informatie en de Forecasting-sectie staan
+              altijd op het dashboard.
             text_only: true
             visibility:
               - condition: state
@@ -4950,7 +4952,6 @@ views:
           - type: entities
             entities:
               - entity: input_boolean.help_tonen_op_dashboard
-              - entity: input_boolean.pv_tonen_op_dashboard
           - type: heading
             heading: Logboek (afgelopen 4 uur)
             heading_style: title
