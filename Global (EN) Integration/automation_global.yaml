@@ -706,7 +706,7 @@ actions:
               - 'on'
           - condition: template
             value_template: >-
-              {{ not is_state('sensor.zendure_forecast_plan', 'Charging')
+              {{ not is_state('sensor.zendure_forecast_plan', 'Charge')
                  and (as_timestamp(now()) - as_timestamp(states.sensor.zendure_forecast_plan.last_changed, 0)) > 60 }}
         sequence:
           - action: input_boolean.turn_off
@@ -1911,7 +1911,16 @@ actions:
               - trigger: state
                 entity_id:
                   - input_select.zendure_operation_mode
+              - alias: Charging already stopped elsewhere (e.g. by the charging check)
+                trigger: state
+                entity_id:
+                  - input_boolean.dynamic_charging_running
+                to: 'off'
+                id: laden_elders_gestopt
             continue_on_timeout: false
+          - alias: Stop this run if charging was already stopped elsewhere (prevents piled-up runs)
+            condition: template
+            value_template: "{{ wait.trigger is none or wait.trigger.id != 'laden_elders_gestopt' }}"
           - action: input_boolean.turn_off
             target:
               entity_id:

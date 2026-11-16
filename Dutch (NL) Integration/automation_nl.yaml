@@ -1935,7 +1935,16 @@ actions:
               - trigger: state
                 entity_id:
                   - input_select.zendure_2400_ac_modus_selecteren
+              - alias: Laden elders al gestopt (bv. door de laadcontrole)
+                trigger: state
+                entity_id:
+                  - input_boolean.dynamisch_laden_loopt
+                to: 'off'
+                id: laden_elders_gestopt
             continue_on_timeout: false
+          - alias: Deze run stoppen als het laden elders al gestopt is (voorkomt opgestapelde runs)
+            condition: template
+            value_template: "{{ wait.trigger is none or wait.trigger.id != 'laden_elders_gestopt' }}"
           - action: input_boolean.turn_off
             target:
               entity_id:

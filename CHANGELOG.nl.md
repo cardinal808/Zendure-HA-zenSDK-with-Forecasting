@@ -4,6 +4,10 @@ Versies volgen `jaar.maand.volgnummer`; het volgnummer begint elke maand bij 1. 
 
 ## 2026.11.7 (in ontwikkeling) — gebaseerd op Gielz v20261113
 
+**Fix: nachtladen stopte elke 2 minuten (alleen de EN-set)**
+- De laadcontrole (sinds 2026.11.5) keek in de Engelse automation naar de planner-status `Charging`, maar de Engelse planner zegt `Charge`. Daardoor stopte hij elke lading na een minuut en startte de laadtak hem twee minuten later opnieuw. Elke herstart liet een wachtende run achter, tot de automation zijn maximum aan parallelle runs bereikte (*Maximum number of runs exceeded*) en aan het eind van het slot alle wachtende runs tegelijk een stop naar de Zendure stuurden (*Client error … /properties/write*). De Nederlandse set had hier geen last van.
+- Daarnaast stopt een laad-run nu vanzelf als het laden elders al gestopt is (bv. door de laadcontrole), zodat runs zich niet meer kunnen opstapelen (EN en NL).
+
 **Terugleverprijs: saldering tot en met 2026, daarna zonder btw (schakelt vanzelf om op 1 januari 2027)**
 - **Saldering t/m 31-12-2026, daarna zonder** (geen keuze): elk kwartier dat vóór 1 januari 2027 00:00 begint telt met saldering, daarna zonder.
 - Zolang saldering geldt: terugleverprijs = marktprijs **met** btw + energiebelasting (incl. btw) + bonus + opslag. Via saldering krijg je de energiebelasting terug; die telde eerst niet mee. Gevolg: *niet terugleveren bij negatieve prijs* grijpt nu pas in als de marktprijs onder ongeveer −€ 0,11 zakt (eerst al onder € 0, terwijl terugleveren dan nog geld opleverde), en de besparing waardeert teruglevering hoger.

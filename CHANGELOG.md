@@ -4,6 +4,10 @@ Versions follow `year.month.sequence`; the sequence restarts at 1 every month. E
 
 ## 2026.11.7 (in development) — based on Gielz v20261113
 
+**Fix: night charging stopped every 2 minutes (EN set only)**
+- The charging check (since 2026.11.5) looked for the planner status `Charging`, but the English planner says `Charge`. As a result it stopped every charge after one minute and the charging branch restarted it two minutes later. Every restart left a waiting run behind, until the automation hit its maximum of parallel runs (*Maximum number of runs exceeded*) and, at the end of the slot, all waiting runs sent a stop to the Zendure at the same time (*Client error … /properties/write*). The Dutch set was not affected.
+- In addition, a charging run now ends by itself when charging was already stopped elsewhere (e.g. by the charging check), so runs can no longer pile up (EN and NL).
+
 **Feed-in price: Dutch net metering (salderingsregeling) until the end of 2026, then without VAT (switches by itself on 1 January 2027)**
 - **Net metering until 31-12-2026, then without** (no choice): every quarter hour that starts before 1 January 2027 00:00 counts with net metering, after that without. Outside the Netherlands: leave the energy tax at 0.
 - While net metering applies: feed-in price = market price **with** VAT + energy tax (incl. VAT) + bonus + markup. Through net metering you get the energy tax back; it did not count before. As a result *no export at negative price* now only steps in when the market price drops below about −€0.11 (before already below €0, while exporting still earned money), and the savings value export higher.
