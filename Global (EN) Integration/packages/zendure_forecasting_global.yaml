@@ -511,18 +511,40 @@ template:
         {%- set ib = ns.ib | unique | reject('in', ia) | list -%}{%- set eb = ns.eb | unique | reject('in', ea) | list -%}
         {{ {'i': {'options': ia + ib, 'fill': (ia[0] if ia | length == 1 else '') if ia | length > 0 else (ns.inet[0] if ib | length == 1 and ns.inet | length == 1 else '')},
             'e': {'options': ea + eb, 'fill': (ea[0] if ea | length == 1 else '') if ea | length > 0 else (ns.enet[0] if eb | length == 1 and ns.enet | length == 1 else '')}} }}
+      # Home energy meter sensor (Gielz's field, power in W, + = import, - = export).
+      # Preferred: a Zendure P1 meter via the local API (own REST sensor with 'zendure' and 'p1' in
+      # the name, e.g. sensor.p1_zendure_api). Then: HomeWizard P1 (integration, active power) and
+      # Shelly Pro 3EM (total active power). Filled in automatically only when Gielz's HomeWizard P1
+      # (via the IP address) gives no value, so Smart Matching does not switch source unasked.
+      k_p1w: >
+        {%- set ns = namespace(a=[], b=[]) -%}
+        {%- set eigen = ['sensor.homewizard_p1_power', 'sensor.home_energy_meter_power'] -%}
+        {%- for s in states.sensor if s.attributes.unit_of_measurement in ['W', 'kW'] and s.entity_id is search('p1') and s.entity_id is search('zendure') and s.entity_id not in eigen and not s.entity_id is search('^sensor\\.(forecast_|zendure_)') -%}
+          {%- set ns.a = ns.a + [s.entity_id] -%}
+        {%- endfor -%}
+        {%- for e in integration_entities('homewizard') | select('match', 'sensor\\..*_(power|vermogen)$') -%}
+          {%- if ((device_attr(device_id(e), 'model') or '') ~ '') | lower is search('p1') and state_attr(e, 'unit_of_measurement') in ['W', 'kW'] -%}{%- set ns.b = ns.b + [e] -%}{%- endif -%}
+        {%- endfor -%}
+        {%- for e in integration_entities('shelly') | select('match', 'sensor\\..*total_active_power$') -%}
+          {%- if ((device_attr(device_id(e), 'model') or '') ~ '') is search('EM') -%}{%- set ns.b = ns.b + [e] -%}{%- endif -%}
+        {%- endfor -%}
+        {%- set a = ns.a | unique | sort -%}{%- set b = ns.b | unique | sort | reject('in', a) | list -%}
+        {%- set hw_ok = states('sensor.homewizard_p1_power') not in ['unknown', 'unavailable', 'none', ''] -%}
+        {%- set hw_b = b | select('search', '_(power|vermogen)$') | reject('search', 'total_active') | list -%}
+        {{ {'options': a + b, 'fill': '' if hw_ok else ((a[0] if a | length == 1 else '') if a | length > 0 else (hw_b[0] if b | length == 1 and hw_b | length == 1 else ''))} }}
     sensor:
       - name: "Forecast Sensor Candidates"
         unique_id: forecast_sensor_candidates
         icon: mdi:magnify-scan
         state: >
-          {{ [k_solar_remaining.options | count, k_solar_tomorrow.options | count, k_solar_production.options | count, k_net.i.options | count, k_net.e.options | count] | select('gt', 1) | list | length }}
+          {{ [k_solar_remaining.options | count, k_solar_tomorrow.options | count, k_solar_production.options | count, k_net.i.options | count, k_net.e.options | count, k_p1w.options | count] | select('gt', 1) | list | length }}
         attributes:
           solar_remaining: "{{ k_solar_remaining }}"
           solar_tomorrow: "{{ k_solar_tomorrow }}"
           solar_production: "{{ k_solar_production }}"
           grid_import: "{{ k_net.i }}"
           grid_export: "{{ k_net.e }}"
+          p1_power: "{{ k_p1w }}"
   # Dropdowns when more than one sensor is found: choosing writes the sensor into the input field
   # (the field can still be changed by hand). Only available with more than one candidate.
   - select:
@@ -609,6 +631,23 @@ template:
           - action: input_text.set_value
             target:
               entity_id: input_text.forecast_setting_grid_export_counter_sensor
+            data:
+              value: "{{ option }}"
+      - name: "Forecast Choose Home Energy Meter Sensor"
+        unique_id: forecast_choose_home_energy_meter_sensor
+        icon: mdi:form-dropdown
+        availability: "{{ ((state_attr('sensor.forecast_sensor_candidates', 'p1_power') or {}).options or []) | length > 1 }}"
+        state: >
+          {%- set v = states('input_text.home_energy_setting_meter_sensor') | trim | lower | replace(' ', '') -%}
+          {{ v if v not in ['', 'unknown', 'unavailable'] else none }}
+        options: >
+          {%- set l = (state_attr('sensor.forecast_sensor_candidates', 'p1_power') or {}).options or [] -%}
+          {%- set v = states('input_text.home_energy_setting_meter_sensor') | trim | lower | replace(' ', '') -%}
+          {{ l + ([v] if v not in l and v not in ['', 'unknown', 'unavailable'] else []) }}
+        select_option:
+          - action: input_text.set_value
+            target:
+              entity_id: input_text.home_energy_setting_meter_sensor
             data:
               value: "{{ option }}"
   # Grid counters recognised automatically (field empty, P1 meter found): the dashboard then hides
@@ -3294,6 +3333,7 @@ automation:
           - input_text.forecast_setting_solar_production_sensor
           - input_text.forecast_setting_grid_import_counter_sensor
           - input_text.forecast_setting_grid_export_counter_sensor
+          - input_text.home_energy_setting_meter_sensor
         to: ''
     actions:
       - delay:
@@ -3305,6 +3345,7 @@ automation:
             - {key: solar_production, field: input_text.forecast_setting_solar_production_sensor, label: "Solar production sensor"}
             - {key: grid_import, field: input_text.forecast_setting_grid_import_counter_sensor, label: "Grid import counter"}
             - {key: grid_export, field: input_text.forecast_setting_grid_export_counter_sensor, label: "Grid export counter"}
+            - {key: p1_power, field: input_text.home_energy_setting_meter_sensor, label: "Home energy meter sensor"}
           sequence:
             - variables:
                 w: "{{ (state_attr('sensor.forecast_sensor_candidates', repeat.item.key) or {}).fill | default('', true) }}"

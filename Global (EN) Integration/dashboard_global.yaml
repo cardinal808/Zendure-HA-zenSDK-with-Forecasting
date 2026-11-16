@@ -4004,6 +4004,13 @@ views:
           - type: entities
             entities:
               - entity: input_text.home_energy_setting_meter_sensor
+              - type: conditional
+                conditions:
+                  - entity: select.forecast_choose_home_energy_meter_sensor
+                    state_not: unavailable
+                row:
+                  entity: select.forecast_choose_home_energy_meter_sensor
+                  name: ↳ Choose from the sensors found
               - entity: input_text.zendure_setting_battery_order
                 name: Battery Order
           - type: heading

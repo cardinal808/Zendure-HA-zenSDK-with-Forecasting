@@ -511,18 +511,40 @@ template:
         {%- set ib = ns.ib | unique | reject('in', ia) | list -%}{%- set eb = ns.eb | unique | reject('in', ea) | list -%}
         {{ {'i': {'opties': ia + ib, 'invullen': (ia[0] if ia | length == 1 else '') if ia | length > 0 else (ns.inet[0] if ib | length == 1 and ns.inet | length == 1 else '')},
             'e': {'opties': ea + eb, 'invullen': (ea[0] if ea | length == 1 else '') if ea | length > 0 else (ns.enet[0] if eb | length == 1 and ns.enet | length == 1 else '')}} }}
+      # Afwijkende P1 Sensor (veld van Gielz, vermogen in W, + = afname, - = teruglevering).
+      # Voorkeur: een Zendure P1-meter via de lokale API (zelfgemaakte REST-sensor met 'zendure' en 'p1'
+      # in de naam, bv. sensor.p1_zendure_api). Daarna: HomeWizard P1 (integratie, actief vermogen) en
+      # Shelly Pro 3EM (totaal actief vermogen). Automatisch invullen alleen als Gielz' HomeWizard P1
+      # (via het IP-adres) geen waarde geeft, zodat de NOM-sturing niet ongevraagd van bron wisselt.
+      k_p1w: >
+        {%- set ns = namespace(a=[], b=[]) -%}
+        {%- set eigen = ['sensor.homewizard_p1_vermogen', 'sensor.p1_aansturing_vermogen'] -%}
+        {%- for s in states.sensor if s.attributes.unit_of_measurement in ['W', 'kW'] and s.entity_id is search('p1') and s.entity_id is search('zendure') and s.entity_id not in eigen and not s.entity_id is search('^sensor\\.(forecast_|zendure_)') -%}
+          {%- set ns.a = ns.a + [s.entity_id] -%}
+        {%- endfor -%}
+        {%- for e in integration_entities('homewizard') | select('match', 'sensor\\..*_(power|vermogen)$') -%}
+          {%- if ((device_attr(device_id(e), 'model') or '') ~ '') | lower is search('p1') and state_attr(e, 'unit_of_measurement') in ['W', 'kW'] -%}{%- set ns.b = ns.b + [e] -%}{%- endif -%}
+        {%- endfor -%}
+        {%- for e in integration_entities('shelly') | select('match', 'sensor\\..*total_active_power$') -%}
+          {%- if ((device_attr(device_id(e), 'model') or '') ~ '') is search('EM') -%}{%- set ns.b = ns.b + [e] -%}{%- endif -%}
+        {%- endfor -%}
+        {%- set a = ns.a | unique | sort -%}{%- set b = ns.b | unique | sort | reject('in', a) | list -%}
+        {%- set hw_ok = states('sensor.homewizard_p1_vermogen') not in ['unknown', 'unavailable', 'none', ''] -%}
+        {%- set hw_b = b | select('search', '_(power|vermogen)$') | reject('search', 'total_active') | list -%}
+        {{ {'opties': a + b, 'invullen': '' if hw_ok else ((a[0] if a | length == 1 else '') if a | length > 0 else (hw_b[0] if b | length == 1 and hw_b | length == 1 else ''))} }}
     sensor:
       - name: "Forecast Sensor Kandidaten"
         unique_id: forecast_sensor_kandidaten
         icon: mdi:magnify-scan
         state: >
-          {{ [k_zon_resterend.opties | count, k_zon_morgen.opties | count, k_zon_productie.opties | count, k_net.i.opties | count, k_net.e.opties | count] | select('gt', 1) | list | length }}
+          {{ [k_zon_resterend.opties | count, k_zon_morgen.opties | count, k_zon_productie.opties | count, k_net.i.opties | count, k_net.e.opties | count, k_p1w.opties | count] | select('gt', 1) | list | length }}
         attributes:
           zon_resterend: "{{ k_zon_resterend }}"
           zon_morgen: "{{ k_zon_morgen }}"
           zon_productie: "{{ k_zon_productie }}"
           net_import: "{{ k_net.i }}"
           net_export: "{{ k_net.e }}"
+          p1_vermogen: "{{ k_p1w }}"
   # Keuzelijsten bij meer dan één gevonden sensor: kiezen schrijft de sensor in het invoerveld
   # (het veld blijft gewoon met de hand te wijzigen). Alleen beschikbaar bij meer dan één kandidaat.
   - select:
@@ -609,6 +631,23 @@ template:
           - action: input_text.set_value
             target:
               entity_id: input_text.forecast_net_export_teller_sensor
+            data:
+              value: "{{ option }}"
+      - name: "Forecast Kies Afwijkende P1 Sensor"
+        unique_id: forecast_kies_afwijkende_p1_sensor
+        icon: mdi:form-dropdown
+        availability: "{{ ((state_attr('sensor.forecast_sensor_kandidaten', 'p1_vermogen') or {}).opties or []) | length > 1 }}"
+        state: >
+          {%- set v = states('input_text.afwijkende_p1_sensor') | trim | lower | replace(' ', '') -%}
+          {{ v if v not in ['', 'unknown', 'unavailable'] else none }}
+        options: >
+          {%- set l = (state_attr('sensor.forecast_sensor_kandidaten', 'p1_vermogen') or {}).opties or [] -%}
+          {%- set v = states('input_text.afwijkende_p1_sensor') | trim | lower | replace(' ', '') -%}
+          {{ l + ([v] if v not in l and v not in ['', 'unknown', 'unavailable'] else []) }}
+        select_option:
+          - action: input_text.set_value
+            target:
+              entity_id: input_text.afwijkende_p1_sensor
             data:
               value: "{{ option }}"
   # Net-tellers automatisch herkend (veld leeg, P1-meter gevonden): het dashboard verbergt dan het
@@ -3293,6 +3332,7 @@ automation:
           - input_text.forecast_zon_productie_sensor
           - input_text.forecast_net_import_teller_sensor
           - input_text.forecast_net_export_teller_sensor
+          - input_text.afwijkende_p1_sensor
         to: ''
     actions:
       - delay:
@@ -3304,6 +3344,7 @@ automation:
             - {key: zon_productie, field: input_text.forecast_zon_productie_sensor, label: "Zonnepanelen productie sensor"}
             - {key: net_import, field: input_text.forecast_net_import_teller_sensor, label: "Net import teller"}
             - {key: net_export, field: input_text.forecast_net_export_teller_sensor, label: "Net export teller"}
+            - {key: p1_vermogen, field: input_text.afwijkende_p1_sensor, label: "Afwijkende P1 sensor"}
           sequence:
             - variables:
                 w: "{{ (state_attr('sensor.forecast_sensor_kandidaten', repeat.item.key) or {}).invullen | default('', true) }}"

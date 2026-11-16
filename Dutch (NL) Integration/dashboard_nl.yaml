@@ -4013,6 +4013,13 @@ views:
           - type: entities
             entities:
               - entity: input_text.afwijkende_p1_sensor
+              - type: conditional
+                conditions:
+                  - entity: select.forecast_kies_afwijkende_p1_sensor
+                    state_not: unavailable
+                row:
+                  entity: select.forecast_kies_afwijkende_p1_sensor
+                  name: ↳ Kies uit de gevonden sensoren
               - entity: input_text.zendure_2400_ac_batterij_volgorde
                 name: Batterij Volgorde
           - type: heading
