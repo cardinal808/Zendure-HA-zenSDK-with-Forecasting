@@ -26,6 +26,10 @@ Versions follow `year.month.sequence`; the sequence restarts at 1 every month. E
 - Plan card and *Collected data*: no template error any more when the planner does not exist yet (dashboard pasted before the restart); the plan then shows a notice.
 - Checked: all references to entities and attributes between the files, NL = EN, and the Gielz files only differ in the intended places (mode *Dynamic Smart Matching + Forecasting*, `pv_active` without pvStatus, EV/HVAC correction and dip block in Smart Matching, checks not in Forecasting mode).
 
+**Fix: hold between charge slots only with real charging (16-11)**
+- A full battery (98%) stayed in standby in the morning in an expensive quarter (€0.407), because a remainder of 0.24 kWh charging was planned at 13:15 (€0.357 / 84.5% efficiency = €0.423). What the battery supplies now is then not charged back but simply used earlier; the plan itself already counted on discharging.
+- Hold between charge slots now only applies with at least 0.5 kWh planned grid charging later (the same limit as smart hold), and the price now must be at least €0.01 below the charge price after loss.
+
 **Fix: solar bonus only in daylight, on bare market price + markup (like Zonneplan)**
 - The feed-in bonus (now **Solar bonus % (daytime)**) counted on the market price **including** VAT, all day. Zonneplan gives the solar bonus on the bare market price (without VAT) plus the sales fee, only between sunrise and sunset and only when that amount is positive.
 - Now: solar bonus = bonus % × max(bare market price + feed-in markup, 0), only while the sun is up (`sun.sun`; for quarter hours in the plan and the savings the middle of the quarter between sunrise and sunset).

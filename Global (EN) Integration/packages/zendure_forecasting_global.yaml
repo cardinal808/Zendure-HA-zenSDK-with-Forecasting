@@ -2726,10 +2726,16 @@ template:
       # Between charge slots: what the battery supplies now, a later planned slot charges back (with
       # loss). If the price now is lower than that slot after charge and discharge loss (slot price /
       # efficiency), buying directly is cheaper and the battery holds. Part of Smart hold (no loss).
+      # Only with at least c_hold_charge_min_kwh planned grid charging later: if only a remainder is
+      # planned (e.g. a 0.2 kWh top-up in an almost full battery), what the battery supplies now is
+      # not charged back but simply used earlier, and holding only leaves a full battery after the
+      # bridge. Here too the price now must be at least c_hold_min_difference lower.
       between_charge_hold: >
         {%- set later = chosen | selectattr('s', 'gt', now_ts) | list -%}
+        {%- set later_ac = [later | length * e_slot, planned_ac] | min -%}
         {{ is_state('input_boolean.forecast_setting_smart_hold', 'on') and prices_ok and price_now < 999 and not slot_now
-           and later | length > 0 and eff_rt > 0 and price_now < (later | map(attribute='v') | max) / eff_rt }}
+           and later | length > 0 and later_ac >= c_hold_charge_min_kwh and eff_rt > 0
+           and price_now < (later | map(attribute='v') | max) / eff_rt - c_hold_min_difference }}
       hold_discharge: "{{ (dip_hold or smart_hold or between_charge_hold) and not pd_discharge_now }}"
 
       # ---- Battery empty (for the dashboard) ------------------------------

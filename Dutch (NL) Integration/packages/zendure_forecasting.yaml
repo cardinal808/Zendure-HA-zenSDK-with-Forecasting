@@ -2723,10 +2723,16 @@ template:
       # Tussen laadslots: wat de accu nu levert, laadt een later gepland slot weer bij (met verlies).
       # Is de prijs nu lager dan dat slot na laad- en ontlaadverlies (prijs slot / rendement), dan is
       # direct inkopen goedkoper en houdt de accu vast. Hoort bij Slim vasthouden (kost geen verlies).
+      # Alleen bij minstens c_vasthouden_laden_min_kwh gepland netladen later: is er alleen een restje
+      # gepland (bv. 0,2 kWh bijladen in een bijna volle accu), dan wordt wat de accu nu levert niet
+      # bijgeladen maar gewoon eerder gebruikt, en levert vasthouden alleen een volle accu na de
+      # overbrugging op. Ook hier moet de prijs nu minstens c_vasthouden_min_verschil lager zijn.
       tussen_laden_vasthouden: >
         {%- set later = gekozen | selectattr('s', 'gt', nu_ts) | list -%}
+        {%- set later_ac = [later | length * e_slot, gepland_ac] | min -%}
         {{ is_state('input_boolean.forecast_slim_vasthouden', 'on') and prijzen_ok and prijs_nu < 999 and not slot_nu
-           and later | length > 0 and eff_rt > 0 and prijs_nu < (later | map(attribute='v') | max) / eff_rt }}
+           and later | length > 0 and later_ac >= c_vasthouden_laden_min_kwh and eff_rt > 0
+           and prijs_nu < (later | map(attribute='v') | max) / eff_rt - c_vasthouden_min_verschil }}
       ontladen_vasthouden: "{{ (dal_vasthouden or slim_vasthouden or tussen_laden_vasthouden) and not vo_ontladen_nu }}"
 
       # ---- Accu leeg (voor het dashboard) ----------------------------------

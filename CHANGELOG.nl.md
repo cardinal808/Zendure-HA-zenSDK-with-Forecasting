@@ -26,6 +26,10 @@ Versies volgen `jaar.maand.volgnummer`; het volgnummer begint elke maand bij 1. 
 - Plan-kaart en *Verzamelde gegevens*: geen templatefout meer als de planner nog niet bestaat (dashboard geplakt vóór de herstart); het plan toont dan een melding.
 - Gecontroleerd: alle verwijzingen naar entiteiten en attributen tussen de bestanden, NL = EN, en de Gielz-bestanden wijken alleen af op de bedoelde plekken (modus *Dynamisch NOM + Forecasting*, `pv_active` zonder pvStatus, EV/HVAC-correctie en dal-blokkade in NOM, controles niet in Forecasting-modus).
 
+**Fix: vasthouden tussen laadslots alleen bij echt bijladen (16-11)**
+- Een volle accu (98%) bleef 's ochtends in een duur kwartier (€0,407) in stand-by, omdat er om 13:15 een restje van 0,24 kWh bijladen gepland stond (€0,357 / 84,5% rendement = €0,423). Wat de accu nu levert, wordt dan niet bijgeladen maar gewoon eerder gebruikt; het plan zelf rekende ook al met ontladen.
+- Vasthouden tussen laadslots geldt nu pas bij minstens 0,5 kWh gepland netladen later (dezelfde grens als slim vasthouden), en de prijs nu moet minstens €0,01 onder de laadprijs na verlies liggen.
+
 **Fix: zonnebonus alleen overdag, over kale marktprijs + opslag (zoals Zonneplan)**
 - De bonus teruglevering (nu **Zonnebonus % (overdag)**) telde over de marktprijs **inclusief** btw en de hele dag. Zonneplan geeft de zonnebonus over de kale marktprijs (zonder btw) plus de verkoopvergoeding, alleen tussen zonsopkomst en zonsondergang en alleen als dat bedrag positief is.
 - Nu: zonnebonus = bonus % × max(kale marktprijs + opslag teruglevering, 0), alleen als de zon op is (`sun.sun`; voor kwartieren in de planning en de besparing het midden van het kwartier tussen zonsopkomst en zonsondergang).
