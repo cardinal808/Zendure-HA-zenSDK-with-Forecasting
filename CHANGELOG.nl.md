@@ -36,6 +36,15 @@ Versies volgen `jaar.maand.volgnummer`; het volgnummer begint elke maand bij 1. 
 - Plan-kaart en *Verzamelde gegevens*: geen templatefout meer als de planner nog niet bestaat (dashboard geplakt vóór de herstart); het plan toont dan een melding.
 - Gecontroleerd: alle verwijzingen naar entiteiten en attributen tussen de bestanden, NL = EN, en de Gielz-bestanden wijken alleen af op de bedoelde plekken (modus *Dynamisch NOM + Forecasting*, `pv_active` zonder pvStatus, EV/HVAC-correctie en dal-blokkade in NOM, controles niet in Forecasting-modus).
 
+**Dashboard rekent niet meer zelf (16-11)**
+- **Verbruik per weekdag** berekent de planner (attributen `verbruik_per_weekdag_kwh` en `profiel_weken_per_weekdag`), met dezelfde menging als het plan. De kaart *Verzamelde gegevens* en de grafiek *Verbruik per dag* lezen dat alleen nog (rekenden eerst elk zelf, en zonder de terugval op het daggemiddelde die het plan gebruikt).
+- **Plan-kaart:** wat het huis direct uit het net koopt (`direct_net_kwh`), het deel van de energiebalans dat niet wordt opgeslagen (`netladen_niet_opgeslagen_kwh`) en de gemiddelde terugleverprijs bij *Negatieve prijzen* (`vooraf_terugleverprijs`) en *Terugleveren vóór de zon* (`zonoverschot_terugleverprijs`) komen uit de planner.
+- **Nieuwe sensor `sensor.forecast_meldingen`** (aantal; attribuut `meldingen` met id, niveau en tekst): ontbrekende HACS-kaarten, nieuwe release, modus niet actief, zon-forecast niet beschikbaar, ingevuld veld zonder bestaande sensor. De plan-kaart toont deze lijst; de diagnose-export neemt hem op (`meta.meldingen`). Alleen het verschil tussen dashboard- en pakketversie controleert de kaart zelf.
+- **Besparing:** de tabel *Overzicht* leest de sensoren per periode (Vandaag, Deze Maand, Dit Jaar, totaal) in plaats van zelf uit de emmers te rekenen; nieuw attribuut `kosten_vast_zonder_zon_en_accu`.
+- **Kaart Optionele pakketten** gebruikt het attribuut `pakketten` van `sensor.forecasting_versie`.
+
+**Kalibratieladen standaard na 21 dagen** (was 14). Geldt voor nieuwe installaties en als het veld op 0 staat; een eerder ingestelde waarde blijft staan.
+
 **Fix: vasthouden tussen laadslots alleen bij echt bijladen (16-11)**
 - Een volle accu (98%) bleef 's ochtends in een duur kwartier (€0,407) in stand-by, omdat er om 13:15 een restje van 0,24 kWh bijladen gepland stond (€0,357 / 84,5% rendement = €0,423). Wat de accu nu levert, wordt dan niet bijgeladen maar gewoon eerder gebruikt; het plan zelf rekende ook al met ontladen.
 - Vasthouden tussen laadslots geldt nu pas bij minstens 0,5 kWh gepland netladen later (dezelfde grens als slim vasthouden), en de prijs nu moet minstens €0,01 onder de laadprijs na verlies liggen.

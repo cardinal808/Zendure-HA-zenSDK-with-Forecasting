@@ -323,6 +323,7 @@ template:
           dynamic_tariff: "{{ (buckets.total.solar_fixed - buckets.total.solar_dyn) | round(2) }}"
           battery_and_smart_charging: "{{ (buckets.total.solar_dyn - buckets.total.now_dyn - buckets.total.solar_batt) | round(2) }}"
           actual_costs: "{{ buckets.total.now_dyn | round(2) }}"
+          costs_fixed_without_solar_and_battery: "{{ buckets.total.none_fixed | round(2) }}"
           price_last_interval: "{{ p_dyn }}"
           market_price_last_interval: "{{ p_market }}"
           last_interval_settled: "{{ inc is mapping }}"
@@ -347,6 +348,7 @@ template:
           dynamic_tariff: "{{ (buckets.day.solar_fixed - buckets.day.solar_dyn) | round(2) }}"
           battery_and_smart_charging: "{{ (buckets.day.solar_dyn - buckets.day.now_dyn - buckets.day.solar_batt) | round(2) }}"
           actual_costs: "{{ buckets.day.now_dyn | round(2) }}"
+          costs_fixed_without_solar_and_battery: "{{ buckets.day.none_fixed | round(2) }}"
 
       - name: "Zendure Savings This Month"
         unique_id: zendure_savings_this_month
@@ -362,6 +364,7 @@ template:
           dynamic_tariff: "{{ (buckets.month.solar_fixed - buckets.month.solar_dyn) | round(2) }}"
           battery_and_smart_charging: "{{ (buckets.month.solar_dyn - buckets.month.now_dyn - buckets.month.solar_batt) | round(2) }}"
           actual_costs: "{{ buckets.month.now_dyn | round(2) }}"
+          costs_fixed_without_solar_and_battery: "{{ buckets.month.none_fixed | round(2) }}"
 
       - name: "Zendure Savings This Year"
         unique_id: zendure_savings_this_year
@@ -377,6 +380,7 @@ template:
           dynamic_tariff: "{{ (buckets.year.solar_fixed - buckets.year.solar_dyn) | round(2) }}"
           battery_and_smart_charging: "{{ (buckets.year.solar_dyn - buckets.year.now_dyn - buckets.year.solar_batt) | round(2) }}"
           actual_costs: "{{ buckets.year.now_dyn | round(2) }}"
+          costs_fixed_without_solar_and_battery: "{{ buckets.year.none_fixed | round(2) }}"
 
       # Battery payback time (savings by battery and smart charging, dynamic contract)
       - name: "Zendure Battery Payback Time"

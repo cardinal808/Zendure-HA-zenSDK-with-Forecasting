@@ -324,6 +324,7 @@ template:
           dynamische_tarief: "{{ (emmers.totaal.zon_vast - emmers.totaal.zon_dyn) | round(2) }}"
           accu_en_slim_laden: "{{ (emmers.totaal.zon_dyn - emmers.totaal.nu_dyn - emmers.totaal.zon_accu) | round(2) }}"
           werkelijke_kosten: "{{ emmers.totaal.nu_dyn | round(2) }}"
+          kosten_vast_zonder_zon_en_accu: "{{ emmers.totaal.geen_vast | round(2) }}"
           prijs_laatste_interval: "{{ p_dyn }}"
           marktprijs_laatste_interval: "{{ p_markt }}"
           laatste_interval_verrekend: "{{ inc is mapping }}"
@@ -348,6 +349,7 @@ template:
           dynamische_tarief: "{{ (emmers.dag.zon_vast - emmers.dag.zon_dyn) | round(2) }}"
           accu_en_slim_laden: "{{ (emmers.dag.zon_dyn - emmers.dag.nu_dyn - emmers.dag.zon_accu) | round(2) }}"
           werkelijke_kosten: "{{ emmers.dag.nu_dyn | round(2) }}"
+          kosten_vast_zonder_zon_en_accu: "{{ emmers.dag.geen_vast | round(2) }}"
 
       - name: "Zendure Besparing Deze Maand"
         unique_id: zendure_besparing_deze_maand
@@ -363,6 +365,7 @@ template:
           dynamische_tarief: "{{ (emmers.maand.zon_vast - emmers.maand.zon_dyn) | round(2) }}"
           accu_en_slim_laden: "{{ (emmers.maand.zon_dyn - emmers.maand.nu_dyn - emmers.maand.zon_accu) | round(2) }}"
           werkelijke_kosten: "{{ emmers.maand.nu_dyn | round(2) }}"
+          kosten_vast_zonder_zon_en_accu: "{{ emmers.maand.geen_vast | round(2) }}"
 
       - name: "Zendure Besparing Dit Jaar"
         unique_id: zendure_besparing_dit_jaar
@@ -378,6 +381,7 @@ template:
           dynamische_tarief: "{{ (emmers.jaar.zon_vast - emmers.jaar.zon_dyn) | round(2) }}"
           accu_en_slim_laden: "{{ (emmers.jaar.zon_dyn - emmers.jaar.nu_dyn - emmers.jaar.zon_accu) | round(2) }}"
           werkelijke_kosten: "{{ emmers.jaar.nu_dyn | round(2) }}"
+          kosten_vast_zonder_zon_en_accu: "{{ emmers.jaar.geen_vast | round(2) }}"
 
       # Terugverdientijd van de accu (besparing door accu en slim laden, dynamisch contract)
       - name: "Zendure Accu Terugverdientijd"

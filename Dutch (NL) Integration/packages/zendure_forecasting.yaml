@@ -65,7 +65,7 @@ input_number:
     unit_of_measurement: "%"
 
   # Kalibratieladen: na zoveel dagen zonder kalibratie (100%) laadt de planner de accu vol uit het net.
-  # Vanaf de helft wacht hij op een zonnige dag. 0 = standaard (14 dagen).
+  # Vanaf de helft wacht hij op een zonnige dag. 0 = standaard (21 dagen).
   forecast_kalibratie_dagen:
     name: Forecast Kalibratie Na Dagen
     icon: mdi:battery-sync
@@ -390,6 +390,56 @@ sensor:
     precision: 2
 
 template:
+  # Meldingen voor bovenaan de plan-kaart (en de diagnose-export): ontbrekende HACS-kaarten, nieuwe
+  # release, modus niet actief, zon-forecast niet beschikbaar, ingevulde velden die niet naar een
+  # bestaande sensor wijzen. State = aantal; attribuut meldingen = [{id, niveau, tekst}].
+  # Het verschil tussen dashboard- en pakketversie controleert de plan-kaart zelf.
+  - trigger:
+      - trigger: homeassistant
+        event: start
+      - trigger: time_pattern
+        minutes: "/1"
+      - trigger: state
+        entity_id:
+          - input_select.zendure_2400_ac_modus_selecteren
+          - input_text.forecast_zon_productie_sensor
+          - input_text.forecast_net_import_teller_sensor
+          - input_text.forecast_net_export_teller_sensor
+    variables:
+      m_lijst: >
+        {%- set ns = namespace(l=[]) -%}
+        {%- set hacs = integration_entities('hacs') -%}
+        {%- if hacs | length > 0 -%}
+          {%- set tekst = (hacs | map('state_attr', 'title') | map('string') | list + hacs | map('state_attr', 'friendly_name') | map('string') | list + hacs) | join(' ') | lower -%}
+          {%- set nk = namespace(l=[]) -%}
+          {%- for k in [['apexcharts', 'apexcharts-card (grafieken)'], ['card[-_ ]?mod', 'card-mod (opmaak van de tabellen)'], ['button[-_ ]?card', 'button-card (downloadknop diagnose-export)']] -%}
+            {%- if not tekst is search(k[0]) and (k[0] != 'button[-_ ]?card' or states('script.zendure_diagnose_export') != 'unknown') -%}{%- set nk.l = nk.l + [k[1]] -%}{%- endif -%}
+          {%- endfor -%}
+          {%- if nk.l | length > 0 -%}{%- set ns.l = ns.l + [{'id': 'kaarten', 'niveau': 'warning', 'tekst': 'Deze kaarten lijken niet geïnstalleerd: **' ~ nk.l | join(', ') ~ '**. Installeer ze via HACS (Frontend) en ververs de pagina. Zonder deze kaarten toont het dashboard foutmeldingen (*Custom element doesn\'t exist*).'}] -%}{%- endif -%}
+        {%- endif -%}
+        {%- if is_state('sensor.forecasting_releasecheck', 'Nieuwe release op GitHub') -%}{%- set ns.l = ns.l + [{'id': 'release', 'niveau': 'info', 'tekst': 'Er staat een nieuwe versie op GitHub: **' ~ state_attr('sensor.github_zendure_forecasting', 'tag_name') ~ '** (jij hebt ' ~ states('sensor.forecasting_versie') ~ '). Zie het tabblad **Releasenotes**.'}] -%}{%- endif -%}
+        {%- if states('input_select.zendure_2400_ac_modus_selecteren') != 'Dynamisch NOM + Forecasting' -%}{%- set ns.l = ns.l + [{'id': 'modus', 'niveau': 'info', 'tekst': 'Modus **Dynamisch NOM + Forecasting** is niet actief. Onderstaand plan is een simulatie.'}] -%}{%- endif -%}
+        {%- if state_attr('sensor.zendure_forecast_plan', 'zon_resterend_vandaag_sensor_ok') == false or state_attr('sensor.zendure_forecast_plan', 'zon_morgen_sensor_ok') == false -%}
+          {%- set ns.l = ns.l + [{'id': 'zon', 'niveau': 'warning', 'tekst': 'Een zon-forecast sensor is niet ingevuld of niet beschikbaar. Die zon wordt als 0 kWh gerekend (er wordt dan meer uit het net gepland).'}] -%}
+        {%- endif -%}
+        {%- set nv = namespace(l=[]) -%}
+        {%- for veld, naam in [['input_text.forecast_zon_productie_sensor', 'Zonnepanelen productie sensor'], ['input_text.forecast_net_import_teller_sensor', 'Net import teller'], ['input_text.forecast_net_export_teller_sensor', 'Net export teller']] -%}
+          {%- for e in (states(veld) | lower | replace(' ', '')).split(',') | reject('eq', '') -%}
+            {%- if e not in ['unknown', 'unavailable'] and (not e is match('^sensor\\.[a-z0-9_]+$') or (states(e) == 'unknown' and state_attr(e, 'friendly_name') is none)) -%}
+              {%- set nv.l = nv.l + [naam ~ ' (' ~ e ~ ')'] -%}
+            {%- endif -%}
+          {%- endfor -%}
+        {%- endfor -%}
+        {%- if nv.l | length > 0 -%}{%- set ns.l = ns.l + [{'id': 'velden', 'niveau': 'warning', 'tekst': 'Ingevuld veld wijst niet naar een bestaande sensor: ' ~ nv.l | join(', ') ~ '. Controleer het entiteit-ID (Instellingen → Entiteiten). Zonder geldige zonnepanelen-teller leert het verbruiksprofiel zonder zonproductie.'}] -%}{%- endif -%}
+        {{ ns.l }}
+    sensor:
+      - name: "Forecast Meldingen"
+        unique_id: forecast_meldingen
+        icon: mdi:message-alert-outline
+        state: "{{ m_lijst | length }}"
+        attributes:
+          meldingen: "{{ m_lijst }}"
+
   # ---- Sensor-herkenning ----
   # Zoekt sensoren die bij de invoervelden van Forecasting Configuratie (Basis) passen:
   #   zon resterend vandaag / zon morgen: Solcast (solcast_solar), daarna Helios Forecast
@@ -1577,7 +1627,7 @@ template:
       c_zo_min_kwh: 0.3                  # ontladen bij zonoverschot: pas vanaf zoveel kWh
       c_zo_marge_eur: 0.01               # ontladen bij zonoverschot: minimale winst per kWh na verlies
       c_vorm_n_vol_werkdag: 10           # vorm per kwartier telt volledig mee na zoveel complete uren (werkdag)
-      c_kalibratie_dagen: 14             # kalibratieladen: standaard na zoveel dagen zonder 100% netladen
+      c_kalibratie_dagen: 21             # kalibratieladen: standaard na zoveel dagen zonder 100% netladen
       c_dag_n_vol: 3                     # profiel per weekdag telt volledig mee na zoveel metingen (weken) van dat uur
       c_vorm_n_vol_weekend: 5            # idem weekend; daarvoor geleidelijk (minder metingen = dichter bij gelijk verdeeld)
 
@@ -1789,6 +1839,31 @@ template:
           {%- set ns.l = ns.l + [{'s': st, 'kw': kw | round(4), 'p': ok, 'wd': wd, 'dg': (wdg * 100) | round(0)}] -%}
         {%- endfor -%}
         {{ ns.l }}
+      # Verwacht verbruik per weekdag (kWh) en aantal gemeten weken van het weekdagprofiel, met
+      # dezelfde menging als uur_last (normale dag, geen feestdag). Voor de kaart Verzamelde
+      # gegevens en de grafiek Verbruik per dag, zodat die niet zelf rekenen.
+      verbruik_per_weekdag: >
+        {%- set ns = namespace(l=[], n=[]) -%}
+        {%- for d in range(7) -%}
+          {%- set wd = d < 5 -%}
+          {%- set prof = prof_wd if wd else prof_we -%}
+          {%- set pn = prof_n_wd if wd else prof_n_we -%}
+          {%- set nmin = 3 if wd else 2 -%}
+          {%- set pd = prof_dag[d] if prof_dag | length == 7 and prof_dag[d] | length == 24 else [] -%}
+          {%- set nt = namespace(t=0, w=0) -%}
+          {%- for h in range(24) -%}
+            {%- set heeft = prof | length == 24 and pn | length == 24 and prof[h] is not none -%}
+            {%- set n = (pn[h] | int(0)) if heeft else 0 -%}
+            {%- set ok = heeft and n >= nmin -%}
+            {%- set kw = (prof[h] | float(l_uur)) if ok else (((n * (prof[h] | float(l_uur)) + (nmin - n) * l_uur) / nmin) if heeft and n > 0 else l_uur) -%}
+            {%- set pdn = ((prof_n_dag[d][h] | int(0)) if prof_n_dag | length == 7 and prof_n_dag[d] | length == 24 else 0) if pd | length == 24 and pd[h] is not none else 0 -%}
+            {%- set wdg = [pdn / c_dag_n_vol, 1] | min -%}
+            {%- set kw = (wdg * (pd[h] | float(kw)) + (1 - wdg) * kw) if pdn > 0 else kw -%}
+            {%- set nt.t = nt.t + kw -%}{%- set nt.w = [nt.w, pdn] | max -%}
+          {%- endfor -%}
+          {%- set ns.l = ns.l + [nt.t | round(2)] -%}{%- set ns.n = ns.n + [[nt.w, c_dag_n_vol] | min] -%}
+        {%- endfor -%}
+        {{ {'kwh': ns.l, 'weken': ns.n} }}
       uur_last_eind_ts: "{{ (nu_ts // 3600) * 3600 + 52 * 3600 }}"
       profiel_aandeel: "{{ (uur_last[:24] | selectattr('p') | list | length / 24 * 100) | round(0) }}"
       verbruik_bron_uur: >
@@ -3005,6 +3080,10 @@ template:
           batterij_max_kwh: "{{ s_max }}"
           verwacht_batterijgebruik_kwh: "{{ need_bridge_ac }}"
           verwachte_zon_naar_batterij_kwh: "{{ zon_dc }}"
+          # Voor de plan-kaart: wat na accu, zon naar de accu en gepland laden (na verlies) direct
+          # uit het net komt, en hoeveel van de energiebalans niet wordt opgeslagen (rendementsfilter)
+          direct_net_kwh: "{{ ([need_bridge_ac - s_nu - zon_dc - gepland_ac * eff_rt, 0] | max) | round(2) }}"
+          netladen_niet_opgeslagen_kwh: "{{ ([netladen_ac - gepland_ac, 0] | max) | round(2) }}"
           zon_overschot_kwh: "{{ zon_overschot_ac }}"
           ev_overdag_van_zon_kwh: "{{ ev_overdag_kwh }}"
           overbruggen_tot: "{{ (t_end_ts | timestamp_custom('%Y-%m-%d %H:%M', true)) }}"
@@ -3109,10 +3188,12 @@ template:
           vooraf_terugleveren_nu: "{{ vo_terug_nu }}"
           vooraf_terugleveren_kwh: "{{ (vo_terug_slots | map(attribute='kwh') | sum) | round(2) }}"
           vooraf_terugleveren_slots: "{{ vo_terug_slots }}"
+          vooraf_terugleverprijs: "{{ ((vo_terug_slots | map(attribute='f') | sum) / (vo_terug_slots | length)) | round(4) if vo_terug_slots | length > 0 else none }}"
           zonoverschot_aan: "{{ zo_aan }}"
           zonoverschot_nu: "{{ zo_nu }}"
           zonoverschot_kwh: "{{ (zo_slots | map(attribute='kwh') | sum) | round(2) }}"
           zonoverschot_slots: "{{ zo_slots }}"
+          zonoverschot_terugleverprijs: "{{ ((zo_slots | map(attribute='f') | sum) / (zo_slots | length)) | round(4) if zo_slots | length > 0 else none }}"
           zonoverschot_zon_vanaf: "{{ zo_zon.s | timestamp_custom('%Y-%m-%d %H:%M', true) if zo_zon is mapping else none }}"
           zonoverschot_zon_kwh: "{{ zo_zon.kwh if zo_zon is mapping else none }}"
           zonoverschot_nodig_kwh: "{{ zo_nodig_ac }}"
@@ -3149,6 +3230,8 @@ template:
           vorm_kwartier_aandeel_pct: "{{ vorm_aandeel }}"
           verbruik_komende_24u_kwh: "{{ (uur_last[:24] | map(attribute='kw') | sum) | round(2) }}"
           historie_dagen: "{{ hist_dagen }}"
+          verbruik_per_weekdag_kwh: "{{ verbruik_per_weekdag.kwh }}"
+          profiel_weken_per_weekdag: "{{ verbruik_per_weekdag.weken }}"
           historie_7_dagen: "{{ {'prod7': prod7, 'imp7': imp7, 'exp7': exp7, 'exp_zon7': exp_zon7, 'laden7': laden7, 'ontladen7': ontladen7, 'laden_zon7': laden_zon7, 'ev7': ev7, 'ev_zon7': ev_zon7, 'hvac7': hvac7, 'hvac_zon7': hvac_zon7} }}"
           historie_7_dagen_vorige_waarde: "{{ hist_7_ontbreekt }}"
           marge_pct: "{{ marge_pct }}"
@@ -3369,7 +3452,7 @@ automation:
   - id: forecast_standaardwaarden
     alias: Forecast Standaardwaarden
     description: >-
-      Forecasting 2026.11.7 - Vult de standaardwaarde in als een veld op 0 staat (Kalibratie na dagen 14, Betrouwbaarheid zonvoorspelling 100%).
+      Forecasting 2026.11.7 - Vult de standaardwaarde in als een veld op 0 staat (Kalibratie na dagen 21, Betrouwbaarheid zonvoorspelling 100%).
     mode: queued
     max: 5
     triggers:
@@ -3385,7 +3468,7 @@ automation:
           seconds: 10
       - repeat:
           for_each:
-              - {e: input_number.forecast_kalibratie_dagen, v: 14}
+              - {e: input_number.forecast_kalibratie_dagen, v: 21}
               - {e: input_number.forecast_betrouwbaarheid, v: 100}
           sequence:
             - if:

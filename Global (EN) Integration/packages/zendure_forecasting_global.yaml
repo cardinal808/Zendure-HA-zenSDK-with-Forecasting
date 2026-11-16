@@ -65,7 +65,7 @@ input_number:
     unit_of_measurement: "%"
 
   # Calibration charging: after this many days without calibration (100%) the planner charges the
-  # battery full from the grid. From half of it, it waits for a sunny day. 0 = default (14 days).
+  # battery full from the grid. From half of it, it waits for a sunny day. 0 = default (21 days).
   forecast_setting_calibration_days:
     name: Forecast Calibration After Days
     icon: mdi:battery-sync
@@ -390,6 +390,56 @@ sensor:
     precision: 2
 
 template:
+  # Notices for the top of the plan card (and the diagnostics export): missing HACS cards, new
+  # release, mode not active, solar forecast not available, filled-in fields that do not point to
+  # an existing sensor. State = count; attribute notices = [{id, level, text}].
+  # The difference between dashboard and package version is checked by the plan card itself.
+  - trigger:
+      - trigger: homeassistant
+        event: start
+      - trigger: time_pattern
+        minutes: "/1"
+      - trigger: state
+        entity_id:
+          - input_select.zendure_operation_mode
+          - input_text.forecast_setting_solar_production_sensor
+          - input_text.forecast_setting_grid_import_counter_sensor
+          - input_text.forecast_setting_grid_export_counter_sensor
+    variables:
+      m_lijst: >
+        {%- set ns = namespace(l=[]) -%}
+        {%- set hacs = integration_entities('hacs') -%}
+        {%- if hacs | length > 0 -%}
+          {%- set tekst = (hacs | map('state_attr', 'title') | map('string') | list + hacs | map('state_attr', 'friendly_name') | map('string') | list + hacs) | join(' ') | lower -%}
+          {%- set nk = namespace(l=[]) -%}
+          {%- for k in [['apexcharts', 'apexcharts-card (charts)'], ['card[-_ ]?mod', 'card-mod (table layout)'], ['button[-_ ]?card', 'button-card (diagnostics export download button)']] -%}
+            {%- if not tekst is search(k[0]) and (k[0] != 'button[-_ ]?card' or states('script.zendure_diagnostics_export') != 'unknown') -%}{%- set nk.l = nk.l + [k[1]] -%}{%- endif -%}
+          {%- endfor -%}
+          {%- if nk.l | length > 0 -%}{%- set ns.l = ns.l + [{'id': 'kaarten', 'level': 'warning', 'text': 'These cards do not seem to be installed: **' ~ nk.l | join(', ') ~ '**. Install them via HACS (Frontend) and refresh the page. Without them the dashboard shows errors (*Custom element doesn\'t exist*).'}] -%}{%- endif -%}
+        {%- endif -%}
+        {%- if is_state('sensor.forecasting_release_check', 'New release on GitHub') -%}{%- set ns.l = ns.l + [{'id': 'release', 'level': 'info', 'text': 'A new version is on GitHub: **' ~ state_attr('sensor.github_zendure_forecasting', 'tag_name') ~ '** (you have ' ~ states('sensor.forecasting_version') ~ '). See the **Releasenotes** tab.'}] -%}{%- endif -%}
+        {%- if states('input_select.zendure_operation_mode') != 'Dynamic Smart Matching + Forecasting' -%}{%- set ns.l = ns.l + [{'id': 'modus', 'level': 'info', 'text': 'Mode **Dynamic Smart Matching + Forecasting** is not active. The plan below is a simulation.'}] -%}{%- endif -%}
+        {%- if state_attr('sensor.zendure_forecast_plan', 'solar_remaining_today_sensor_ok') == false or state_attr('sensor.zendure_forecast_plan', 'solar_tomorrow_sensor_ok') == false -%}
+          {%- set ns.l = ns.l + [{'id': 'zon', 'level': 'warning', 'text': 'A solar forecast sensor is not filled in or not available. That solar is counted as 0 kWh (more grid charging will be planned).'}] -%}
+        {%- endif -%}
+        {%- set nv = namespace(l=[]) -%}
+        {%- for veld, naam in [['input_text.forecast_setting_solar_production_sensor', 'Solar panels production sensor'], ['input_text.forecast_setting_grid_import_counter_sensor', 'Grid import counter'], ['input_text.forecast_setting_grid_export_counter_sensor', 'Grid export counter']] -%}
+          {%- for e in (states(veld) | lower | replace(' ', '')).split(',') | reject('eq', '') -%}
+            {%- if e not in ['unknown', 'unavailable'] and (not e is match('^sensor\\.[a-z0-9_]+$') or (states(e) == 'unknown' and state_attr(e, 'friendly_name') is none)) -%}
+              {%- set nv.l = nv.l + [naam ~ ' (' ~ e ~ ')'] -%}
+            {%- endif -%}
+          {%- endfor -%}
+        {%- endfor -%}
+        {%- if nv.l | length > 0 -%}{%- set ns.l = ns.l + [{'id': 'velden', 'level': 'warning', 'text': 'Filled-in field does not point to an existing sensor: ' ~ nv.l | join(', ') ~ '. Check the entity ID (Settings → Entities). Without a valid solar panel counter the usage profile learns without solar production.'}] -%}{%- endif -%}
+        {{ ns.l }}
+    sensor:
+      - name: "Forecast Notices"
+        unique_id: forecast_notices
+        icon: mdi:message-alert-outline
+        state: "{{ m_lijst | length }}"
+        attributes:
+          notices: "{{ m_lijst }}"
+
   # ---- Sensor detection ----
   # Looks for sensors that fit the input fields of Forecasting Configuration (Basic):
   #   solar remaining today / solar tomorrow: Solcast (solcast_solar), then Forecast.Solar
@@ -1576,7 +1626,7 @@ template:
       c_sx_min_kwh: 0.3                  # discharge at solar surplus: only from this many kWh
       c_sx_margin_eur: 0.01              # discharge at solar surplus: minimum gain per kWh after losses
       c_shape_n_full_workday: 10         # shape per quarter counts fully after this many complete hours (workday)
-      c_calibration_days: 14             # calibration charging: default after this many days without 100%
+      c_calibration_days: 21             # calibration charging: default after this many days without 100%
       c_day_n_full: 3                    # profile per weekday counts fully after this many measurements (weeks) of that hour
       c_shape_n_full_weekend: 5          # same for weekends; before that gradually (fewer measurements = closer to even)
 
@@ -1789,6 +1839,31 @@ template:
           {%- set ns.l = ns.l + [{'s': st, 'kw': kw | round(4), 'p': ok, 'wd': wd, 'dg': (wdg * 100) | round(0)}] -%}
         {%- endfor -%}
         {{ ns.l }}
+      # Expected usage per weekday (kWh) and number of measured weeks of the weekday profile, with
+      # the same mixing as hour_load (normal day, no holiday). For the card Collected data and the
+      # chart Usage per day, so they do not calculate themselves.
+      usage_per_weekday: >
+        {%- set ns = namespace(l=[], n=[]) -%}
+        {%- for d in range(7) -%}
+          {%- set wd = d < 5 -%}
+          {%- set prof = prof_wd if wd else prof_we -%}
+          {%- set pn = prof_n_wd if wd else prof_n_we -%}
+          {%- set nmin = 3 if wd else 2 -%}
+          {%- set pd = prof_day[d] if prof_day | length == 7 and prof_day[d] | length == 24 else [] -%}
+          {%- set nt = namespace(t=0, w=0) -%}
+          {%- for h in range(24) -%}
+            {%- set heeft = prof | length == 24 and pn | length == 24 and prof[h] is not none -%}
+            {%- set n = (pn[h] | int(0)) if heeft else 0 -%}
+            {%- set ok = heeft and n >= nmin -%}
+            {%- set kw = (prof[h] | float(l_hour)) if ok else (((n * (prof[h] | float(l_hour)) + (nmin - n) * l_hour) / nmin) if heeft and n > 0 else l_hour) -%}
+            {%- set pdn = ((prof_n_day[d][h] | int(0)) if prof_n_day | length == 7 and prof_n_day[d] | length == 24 else 0) if pd | length == 24 and pd[h] is not none else 0 -%}
+            {%- set wdg = [pdn / c_day_n_full, 1] | min -%}
+            {%- set kw = (wdg * (pd[h] | float(kw)) + (1 - wdg) * kw) if pdn > 0 else kw -%}
+            {%- set nt.t = nt.t + kw -%}{%- set nt.w = [nt.w, pdn] | max -%}
+          {%- endfor -%}
+          {%- set ns.l = ns.l + [nt.t | round(2)] -%}{%- set ns.n = ns.n + [[nt.w, c_day_n_full] | min] -%}
+        {%- endfor -%}
+        {{ {'kwh': ns.l, 'weeks': ns.n} }}
       hour_load_end_ts: "{{ (now_ts // 3600) * 3600 + 52 * 3600 }}"
       profile_share: "{{ (hour_load[:24] | selectattr('p') | list | length / 24 * 100) | round(0) }}"
       usage_source_hour: >
@@ -3006,6 +3081,10 @@ template:
           battery_max_kwh: "{{ s_max }}"
           expected_battery_usage_kwh: "{{ need_bridge_ac }}"
           expected_solar_to_battery_kwh: "{{ solar_dc }}"
+          # For the plan card: what comes directly from the grid after battery, solar to the battery
+          # and planned charging (after loss), and how much of the energy balance is not stored
+          direct_grid_kwh: "{{ ([need_bridge_ac - s_now - solar_dc - planned_ac * eff_rt, 0] | max) | round(2) }}"
+          grid_charge_not_stored_kwh: "{{ ([grid_total_ac - planned_ac, 0] | max) | round(2) }}"
           solar_surplus_kwh: "{{ solar_surplus_ac }}"
           ev_daytime_from_solar_kwh: "{{ ev_daytime_kwh }}"
           bridge_until: "{{ (t_end_ts | timestamp_custom('%Y-%m-%d %H:%M', true)) }}"
@@ -3110,10 +3189,12 @@ template:
           pre_discharge_export_now: "{{ pd_export_now }}"
           pre_discharge_export_kwh: "{{ (pd_export_slots | map(attribute='kwh') | sum) | round(2) }}"
           pre_discharge_export_slots: "{{ pd_export_slots }}"
+          pre_discharge_export_price: "{{ ((pd_export_slots | map(attribute='f') | sum) / (pd_export_slots | length)) | round(4) if pd_export_slots | length > 0 else none }}"
           solar_surplus_on: "{{ sx_on }}"
           solar_surplus_now: "{{ sx_now }}"
           solar_surplus_export_kwh: "{{ (sx_slots | map(attribute='kwh') | sum) | round(2) }}"
           solar_surplus_slots: "{{ sx_slots }}"
+          solar_surplus_export_price: "{{ ((sx_slots | map(attribute='f') | sum) / (sx_slots | length)) | round(4) if sx_slots | length > 0 else none }}"
           solar_surplus_sun_from: "{{ sx_solar.s | timestamp_custom('%Y-%m-%d %H:%M', true) if sx_solar is mapping else none }}"
           solar_surplus_sun_kwh: "{{ sx_solar.kwh if sx_solar is mapping else none }}"
           solar_surplus_need_kwh: "{{ sx_need_ac }}"
@@ -3150,6 +3231,8 @@ template:
           shape_quarter_share_pct: "{{ shape_share }}"
           usage_next_24h_kwh: "{{ (hour_load[:24] | map(attribute='kw') | sum) | round(2) }}"
           history_days: "{{ hist_days }}"
+          usage_per_weekday_kwh: "{{ usage_per_weekday.kwh }}"
+          profile_weeks_per_weekday: "{{ usage_per_weekday.weeks }}"
           history_7_days: "{{ {'prod7': prod7, 'imp7': imp7, 'exp7': exp7, 'exp_solar7': exp_solar7, 'charge7': charge7, 'discharge7': discharge7, 'charge_solar7': charge_solar7, 'ev7': ev7, 'ev_solar7': ev_solar7, 'hvac7': hvac7, 'hvac_solar7': hvac_solar7} }}"
           history_7_days_previous_value: "{{ hist_7_missing }}"
           margin_pct: "{{ margin_pct }}"
@@ -3369,7 +3452,7 @@ automation:
   - id: forecast_default_values
     alias: Forecast Default Values
     description: >-
-      Forecasting 2026.11.7 - Fills in the default value when a field is 0 (Calibration after days 14, Solar forecast reliability 100%).
+      Forecasting 2026.11.7 - Fills in the default value when a field is 0 (Calibration after days 21, Solar forecast reliability 100%).
     mode: queued
     max: 5
     triggers:
@@ -3385,7 +3468,7 @@ automation:
           seconds: 10
       - repeat:
           for_each:
-              - {e: input_number.forecast_setting_calibration_days, v: 14}
+              - {e: input_number.forecast_setting_calibration_days, v: 21}
               - {e: input_number.forecast_setting_solar_reliability, v: 100}
           sequence:
             - if:

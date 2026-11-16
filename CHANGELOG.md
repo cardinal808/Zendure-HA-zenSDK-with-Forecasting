@@ -36,6 +36,15 @@ Versions follow `year.month.sequence`; the sequence restarts at 1 every month. E
 - Plan card and *Collected data*: no template error any more when the planner does not exist yet (dashboard pasted before the restart); the plan then shows a notice.
 - Checked: all references to entities and attributes between the files, NL = EN, and the Gielz files only differ in the intended places (mode *Dynamic Smart Matching + Forecasting*, `pv_active` without pvStatus, EV/HVAC correction and dip block in Smart Matching, checks not in Forecasting mode).
 
+**Dashboard no longer calculates itself (16-11)**
+- **Usage per weekday** is calculated by the planner (attributes `usage_per_weekday_kwh` and `profile_weeks_per_weekday`), with the same blending as the plan. The card *Collected data* and the chart *Usage per day* only read it (each calculated it themselves before, and without the fallback to the day average the plan uses).
+- **Plan card:** what the house buys directly from the grid (`direct_grid_kwh`), the part of the energy balance that is not stored (`grid_charge_not_stored_kwh`) and the average feed-in price for *Negative prices* (`pre_discharge_export_price`) and *Export before the sun* (`solar_surplus_export_price`) come from the planner.
+- **New sensor `sensor.forecast_notices`** (count; attribute `notices` with id, level and text): missing HACS cards, new release, mode not active, solar forecast not available, filled-in field without an existing sensor. The plan card shows this list; the diagnostics export includes it (`meta.notices`). Only the difference between dashboard and package version is checked by the card itself.
+- **Savings:** the *Overview* table reads the sensors per period (Today, This Month, This Year, total) instead of calculating from the buckets; new attribute `costs_fixed_without_solar_and_battery`.
+- **Card Optional packages** uses the `packages` attribute of `sensor.forecasting_version`.
+
+**Calibration charging by default after 21 days** (was 14). Applies to new installations and when the field is 0; a value set earlier stays.
+
 **Fix: hold between charge slots only with real charging (16-11)**
 - A full battery (98%) stayed in standby in the morning in an expensive quarter (€0.407), because a remainder of 0.24 kWh charging was planned at 13:15 (€0.357 / 84.5% efficiency = €0.423). What the battery supplies now is then not charged back but simply used earlier; the plan itself already counted on discharging.
 - Hold between charge slots now only applies with at least 0.5 kWh planned grid charging later (the same limit as smart hold), and the price now must be at least €0.01 below the charge price after loss.

@@ -272,6 +272,7 @@ script:
                    'pakketten': state_attr('sensor.forecasting_versie', 'pakketten'),
                    'home_assistant': state_attr('update.home_assistant_core_update', 'installed_version'),
                    'tijdzone': now().tzname(),
+                   'meldingen': state_attr('sensor.forecast_meldingen', 'meldingen') or [],
                    'ontbrekende_helpers': bestaat_niet.h,
                    'ingevuld_maar_bestaat_niet': bestaat_niet.e
                  },
