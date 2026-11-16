@@ -392,7 +392,8 @@ sensor:
 template:
   # ---- Sensor-herkenning ----
   # Zoekt sensoren die bij de invoervelden van Forecasting Configuratie (Basis) passen:
-  #   zon resterend vandaag / zon morgen: Solcast (solcast_solar), daarna Forecast.Solar
+  #   zon resterend vandaag / zon morgen: Solcast (solcast_solar), daarna Helios Forecast
+  #     (energy_today_remaining / energy_day_2), daarna Forecast.Solar
   #   zonnepanelen-teller: omvormer-integraties (SolarEdge, Enphase, Growatt, SMA, Huawei, Fronius,
   #     GoodWe, ...) met een totaal-teller in kWh; daarna HomeWizard/Shelly-meters met zon/pv in de naam
   #   net-tellers: HomeWizard P1, DSMR, P1 Monitor, SlimmeLezer (ESPHome), DSMR Reader; daarna
@@ -412,24 +413,31 @@ template:
       zn: "(zon|pv|solar|omvormer|inverter|panel|paneel)"
       # Zon-forecast: Solcast, anders Forecast.Solar (kWh-sensoren)
       zf: >
-        {%- set ns = namespace(sc=[], fs=[]) -%}
+        {%- set ns = namespace(sc=[], fs=[], he=[]) -%}
         {%- for e in integration_entities('solcast_solar') | select('match', 'sensor\\.') -%}
           {%- if state_attr(e, 'unit_of_measurement') in ['kWh', 'Wh', 'MWh'] -%}{%- set ns.sc = ns.sc + [e] -%}{%- endif -%}
         {%- endfor -%}
         {%- for e in integration_entities('forecast_solar') | select('match', 'sensor\\.') -%}
           {%- if state_attr(e, 'unit_of_measurement') in ['kWh', 'Wh', 'MWh'] -%}{%- set ns.fs = ns.fs + [e] -%}{%- endif -%}
         {%- endfor -%}
-        {{ {'sc': ns.sc | sort, 'fs': ns.fs | sort} }}
+        {%- for e in integration_entities('helios_forecast') | select('match', 'sensor\\.') -%}
+          {%- if state_attr(e, 'unit_of_measurement') in ['kWh', 'Wh', 'MWh'] -%}{%- set ns.he = ns.he + [e] -%}{%- endif -%}
+        {%- endfor -%}
+        {{ {'sc': ns.sc | sort, 'fs': ns.fs | sort, 'he': ns.he | sort} }}
       k_zon_resterend: >
         {%- set x = '(peak|piek|power|vermogen)' -%}
         {%- set a = zf.sc | select('search', '(remaining|resterend|rest_)') | reject('search', x) | list -%}
+        {%- set h = zf.he | select('search', '_energy_today_remaining$') | list -%}
         {%- set b = zf.fs | select('search', '(remaining|resterend|rest_)') | reject('search', x) | list -%}
-        {{ {'opties': a + b, 'invullen': (a[0] if a | length == 1 else '') if a | length > 0 else (b[0] if b | length == 1 else '')} }}
+        {%- set g = a if a | length > 0 else (h if h | length > 0 else b) -%}
+        {{ {'opties': a + h + b, 'invullen': g[0] if g | length == 1 else ''} }}
       k_zon_morgen: >
         {%- set x = '(peak|piek|power|vermogen)' -%}
         {%- set a = zf.sc | select('search', '(tomorrow|morgen)') | reject('search', x) | list -%}
+        {%- set h = zf.he | select('search', '_energy_day_2$') | list -%}
         {%- set b = zf.fs | select('search', '(tomorrow|morgen)') | reject('search', x) | list -%}
-        {{ {'opties': a + b, 'invullen': (a[0] if a | length == 1 else '') if a | length > 0 else (b[0] if b | length == 1 else '')} }}
+        {%- set g = a if a | length > 0 else (h if h | length > 0 else b) -%}
+        {{ {'opties': a + h + b, 'invullen': g[0] if g | length == 1 else ''} }}
       # Zonnepanelen-teller: totaal-teller (kWh, total/total_increasing) van een omvormer-integratie
       k_zon_productie: >
         {%- set ja = '(lifetime|total|totaal|yield|opbrengst|productie|production|e_total|energy_total|ac_energy)' -%}
@@ -2009,8 +2017,49 @@ template:
       # goedkoper zijn dan de inkoop in het gat. Hij werkt ook als er nog geen enkel
       # gewoon laadslot gepland is, en gebruikt ook de prijzen van morgen zodra die bekend zijn.
 
+      # Helios Forecast (helios_forecast): de curve per kwartier staat in het attribuut 'forecast'
+      # (datetime, watts) van de "Power now"-sensor van hetzelfde apparaat. Omgezet naar perioden van
+      # een half uur in dezelfde vorm als Solcast (period_start, pv_estimate in kW), zodat de planner
+      # er hetzelfde mee rekent. Alleen als een van de zon-velden een sensor van Helios Forecast is.
+      helios_detail: >
+        {%- set e1 = states('input_text.forecast_zon_resterend_vandaag_sensor') | trim -%}
+        {%- set e2 = states('input_text.forecast_zon_morgen_sensor') | trim -%}
+        {%- set he = integration_entities('helios_forecast') -%}
+        {%- set nb = namespace(bron='') -%}
+        {%- for e in [e1, e2] -%}
+          {%- if nb.bron == '' and e in he -%}
+            {%- set p = e | regex_replace('_energy_(today_remaining|day_\\d+|this_hour|next_hour)$', '_power_now') -%}
+            {%- if p != e and state_attr(p, 'forecast') is not none -%}{%- set nb.bron = p -%}
+            {%- else -%}
+              {#- Hernoemde entiteit: de sensor met het attribuut 'forecast' op hetzelfde apparaat -#}
+              {%- set dv = device_id(e) -%}
+              {%- for s in (device_entities(dv) if dv else []) | select('match', '^sensor\\.') -%}
+                {%- if nb.bron == '' and state_attr(s, 'forecast') is not none -%}{%- set nb.bron = s -%}{%- endif -%}
+              {%- endfor -%}
+            {%- endif -%}
+          {%- endif -%}
+        {%- endfor -%}
+        {%- set ns = namespace(l=[], cur=-1, som=0, n=0) -%}
+        {%- if nb.bron != '' -%}
+          {%- for p in (state_attr(nb.bron, 'forecast') or []) | list + [{'datetime': '', 'watts': none}] -%}
+            {%- set ts = as_timestamp(p.datetime, 0) if p is mapping and p.datetime is defined and p.datetime else 0 -%}
+            {%- set s = ((ts // 1800) * 1800) | int if ts > 0 else -2 -%}
+            {%- if s != ns.cur -%}
+              {%- if ns.n > 0 -%}
+                {%- set ns.l = ns.l + [{'period_start': ns.cur | timestamp_custom('%Y-%m-%dT%H:%M:%S+00:00', false), 'pv_estimate': (ns.som / ns.n / 1000) | round(3)}] -%}
+              {%- endif -%}
+              {%- set ns.cur = s -%}{%- set ns.som = 0 -%}{%- set ns.n = 0 -%}
+            {%- endif -%}
+            {%- if ts > nu_ts - 3600 and ts < nu_ts + 180000 and p.watts is number -%}
+              {%- set ns.som = ns.som + p.watts -%}{%- set ns.n = ns.n + 1 -%}
+            {%- endif -%}
+          {%- endfor -%}
+        {%- endif -%}
+        {{ ns.l }}
+
       # Zon-dekking: vanaf wanneer dekt de zon het verbruik?
-      # Uit de detailvoorspelling (Solcast: attribuut detailedForecast, kW per half uur)
+      # Uit de detailvoorspelling (Solcast: attribuut detailedForecast, kW per half uur;
+      # Helios Forecast: helios_detail hierboven)
       # van de ingevulde sensoren en van de "_today"-variant van de resterend-vandaag-sensor.
       # Alleen de eerstvolgende zondag telt (tot de volgende zonsondergang).
       zon_ondergang_ts: "{{ as_timestamp(state_attr('sun.sun', 'next_setting'), nu_ts + 43200) }}"
@@ -2018,13 +2067,13 @@ template:
         {%- set e1 = states('input_text.forecast_zon_resterend_vandaag_sensor') | trim -%}
         {%- set e2 = states('input_text.forecast_zon_morgen_sensor') | trim -%}
         {%- set ns = namespace(l=[], ts=[], ids=[]) -%}
-        {#- Dag-sensor met detail bij de resterend-vandaag-sensor (EN- en NL-namen van Solcast), en alle Solcast-sensoren als vangnet -#}
+        {#- Dag-sensor met detail bij de resterend-vandaag-sensor (EN- en NL-namen van Solcast), alle Solcast-sensoren als vangnet, en Helios Forecast -#}
         {%- set e_vandaag = [e1 | replace('_remaining_today', '_today'), e1 | replace('_resterende_voorspelling_vandaag', '_voorspelling_vandaag')] -%}
         {%- set solcast = (integration_entities('solcast_solar') | select('match', '^sensor\\.') | list) if (e1 ~ e2) is search('solcast') else [] -%}
-        {%- for e in [e1] + e_vandaag + [e2] + solcast -%}
-          {%- if e | lower | regex_match('^sensor\\..+') and e not in ns.ids -%}
+        {%- for e in [e1] + e_vandaag + [e2] + solcast + (['helios'] if helios_detail | length > 0 else []) -%}
+          {%- if (e == 'helios' or e | lower | regex_match('^sensor\\..+')) and e not in ns.ids -%}
             {%- set ns.ids = ns.ids + [e] -%}
-            {%- set d = state_attr(e, 'detailedForecast') or state_attr(e, 'detailed_forecast') or [] -%}
+            {%- set d = helios_detail if e == 'helios' else (state_attr(e, 'detailedForecast') or state_attr(e, 'detailed_forecast') or []) -%}
             {%- for p in d -%}
               {%- if p is mapping and p.period_start is defined -%}
                 {%- set ps = as_timestamp(p.period_start, 0) -%}
@@ -2116,13 +2165,13 @@ template:
         {%- set e2 = states('input_text.forecast_zon_morgen_sensor') | trim -%}
         {%- set ns = namespace(l=[], ts=[], ids=[]) -%}
         {%- if not zon_dag_is_vandaag -%}
-          {#- Dag-sensor met detail bij de resterend-vandaag-sensor (EN- en NL-namen van Solcast), en alle Solcast-sensoren als vangnet -#}
+          {#- Dag-sensor met detail bij de resterend-vandaag-sensor (EN- en NL-namen van Solcast), alle Solcast-sensoren als vangnet, en Helios Forecast -#}
           {%- set e_vandaag = [e1 | replace('_remaining_today', '_today'), e1 | replace('_resterende_voorspelling_vandaag', '_voorspelling_vandaag')] -%}
           {%- set solcast = (integration_entities('solcast_solar') | select('match', '^sensor\\.') | list) if (e1 ~ e2) is search('solcast') else [] -%}
-          {%- for e in [e2] + e_vandaag + [e1] + solcast -%}
-            {%- if e | lower | regex_match('^sensor\\..+') and e not in ns.ids -%}
+          {%- for e in [e2] + e_vandaag + [e1] + solcast + (['helios'] if helios_detail | length > 0 else []) -%}
+            {%- if (e == 'helios' or e | lower | regex_match('^sensor\\..+')) and e not in ns.ids -%}
               {%- set ns.ids = ns.ids + [e] -%}
-              {%- set d = state_attr(e, 'detailedForecast') or state_attr(e, 'detailed_forecast') or [] -%}
+              {%- set d = helios_detail if e == 'helios' else (state_attr(e, 'detailedForecast') or state_attr(e, 'detailed_forecast') or []) -%}
               {%- for p in d -%}
                 {%- if p is mapping and p.period_start is defined -%}
                   {%- set ps = as_timestamp(p.period_start, 0) -%}
@@ -2858,13 +2907,13 @@ template:
         {%- set e1 = states('input_text.forecast_zon_resterend_vandaag_sensor') | trim -%}
         {%- set e2 = states('input_text.forecast_zon_morgen_sensor') | trim -%}
         {%- set ns = namespace(l=[], ts=[], ids=[]) -%}
-        {#- Dag-sensor met detail bij de resterend-vandaag-sensor (EN- en NL-namen van Solcast), en alle Solcast-sensoren als vangnet -#}
+        {#- Dag-sensor met detail bij de resterend-vandaag-sensor (EN- en NL-namen van Solcast), alle Solcast-sensoren als vangnet, en Helios Forecast -#}
         {%- set e_vandaag = [e1 | replace('_remaining_today', '_today'), e1 | replace('_resterende_voorspelling_vandaag', '_voorspelling_vandaag')] -%}
         {%- set solcast = (integration_entities('solcast_solar') | select('match', '^sensor\\.') | list) if (e1 ~ e2) is search('solcast') else [] -%}
-        {%- for e in [e1] + e_vandaag + [e2] + solcast -%}
-          {%- if e | lower | regex_match('^sensor\\..+') and e not in ns.ids -%}
+        {%- for e in [e1] + e_vandaag + [e2] + solcast + (['helios'] if helios_detail | length > 0 else []) -%}
+          {%- if (e == 'helios' or e | lower | regex_match('^sensor\\..+')) and e not in ns.ids -%}
             {%- set ns.ids = ns.ids + [e] -%}
-            {%- set d = state_attr(e, 'detailedForecast') or state_attr(e, 'detailed_forecast') or [] -%}
+            {%- set d = helios_detail if e == 'helios' else (state_attr(e, 'detailedForecast') or state_attr(e, 'detailed_forecast') or []) -%}
             {%- for q in d -%}
               {%- if q is mapping and q.period_start is defined -%}
                 {%- set ps = as_timestamp(q.period_start, 0) -%}

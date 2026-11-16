@@ -4,6 +4,12 @@ Versies volgen `jaar.maand.volgnummer`; het volgnummer begint elke maand bij 1. 
 
 ## 2026.11.7 (in ontwikkeling) — gebaseerd op Gielz v20261113
 
+**Helios Forecast als zonvoorspelling, met detail per kwartier**
+- [Helios Forecast](https://github.com/ReikanYsora/Helios-Forecast) werkt nu net zo goed als Solcast. Vul bij **Zon resterend vandaag** `sensor.<naam>_energy_today_remaining` in en bij **Zon morgen** `sensor.<naam>_energy_day_2` (day 1 is vandaag, day 2 is morgen).
+- De planner haalt de curve per kwartier uit het attribuut `forecast` van de *Power now*-sensor van hetzelfde Helios-apparaat (`sensor.<naam>_power_now`, ook als die hernoemd is) en zet die om naar halve uren, zoals Solcast. Daardoor weten de pad-check (*zon dekt vanaf*), vooraf ontladen, ontladen bij zonoverschot en de Plan Tijdlijn ook met Helios hoe laat de zon het verbruik dekt. Eerst viel de planner terug op *zonsopkomst + 3 uur*.
+- Sensor-herkenning: Helios Forecast wordt gevonden na Solcast en vóór Forecast.Solar.
+- Tip: Helios corrigeert zichzelf met je gemeten opbrengst. Laat **Betrouwbaarheid zonvoorspelling** daarom op 100%, anders corrigeer je dubbel.
+
 **Fix: nachtladen stopte elke 2 minuten (alleen de EN-set)**
 - De laadcontrole (sinds 2026.11.5) keek in de Engelse automation naar de planner-status `Charging`, maar de Engelse planner zegt `Charge`. Daardoor stopte hij elke lading na een minuut en startte de laadtak hem twee minuten later opnieuw. Elke herstart liet een wachtende run achter, tot de automation zijn maximum aan parallelle runs bereikte (*Maximum number of runs exceeded*) en aan het eind van het slot alle wachtende runs tegelijk een stop naar de Zendure stuurden (*Client error … /properties/write*). De Nederlandse set had hier geen last van.
 - Daarnaast stopt een laad-run nu vanzelf als het laden elders al gestopt is (bv. door de laadcontrole), zodat runs zich niet meer kunnen opstapelen (EN en NL).

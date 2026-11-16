@@ -774,7 +774,7 @@ views:
             heading_style: title
           - type: markdown
             content: >-
-              <ha-alert alert-type="info">Helptekst</ha-alert>Voorspelling per prijsslot voor de komende 36 uur. Prijs (kleuren zoals Gielz): blauw = gepland laden uit het net, rood = duur (duurste periodes van Gielz), grijs = overig, lichtgrijs = prijs nog onbekend. Accu: blauw = laden uit het net, geel = laden uit zon, oranje = ontladen; witte lijn = laadpercentage (0–100%). Net: blauw = accu laden uit het net, paars = huis uit het net, grijs = teruglevering. Het laden van morgen is indicatief; de dal-blokkade zit niet in deze voorspelling. Zon alleen met een Solcast-detailvoorspelling.
+              <ha-alert alert-type="info">Helptekst</ha-alert>Voorspelling per prijsslot voor de komende 36 uur. Prijs (kleuren zoals Gielz): blauw = gepland laden uit het net, rood = duur (duurste periodes van Gielz), grijs = overig, lichtgrijs = prijs nog onbekend. Accu: blauw = laden uit het net, geel = laden uit zon, oranje = ontladen; witte lijn = laadpercentage (0–100%). Net: blauw = accu laden uit het net, paars = huis uit het net, grijs = teruglevering. Het laden van morgen is indicatief; de dal-blokkade zit niet in deze voorspelling. Zon alleen met een detailvoorspelling (Solcast of Helios Forecast).
 
 
               Let op: mod-card (card-mod, HACS) benodigd.
@@ -4089,11 +4089,11 @@ views:
             content: >-
               <ha-alert alert-type="info">Helptekst</ha-alert>Voor de modus
               **Dynamisch NOM + Forecasting**. Vul de entity_id in van je
-              zon-forecast sensors (kWh, bv. Forecast.Solar of Solcast) en van
+              zon-forecast sensors (kWh, bv. Solcast, Helios Forecast of Forecast.Solar) en van
               een totaalteller (kWh) van je zonnepanelen. Zelfverbruik zon en
               dagverbruik worden vanaf dag 1 automatisch berekend uit je eigen
-              metingen en worden elke dag nauwkeuriger (tot 7 dagen). Solcast of
-              Forecast.Solar vult de set zelf in als het veld leeg is. **Extra planner
+              metingen en worden elke dag nauwkeuriger (tot 7 dagen). Solcast, Helios
+              Forecast of Forecast.Solar vult de set zelf in als het veld leeg is. **Extra planner
               laadmarge**: een extra buffer bovenop wat de planner nodig vindt, als
               percentage van de batterijcapaciteit. De kWh-tellers van je netmeter worden automatisch herkend
               (SlimmeLezer, HomeWizard, DSMR-integratie); je ziet dan welke sensor hij gebruikt. Heb je een andere meter, bv.
@@ -4109,7 +4109,7 @@ views:
               100%. Vanaf de helft van dit aantal dagen wacht de planner op een
               zonnige dag; daarna laadt hij de accu vol uit het net (goedkoopste
               kwartieren). **Kalibratieladen** staat standaard aan. **Sensoren**: de set zoekt
-              zelf naar Solcast / Forecast.Solar, de teller van je omvormer en je P1-meter
+              zelf naar Solcast / Helios Forecast / Forecast.Solar, de teller van je omvormer en je P1-meter
               (HomeWizard, DSMR, P1 Monitor, SlimmeLezer, DSMR Reader, Shelly). Vindt hij er
               precies één, dan vult hij een leeg veld zelf in; vindt hij er meer, kies dan in de
               keuzelijst **↳ Kies uit de gevonden sensoren** onder het veld. Je kunt het veld

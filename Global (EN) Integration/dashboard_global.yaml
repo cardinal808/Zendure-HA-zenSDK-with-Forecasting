@@ -774,7 +774,7 @@ views:
             heading_style: title
           - type: markdown
             content: >-
-              <ha-alert alert-type="info">Help</ha-alert>Forecast per price slot for the next 36 hours. Price (colours as in Gielz): blue = planned grid charging, red = expensive (Gielz's most expensive periods), grey = other, light grey = price not known yet. Battery: blue = charging from the grid, yellow = charging from solar, orange = discharging; white line = state of charge (0–100%). Grid: blue = battery charging from the grid, purple = house from the grid, grey = export. Tomorrow's charging is indicative; the cheap-dip hold is not part of this forecast. Solar only with a Solcast detailed forecast.
+              <ha-alert alert-type="info">Help</ha-alert>Forecast per price slot for the next 36 hours. Price (colours as in Gielz): blue = planned grid charging, red = expensive (Gielz's most expensive periods), grey = other, light grey = price not known yet. Battery: blue = charging from the grid, yellow = charging from solar, orange = discharging; white line = state of charge (0–100%). Grid: blue = battery charging from the grid, purple = house from the grid, grey = export. Tomorrow's charging is indicative; the cheap-dip hold is not part of this forecast. Solar only with a detailed forecast (Solcast or Helios Forecast).
 
 
               Note: needs mod-card (card-mod, HACS).
@@ -4082,11 +4082,11 @@ views:
             content: >-
               <ha-alert alert-type="info">Help text</ha-alert>For the mode
               **Dynamic Smart Matching + Forecasting**. Enter the entity_id of your
-              solar forecast sensors (kWh, e.g. Forecast.Solar or Solcast) and of
+              solar forecast sensors (kWh, e.g. Solcast, Helios Forecast or Forecast.Solar) and of
               a total counter (kWh) of your solar panels. Solar self-consumption
               and daily usage are calculated automatically from day 1 from your own
               measurements and get more accurate every day (up to 7 days). The set
-              fills in Solcast or Forecast.Solar itself when the field is empty.
+              fills in Solcast, Helios Forecast or Forecast.Solar itself when the field is empty.
               **Extra planner charge margin**: an extra buffer on top of what the
               planner needs, as a percentage of the battery capacity. The kWh
               counters of your grid meter are detected automatically (SlimmeLezer,
@@ -4103,7 +4103,7 @@ views:
               From half this number of days the planner waits for a sunny day;
               after that it charges the battery full from the grid (cheapest
               quarter hours). **Calibration charging** is on by default. **Sensors**: the set
-              looks for Solcast / Forecast.Solar, the counter of your inverter and your P1
+              looks for Solcast / Helios Forecast / Forecast.Solar, the counter of your inverter and your P1
               meter (HomeWizard, DSMR, P1 Monitor, SlimmeLezer, DSMR Reader, Shelly). If it finds
               exactly one, it fills an empty field itself; if it finds more, choose in the
               dropdown **↳ Choose from the sensors found** below the field. You can always

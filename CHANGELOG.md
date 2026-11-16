@@ -4,6 +4,12 @@ Versions follow `year.month.sequence`; the sequence restarts at 1 every month. E
 
 ## 2026.11.7 (in development) — based on Gielz v20261113
 
+**Helios Forecast as solar forecast, with detail per quarter hour**
+- [Helios Forecast](https://github.com/ReikanYsora/Helios-Forecast) now works just as well as Solcast. Enter `sensor.<name>_energy_today_remaining` at **Solar remaining today** and `sensor.<name>_energy_day_2` at **Solar tomorrow** (day 1 is today, day 2 is tomorrow).
+- The planner takes the curve per quarter hour from the attribute `forecast` of the *Power now* sensor of the same Helios device (`sensor.<name>_power_now`, also when renamed) and converts it to half hours, like Solcast. With Helios, the path check (*solar covers from*), pre-discharge, discharge at solar surplus and the Plan Timeline now also know when solar covers the usage. Before, the planner fell back to *sunrise + 3 hours*.
+- Sensor detection: Helios Forecast is found after Solcast and before Forecast.Solar.
+- Tip: Helios corrects itself with your measured yield. Leave **Solar forecast reliability** at 100%, otherwise you correct twice.
+
 **Fix: night charging stopped every 2 minutes (EN set only)**
 - The charging check (since 2026.11.5) looked for the planner status `Charging`, but the English planner says `Charge`. As a result it stopped every charge after one minute and the charging branch restarted it two minutes later. Every restart left a waiting run behind, until the automation hit its maximum of parallel runs (*Maximum number of runs exceeded*) and, at the end of the slot, all waiting runs sent a stop to the Zendure at the same time (*Client error … /properties/write*). The Dutch set was not affected.
 - In addition, a charging run now ends by itself when charging was already stopped elsewhere (e.g. by the charging check), so runs can no longer pile up (EN and NL).
