@@ -4045,6 +4045,13 @@ views:
           - type: entities
             entities:
               - entity: input_text.dynamisch_nordpool_sensor
+              - type: conditional
+                conditions:
+                  - entity: select.forecast_kies_dynamisch_nordpool_sensor
+                    state_not: unavailable
+                row:
+                  entity: select.forecast_kies_dynamisch_nordpool_sensor
+                  name: ↳ Kies uit de gevonden sensoren
               - entity: input_number.dynamisch_export_correctie
                 name: Export Correctie
               - entity: input_number.dynamisch_minimale_spread

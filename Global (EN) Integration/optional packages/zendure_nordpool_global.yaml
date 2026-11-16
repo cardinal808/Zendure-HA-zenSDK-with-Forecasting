@@ -9,7 +9,8 @@
 #
 # 1. All-in price for supply = (market price + energy tax + supplier markup) x (1 + VAT)
 #    -> sensor.nordpool_kwh_nl_eur_5_09_0
-#    Enter it in Gielz Configuration (Dynamic), field Dynamic Nordpool Sensor.
+#    Filled in automatically in Gielz Configuration (Dynamic), field Dynamic Nordpool Sensor
+#    (when empty; sensor detection in the forecasting package).
 #    Then leave Dynamic Supply Markup (Savings) at 0.
 # 2. Bare market price including VAT, for export
 #    -> sensor.nordpool_kwh_nl_eur_5_10_021
@@ -18,8 +19,8 @@
 #    You only pay energy tax and markup for supply, not for export.
 #    The VAT does not need to come out: the feed-in price (negative price package) removes it
 #    itself when net metering ends (1-1-2027) and until then adds the energy tax of this package.
-#    If you set VAT: False on sensor 2 anyway (entity sensor.nordpool_kwh_nl_eur_5_10_0), choose
-#    at Negative Price: Market price sensor is Excluding VAT.
+#    If you set VAT: False on sensor 2 anyway (entity sensor.nordpool_kwh_nl_eur_5_10_0), the set
+#    sees that from the name (_0 = without VAT).
 #
 # Check the names after a restart in Developer tools > States.
 # Enter the amounts in Forecasting Configuration (Nordpool) excluding VAT (the sensor adds the VAT).

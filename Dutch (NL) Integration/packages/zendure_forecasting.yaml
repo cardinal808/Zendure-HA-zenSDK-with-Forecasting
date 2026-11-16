@@ -532,12 +532,24 @@ template:
         {%- set hw_ok = states('sensor.homewizard_p1_vermogen') not in ['unknown', 'unavailable', 'none', ''] -%}
         {%- set hw_b = b | select('search', '_(power|vermogen)$') | reject('search', 'total_active') | list -%}
         {{ {'opties': a + b, 'invullen': '' if hw_ok else ((a[0] if a | length == 1 else '') if a | length > 0 else (hw_b[0] if b | length == 1 and hw_b | length == 1 else ''))} }}
+      # Dynamisch Nordpool Sensor (veld van Gielz, all-in leveringsprijs met raw_today/raw_tomorrow).
+      # Voorkeur: sensor.nordpool_kwh_nl_eur_5_09_0 uit het Nordpool-pakket van deze set. Daarna andere
+      # sensoren van de Nord Pool-integratie (HACS) met raw_today, behalve de kale marktprijs-sensoren
+      # van het Nordpool-pakket (5_10_021 / 5_10_0, die zijn voor de teruglevering).
+      k_np: >
+        {%- set eigen = 'sensor.nordpool_kwh_nl_eur_5_09_0' -%}
+        {%- set a = [eigen] if states(eigen) not in ['unknown', 'unavailable'] else [] -%}
+        {%- set ns = namespace(b=[]) -%}
+        {%- for e in integration_entities('nordpool') | select('match', 'sensor\\.') | sort -%}
+          {%- if e not in a and not e is match('sensor\\.nordpool_kwh_nl_eur_5_10_') and state_attr(e, 'raw_today') is not none -%}{%- set ns.b = ns.b + [e] -%}{%- endif -%}
+        {%- endfor -%}
+        {{ {'opties': a + ns.b, 'invullen': a[0] if a | length > 0 else (ns.b[0] if ns.b | length == 1 else '')} }}
     sensor:
       - name: "Forecast Sensor Kandidaten"
         unique_id: forecast_sensor_kandidaten
         icon: mdi:magnify-scan
         state: >
-          {{ [k_zon_resterend.opties | count, k_zon_morgen.opties | count, k_zon_productie.opties | count, k_net.i.opties | count, k_net.e.opties | count, k_p1w.opties | count] | select('gt', 1) | list | length }}
+          {{ [k_zon_resterend.opties | count, k_zon_morgen.opties | count, k_zon_productie.opties | count, k_net.i.opties | count, k_net.e.opties | count, k_p1w.opties | count, k_np.opties | count] | select('gt', 1) | list | length }}
         attributes:
           zon_resterend: "{{ k_zon_resterend }}"
           zon_morgen: "{{ k_zon_morgen }}"
@@ -545,6 +557,7 @@ template:
           net_import: "{{ k_net.i }}"
           net_export: "{{ k_net.e }}"
           p1_vermogen: "{{ k_p1w }}"
+          nordpool: "{{ k_np }}"
   # Keuzelijsten bij meer dan één gevonden sensor: kiezen schrijft de sensor in het invoerveld
   # (het veld blijft gewoon met de hand te wijzigen). Alleen beschikbaar bij meer dan één kandidaat.
   - select:
@@ -648,6 +661,23 @@ template:
           - action: input_text.set_value
             target:
               entity_id: input_text.afwijkende_p1_sensor
+            data:
+              value: "{{ option }}"
+      - name: "Forecast Kies Dynamisch Nordpool Sensor"
+        unique_id: forecast_kies_dynamisch_nordpool_sensor
+        icon: mdi:form-dropdown
+        availability: "{{ ((state_attr('sensor.forecast_sensor_kandidaten', 'nordpool') or {}).opties or []) | length > 1 }}"
+        state: >
+          {%- set v = states('input_text.dynamisch_nordpool_sensor') | trim | lower | replace(' ', '') -%}
+          {{ v if v not in ['', 'unknown', 'unavailable'] else none }}
+        options: >
+          {%- set l = (state_attr('sensor.forecast_sensor_kandidaten', 'nordpool') or {}).opties or [] -%}
+          {%- set v = states('input_text.dynamisch_nordpool_sensor') | trim | lower | replace(' ', '') -%}
+          {{ l + ([v] if v not in l and v not in ['', 'unknown', 'unavailable'] else []) }}
+        select_option:
+          - action: input_text.set_value
+            target:
+              entity_id: input_text.dynamisch_nordpool_sensor
             data:
               value: "{{ option }}"
   # Net-tellers automatisch herkend (veld leeg, P1-meter gevonden): het dashboard verbergt dan het
@@ -3333,6 +3363,7 @@ automation:
           - input_text.forecast_net_import_teller_sensor
           - input_text.forecast_net_export_teller_sensor
           - input_text.afwijkende_p1_sensor
+          - input_text.dynamisch_nordpool_sensor
         to: ''
     actions:
       - delay:
@@ -3345,6 +3376,7 @@ automation:
             - {key: net_import, field: input_text.forecast_net_import_teller_sensor, label: "Net import teller"}
             - {key: net_export, field: input_text.forecast_net_export_teller_sensor, label: "Net export teller"}
             - {key: p1_vermogen, field: input_text.afwijkende_p1_sensor, label: "Afwijkende P1 sensor"}
+            - {key: nordpool, field: input_text.dynamisch_nordpool_sensor, label: "Dynamisch Nordpool sensor"}
           sequence:
             - variables:
                 w: "{{ (state_attr('sensor.forecast_sensor_kandidaten', repeat.item.key) or {}).invullen | default('', true) }}"

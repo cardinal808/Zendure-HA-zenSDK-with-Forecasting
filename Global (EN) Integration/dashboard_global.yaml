@@ -4038,6 +4038,13 @@ views:
           - type: entities
             entities:
               - entity: input_text.dynamic_setting_nordpool_sensor
+              - type: conditional
+                conditions:
+                  - entity: select.forecast_choose_dynamic_nordpool_sensor
+                    state_not: unavailable
+                row:
+                  entity: select.forecast_choose_dynamic_nordpool_sensor
+                  name: ↳ Choose from the sensors found
               - entity: input_number.dynamic_export_correction
                 name: Export Correction
               - entity: input_number.dynamic_setting_minimal_spread

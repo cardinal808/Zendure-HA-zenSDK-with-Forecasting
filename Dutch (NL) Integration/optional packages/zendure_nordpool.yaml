@@ -9,7 +9,8 @@
 #
 # 1. All-in prijs voor levering = (marktprijs + energiebelasting + opslag leverancier) x (1 + btw)
 #    -> sensor.nordpool_kwh_nl_eur_5_09_0
-#    Invullen bij Gielz Configuratie (Dynamisch), veld Dynamisch Nordpool Sensor.
+#    Wordt automatisch ingevuld bij Gielz Configuratie (Dynamisch), veld Dynamisch Nordpool Sensor
+#    (als dat leeg is; sensor-herkenning in het forecasting-pakket).
 #    Laat dan Dynamisch Opslag Levering (Besparing) op 0 staan.
 # 2. Kale marktprijs inclusief btw, voor teruglevering
 #    -> sensor.nordpool_kwh_nl_eur_5_10_021
@@ -18,8 +19,8 @@
 #    Energiebelasting en opslag betaal je alleen bij levering, niet bij teruglevering.
 #    De btw hoeft er niet uit: de terugleverprijs (negatieve-prijspakket) haalt hem er zelf uit
 #    zodra de saldering stopt (1-1-2027) en telt tot dan de energiebelasting van dit pakket mee.
-#    Zet je toch VAT: False bij sensor 2 (entiteit sensor.nordpool_kwh_nl_eur_5_10_0), kies dan
-#    bij Negatieve Prijs: Marktprijs sensor is Zonder btw.
+#    Zet je toch VAT: False bij sensor 2 (entiteit sensor.nordpool_kwh_nl_eur_5_10_0), dan ziet de set
+#    dat aan de naam (_0 = zonder btw).
 #
 # Controleer de namen na een herstart bij Ontwikkelhulpmiddelen > Statussen.
 # Vul in Forecasting Configuratie (Nordpool) de bedragen in, zonder btw (de btw rekent de sensor erbij):
