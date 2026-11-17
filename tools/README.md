@@ -33,9 +33,12 @@ python3 tools/scenario_sim.py export.json                  # alle scenario's
 python3 tools/scenario_sim.py export.json omni1_60 --log   # één scenario, met elk kwartier
 git show HEAD~1:"Dutch (NL) Integration/packages/zendure_forecasting.yaml" > /tmp/oud.yaml
 python3 tools/scenario_sim.py export.json --yaml /tmp/oud.yaml   # oude planner
+python3 tools/scenario_sim.py export.json --regels               # regeltests over 54 situaties
 ```
 
-Kolommen: netto kosten van het plan, van het optimum, het verschil, het aantal laadstarts, kWh uit het net geladen en de lading aan het eind. Alleen de NL-planner (de scenario's zetten NL-entiteiten).
+Kolommen: netto kosten van het plan, van het optimum, het verschil, het aantal laadstarts, kWh uit het net geladen, de lading aan het eind en het aantal kwartieren *Laden* met een volle accu. De lading die overblijft telt mee tegen wat hij minstens uitspaart (goedkoopste prijs × ontlaadrendement).
+
+Met `--regels` draait de planner los over 54 situaties (accu 5,76 / 11,52 kWh, laadstand 10 / 50 / 90%, drie prijsvormen, 07:00 / 14:30 / 22:00) en toetst: (A) 25% meer verbruik boekt nooit minder netladen, (B) geen gekozen laadslot is na verlies duurder dan elke latere prijs, (C) een kwartier later opnieuw plannen met de verwachte laadstand geeft dezelfde laadslots. Alleen afwijkingen worden getoond. Alleen de NL-planner (de scenario's zetten NL-entiteiten).
 
 ## Beperkingen
 

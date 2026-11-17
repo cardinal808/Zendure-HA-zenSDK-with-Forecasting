@@ -4266,6 +4266,8 @@ views:
               charging is still needed. **Smart hold**: if the battery won't last until
               the sun or the next charge moment, it keeps its charge for the most
               expensive quarter hours (no extra loss; on by default).
+              Apart from that the battery always holds between two charge slots when
+              supplying now and charging back later with loss costs more than buying now.
               **Reliability per month**: a separate solar forecast correction per
               month (0 = the general value); after a month ends the set fills in the measured value for
               next year. **Calibration after days**: the Zendure calibrates at 100%.

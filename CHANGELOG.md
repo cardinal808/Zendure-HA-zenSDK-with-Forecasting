@@ -13,10 +13,12 @@ Versions follow `year.month.sequence`; the sequence restarts at 1 every month. E
 **Path check: charging limited by the room at that moment, not the room now**
 - Allocating charge slots to expensive quarter hours capped the total at the room the battery has *now*. Charging in the afternoon for the evening peak and at night for the morning peak then shared that room, and the night used it up (prompted by Omnibattery 2.0, discussion #865). The planner now runs the battery content per price slot (usage out, solar in) and a charge slot may only fill up to the room until the expensive quarter it serves. New variables `path_slots` and `path_base`.
 - **Smart hold looks up to the next planned charging** (`sh_end_ts`): the charge of now goes to the most expensive quarter hours before that charging. Before, any charging planned before the end of the gap (also the night after the evening peak) turned smart hold off completely.
+- **Holding between charge slots is independent of *Smart hold*:** what the battery supplies now and is charged back later with loss always costs more than buying now; the switch also turned that off. With the switch off, the battery supplied during the day and then charged back again and again (prompted by Omnibattery 2.0).
+- **At an equal price the latest quarter before the peak:** at exactly equal prices the allocation chose the earliest quarter; the battery then sat full for hours and was topped up again and again.
 - Closed loop (`tools/scenario_sim.py`), net cost old → new (optimum): afternoon + night at 60% €5.94 → €5.74 (€5.74), at 20% €6.71 → €6.49 (€6.49), at 95% €5.11 → €5.08 (€5.08); three tariffs with smart hold unchanged at the optimum.
 
 **Tools**
-- `tools/scenario_sim.py`: closed-loop simulation per quarter hour on synthetic scenarios, compared with the optimum (dynamic programming).
+- `tools/scenario_sim.py`: closed-loop simulation per quarter hour on synthetic scenarios, compared with the optimum (dynamic programming), and `--regels`: rule tests over 54 situations (more usage → never less charging, no loss-making slot, plan stable after a quarter hour).
 
 ## 2026.11.7 — based on Gielz v20261113
 

@@ -2484,7 +2484,8 @@ template:
         {%- set ts = path_slots | map(attribute='s') | list -%}
         {%- for b in path_base -%}{%- set ns.free = ns.free + [[s_max - b, 0] | max] -%}{%- endfor -%}
         {%- if path_active and e_slot > 0 and eff_rt > 0 and eff_in > 0 -%}
-          {%- set charge_cand = path_slots | sort(attribute='v') -%}
+          {#- Cheapest first; at an equal price the latest quarter (closer to the peak: the battery sits full for less time) -#}
+          {%- set charge_cand = path_slots | sort(attribute='s', reverse=true) | sort(attribute='v') -%}
           {%- for q in gap_with_margin | sort(attribute='v', reverse=true) -%}
             {%- set nq = namespace(need=q.kwh / eff_rt) -%}
             {%- set iq = ts.index(q.s) if q.s in ts else 0 -%}
@@ -2960,15 +2961,17 @@ template:
       # Pre-discharge comes first: no hold in the quarter hours above the threshold price
       # Between charge slots: what the battery supplies now, a later planned slot charges back (with
       # loss). If the price now is lower than that slot after charge and discharge loss (slot price /
-      # efficiency), buying directly is cheaper and the battery holds. Part of Smart hold (no loss).
+      # efficiency), buying directly is cheaper and the battery holds (no loss).
       # Only with at least c_hold_charge_min_kwh planned grid charging later: if only a remainder is
       # planned (e.g. a 0.2 kWh top-up in an almost full battery), what the battery supplies now is
       # not charged back but simply used earlier, and holding only leaves a full battery after the
       # bridge. Here too the price now must be at least c_hold_min_difference lower.
+      # Independent of the Smart hold switch (since 2026.11.8): it only prevents loss (supplying first
+      # and then charging back with loss) and costs nothing itself.
       between_charge_hold: >
         {%- set later = chosen | selectattr('s', 'gt', now_ts) | list -%}
         {%- set later_ac = [later | length * e_slot, planned_ac] | min -%}
-        {{ is_state('input_boolean.forecast_setting_smart_hold', 'on') and prices_ok and price_now < 999 and not slot_now
+        {{ prices_ok and price_now < 999 and not slot_now
            and later | length > 0 and later_ac >= c_hold_charge_min_kwh and eff_rt > 0
            and price_now < (later | map(attribute='v') | max) / eff_rt - c_hold_min_difference }}
       # Limit for holding between charge slots (for the decision log): most expensive later slot / efficiency

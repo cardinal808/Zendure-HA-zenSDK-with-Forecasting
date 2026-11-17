@@ -4272,6 +4272,8 @@ views:
               bijgeladen moet worden. **Slim vasthouden**: haalt de accu het niet tot
               de zon of het volgende laadmoment, dan bewaart hij zijn lading voor de
               duurste kwartieren (kost geen extra verlies; staat standaard aan).
+              Los daarvan houdt de accu altijd vast tussen twee laadslots als nu
+              leveren en later met verlies bijladen duurder is dan nu inkopen.
               **Betrouwbaarheid per maand**: per maand een eigen correctie van de
               zonvoorspelling (0 = de algemene waarde); na afloop van een maand vult de set de gemeten waarde
               in voor volgend jaar. **Kalibratie na dagen**: de Zendure kalibreert bij

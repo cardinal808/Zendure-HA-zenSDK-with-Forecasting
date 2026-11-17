@@ -2482,7 +2482,8 @@ template:
         {%- set ts = pad_slots | map(attribute='s') | list -%}
         {%- for b in pad_basis -%}{%- set ns.vrij = ns.vrij + [[s_max - b, 0] | max] -%}{%- endfor -%}
         {%- if pad_actief and e_slot > 0 and eff_rt > 0 and eff_in > 0 -%}
-          {%- set laad_kand = pad_slots | sort(attribute='v') -%}
+          {#- Goedkoopste eerst; bij gelijke prijs het laatste kwartier (dichter bij de piek: de accu staat dan korter vol) -#}
+          {%- set laad_kand = pad_slots | sort(attribute='s', reverse=true) | sort(attribute='v') -%}
           {%- for q in gap_met_marge | sort(attribute='v', reverse=true) -%}
             {%- set nq = namespace(nodig=q.kwh / eff_rt) -%}
             {%- set iq = ts.index(q.s) if q.s in ts else 0 -%}
@@ -2956,15 +2957,17 @@ template:
       # Vooraf ontladen gaat voor: in de kwartieren boven de grensprijs niet vasthouden
       # Tussen laadslots: wat de accu nu levert, laadt een later gepland slot weer bij (met verlies).
       # Is de prijs nu lager dan dat slot na laad- en ontlaadverlies (prijs slot / rendement), dan is
-      # direct inkopen goedkoper en houdt de accu vast. Hoort bij Slim vasthouden (kost geen verlies).
+      # direct inkopen goedkoper en houdt de accu vast (kost geen verlies).
       # Alleen bij minstens c_vasthouden_laden_min_kwh gepland netladen later: is er alleen een restje
       # gepland (bv. 0,2 kWh bijladen in een bijna volle accu), dan wordt wat de accu nu levert niet
       # bijgeladen maar gewoon eerder gebruikt, en levert vasthouden alleen een volle accu na de
       # overbrugging op. Ook hier moet de prijs nu minstens c_vasthouden_min_verschil lager zijn.
+      # Staat los van de schakelaar Slim vasthouden (sinds 2026.11.8): het voorkomt alleen verlies
+      # (eerst leveren en dan met verlies bijladen) en kost zelf niets.
       tussen_laden_vasthouden: >
         {%- set later = gekozen | selectattr('s', 'gt', nu_ts) | list -%}
         {%- set later_ac = [later | length * e_slot, gepland_ac] | min -%}
-        {{ is_state('input_boolean.forecast_slim_vasthouden', 'on') and prijzen_ok and prijs_nu < 999 and not slot_nu
+        {{ prijzen_ok and prijs_nu < 999 and not slot_nu
            and later | length > 0 and later_ac >= c_vasthouden_laden_min_kwh and eff_rt > 0
            and prijs_nu < (later | map(attribute='v') | max) / eff_rt - c_vasthouden_min_verschil }}
       # Grens voor vasthouden tussen laadslots (voor het beslissingslog): duurste latere laadslot / rendement

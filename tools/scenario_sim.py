@@ -7,12 +7,15 @@ scenario: vaste prijzen per uur, vast verbruik per uur, geen zon, eigen accu. Da
    automation zou doen: *Laden* = laden met vol vermogen uit het net; ontladen_vasthouden = huis
    uit het net; anders nul op de meter (accu levert het verbruik tot de minimale laadstand);
 2. optimum met dynamisch programmeren over dezelfde acties (laden / vasthouden / NOM);
-3. beide met dezelfde eindwaarde voor de lading die overblijft (goedkoopste prijs / laadrendement);
+3. beide met dezelfde eindwaarde voor de lading die overblijft: wat die minstens uitspaart
+   (goedkoopste prijs × ontlaadrendement). Een hogere eindwaarde (bv. de vervangingskosten) laat
+   het optimum de accu aan het eind vol 'oppotten' en maakt de vergelijking oneerlijk;
    daarom eindigen de scenario's om middernacht, vlak voor de goedkope nacht.
 
 Gebruik (vanuit de root van de repo):
     python3 tools/scenario_sim.py <export.json> [scenario ...]      # zonder scenario: alle
     python3 tools/scenario_sim.py <export.json> --lijst
+    python3 tools/scenario_sim.py <export.json> --regels        # regeltests over een raster
 
 Scenario's staan in SCENARIOS hieronder; eigen scenario's kun je daar toevoegen.
 """
@@ -155,7 +158,7 @@ def gesloten_lus(basis, sc, yaml_path=YAML_NL, uitvoer=False):
     eff = (sc['rte'] / 100) ** 0.5
     e_max = sc['cap'] * (sc['soc_max'] - sc['soc_min']) / 100
     E = sc['cap'] * (sc['soc'] - sc['soc_min']) / 100
-    kosten, vorig, loopt, starts, laden_kwh = 0.0, None, False, 0, 0.0
+    kosten, vorig, loopt, starts, laden_kwh, verspild = 0.0, None, False, 0, 0.0, 0
     log = []
     while t < eind:
         soc = sc['soc_min'] + E / sc['cap'] * 100
@@ -165,6 +168,8 @@ def gesloten_lus(basis, sc, yaml_path=YAML_NL, uitvoer=False):
         p = sc['prijs'](t.hour)
         last = sc['last'](t.hour) / 4
         actie = 'NOM'
+        if out['state'] == 'Laden' and E >= e_max - 0.001:
+            verspild += 1
         if out['state'] == 'Laden' and E < e_max - 0.001:
             ac = min(sc['p_max_w'] / 1000 / 4, (e_max - E) / eff)
             E += ac * eff
@@ -184,13 +189,13 @@ def gesloten_lus(basis, sc, yaml_path=YAML_NL, uitvoer=False):
         kosten += net * p
         log.append((t.strftime('%d %H:%M'), round(p, 3), actie, round(soc, 1), round(net, 3)))
         t += timedelta(minutes=15)
-    p_eind = min(sc['prijs'](h) for h in range(24)) / eff
+    p_eind = min(sc['prijs'](h) for h in range(24)) * eff
     netto = kosten - E * p_eind
     if uitvoer:
         for r in log:
             print(*r)
     return {'kosten': round(kosten, 3), 'eind_kwh': round(E, 3), 'netto': round(netto, 3),
-            'laadstarts': starts, 'netladen_kwh': round(laden_kwh, 2), 'log': log}
+            'laadstarts': starts, 'netladen_kwh': round(laden_kwh, 2), 'laden_vol': verspild, 'log': log}
 
 
 def optimum(sc, stap=0.005):
@@ -203,7 +208,7 @@ def optimum(sc, stap=0.005):
     e_max = sc['cap'] * (sc['soc_max'] - sc['soc_min']) / 100
     N = int(round(e_max / stap))
     stap = e_max / N
-    p_eind = min(sc['prijs'](h) for h in range(24)) / eff
+    p_eind = min(sc['prijs'](h) for h in range(24)) * eff
     V = [-(i * stap) * p_eind for i in range(N + 1)]
 
     def waarde(W, E):
@@ -232,6 +237,73 @@ def optimum(sc, stap=0.005):
     return round(waarde(V, E0), 3)
 
 
+# ---- Regeltests ---------------------------------------------------------------------
+# Losse planner-runs over een raster van situaties, getoetst aan vaste regels:
+#   A  meer verbruik boekt nooit minder netladen;
+#   B  geen geboekt laadslot verliest geld (prijs / rendement < een latere prijs);
+#   C  een kwartier later herberekenen met de verwachte laadstand houdt het plan (zelfde slots);
+#   D  geen laadslot terwijl de accu volgens het plan al vol is (in de gesloten lus: kolom 'vol').
+def schaal(fn, f):
+    return lambda h: fn(h) * f
+
+
+def raster():
+    for cap in (5.76, 11.52):
+        for soc in (10, 50, 90):
+            for pn, pf, lf in (('twee', prijs_twee, last_twee), ('drie', prijs_drie, last_drie), ('vlak', prijs_vlak, last_twee)):
+                for tijd in ('07:00', '14:30', '22:00'):
+                    sc = dict(BASIS, cap=cap, soc=soc, prijs=pf, last=lf, start='2026-11-18T' + tijd)
+                    yield '%s cap%.1f soc%d %s' % (pn, cap, soc, tijd), sc
+
+
+def plan(basis, sc, t, soc, yaml_path):
+    ex = bouw_export(basis, sc, t, soc, None, False)
+    return ps.run(yaml_path, ex, {}, t.strftime('%Y-%m-%dT%H:%M'))
+
+
+def regeltests(basis, yaml_path=YAML_NL):
+    fouten = 0
+    n = 0
+    for naam, sc in raster():
+        n += 1
+        t = datetime.fromisoformat(sc['start']).replace(tzinfo=TZ)
+        out, c = plan(basis, sc, t, sc['soc'], yaml_path)
+        eff_rt = c['eff_rt']
+        gekozen = c['gekozen']
+        meld = []
+        # A
+        sc2 = dict(sc, last=schaal(sc['last'], 1.25))
+        _, c2 = plan(basis, sc2, t, sc['soc'], yaml_path)
+        if c2['gepland_ac'] < c['gepland_ac'] - 0.01:
+            meld.append('A meer verbruik: %.2f -> %.2f kWh' % (c['gepland_ac'], c2['gepland_ac']))
+        # B
+        for x in gekozen:
+            later = [y['v'] for y in c['pad_kand'] if y['s'] > x['s']]
+            if not later or x['v'] / eff_rt >= max(later):
+                meld.append('B verliesgevend slot %s %.3f' % (datetime.fromtimestamp(x['s'], TZ).strftime('%d %H:%M'), x['v']))
+        # C: een kwartier uitvoeren zoals de automation en opnieuw plannen
+        eff = c['eff_in']
+        e_max = sc['cap'] * (sc['soc_max'] - sc['soc_min']) / 100
+        E = sc['cap'] * (sc['soc'] - sc['soc_min']) / 100
+        last = sc['last'](t.hour) / 4
+        if out['state'] == 'Laden':
+            E = min(e_max, E + sc['p_max_w'] / 1000 / 4 * eff)
+        elif out.get('ontladen_vasthouden') is not True:
+            E = max(0, E - last / eff)
+        t1 = t + timedelta(minutes=15)
+        _, c3 = plan(basis, sc, t1, sc['soc_min'] + E / sc['cap'] * 100, yaml_path)
+        voor = sorted(x['s'] for x in gekozen if x['s'] >= t1.timestamp())
+        na = sorted(x['s'] for x in c3['gekozen'] if x['s'] >= t1.timestamp())
+        if voor != na:
+            weg = [datetime.fromtimestamp(s, TZ).strftime('%H:%M') for s in voor if s not in na]
+            bij = [datetime.fromtimestamp(s, TZ).strftime('%H:%M') for s in na if s not in voor]
+            meld.append('C plan verschuift: weg %s, bij %s' % (weg, bij))
+        if meld:
+            fouten += 1
+            print('%-26s %s' % (naam, '; '.join(meld)))
+    print('%d van %d situaties met een afwijking' % (fouten, n))
+
+
 def main():
     args = sys.argv[1:]
     if not args:
@@ -244,14 +316,17 @@ def main():
     yaml_path = YAML_NL
     if '--yaml' in args:
         i = args.index('--yaml'); yaml_path = args[i + 1]; del args[i:i + 2]
+    if '--regels' in args:
+        regeltests(basis, yaml_path)
+        return
     uitvoer = '--log' in args
     namen = [a for a in args[1:] if not a.startswith('--')] or list(SCENARIOS)
-    print('%-20s %8s %8s %8s %7s %7s %7s' % ('scenario', 'plan €', 'optimum', 'verschil', 'starts', 'net kWh', 'eind kWh'))
+    print('%-20s %8s %8s %8s %7s %7s %7s %5s' % ('scenario', 'plan €', 'optimum', 'verschil', 'starts', 'net kWh', 'eind kWh', 'vol'))
     for nm in namen:
         sc = SCENARIOS[nm]
         r = gesloten_lus(basis, sc, yaml_path, uitvoer)
         o = optimum(sc)
-        print('%-20s %8.3f %8.3f %8.3f %7d %7.2f %7.2f' % (nm, r['netto'], o, r['netto'] - o, r['laadstarts'], r['netladen_kwh'], r['eind_kwh']))
+        print('%-20s %8.3f %8.3f %8.3f %7d %7.2f %7.2f %5d' % (nm, r['netto'], o, r['netto'] - o, r['laadstarts'], r['netladen_kwh'], r['eind_kwh'], r['laden_vol']))
 
 
 if __name__ == '__main__':
