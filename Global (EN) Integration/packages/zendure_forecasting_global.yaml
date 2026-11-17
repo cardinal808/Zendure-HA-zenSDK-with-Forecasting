@@ -1562,6 +1562,18 @@ template:
             {% if full_hour %}{{ ('%02d:00 (%s)' | format(hour_idx, hour_type)) if hour_idx >= 0 and hour_kwh >= 0 else none }}
             {% else %}{{ state_attr(profile, 'last_hour') }}{% endif %}
           last_quarter_kwh: "{{ quarter_kwh if quarter_kwh >= 0 else none }}"
+          # The last 6 measured hours with what the profile (workday/weekend) expected for them, to adjust
+          # the planner when usage deviates now (only hours with a learned profile)
+          recent_hours: >
+            {%- set old = (state_attr(profile, 'recent_hours') or []) | selectattr('ts', 'gt', now_ts - 6.5 * 3600) | list -%}
+            {%- if full_hour and hour_kwh >= 0 and hour_idx >= 0 -%}
+              {%- set p = state_attr(profile, hour_type) or [] -%}
+              {%- set n = state_attr(profile, 'n_' ~ hour_type) or [] -%}
+              {%- if p | length == 24 and n | length == 24 and p[hour_idx] is not none and (n[hour_idx] | int(0)) >= (3 if hour_type == 'workday' else 2) -%}
+                {%- set old = (old | rejectattr('ts', 'eq', (prev.ts | float(0)) // 3600 * 3600) | list) + [{'ts': (prev.ts | float(0)) // 3600 * 3600, 'm': hour_kwh, 'v': p[hour_idx] | float(0)}] -%}
+              {%- endif -%}
+            {%- endif -%}
+            {{ old[-6:] }}
           quarter_buffer: "{{ buffer_new }}"
           # Counter values for the calculation an hour from now (only updated on the full hour)
           measurement: >
@@ -1688,6 +1700,7 @@ template:
       c_charge_start_kwh: 0.3             # a charging round starts from this grid charge (kWh)
       c_charge_stop_kwh: 0.05             # a charging round stops below this remainder (kWh)
       c_hold_min_difference: 0.01        # smart hold: price now at least this much (€/kWh) below the threshold price
+      c_gap_max_difference: 0.005        # fewer charge starts: a charge quarter may become this much (€/kWh) more expensive
       c_hold_charge_min_kwh: 0.5         # smart hold: only off with at least this much planned grid charging (kWh) before the end of the gap
       c_charge_min_w: 500                 # measured charge power below this level is ignored
       c_price_floor: 0.02               # lower bound in price comparisons (EUR/kWh)
@@ -1705,6 +1718,10 @@ template:
       c_calibration_days: 21             # calibration charging: default after this many days without 100%
       c_calibration_early_soc: 85        # calibration charging from half the threshold: if planned charging brings the battery to at least this %, continue to 100%
       c_day_n_full: 3                    # profile per weekday counts fully after this many measurements (weeks) of that hour
+      c_adjust_min: 0.7                  # adjusting: usage of the last hours / profile, limited to 0.7..1.5
+      c_adjust_max: 1.5
+      c_adjust_hours: 6                  # the correction fades to 1 over this many hours (and this many hours count)
+      c_adjust_min_kwh: 0.5              # only adjust when the profile expected at least this much for those hours
       c_shape_n_full_weekend: 5          # same for weekends; before that gradually (fewer measurements = closer to even)
 
       # ---- Time -------------------------------------------------------
@@ -1892,6 +1909,17 @@ template:
         {% if has_value('binary_sensor.workday_sensor') %}{{ is_state('binary_sensor.workday_sensor', 'on') }}
         {% else %}{{ now().weekday() < 5 }}{% endif %}
       # 52 hour blocks from the current full hour: {'s': start, 'kw': kWh per hour, 'p': from profile}
+      # Adjusting when usage deviates: ratio measured / expected over the last (max. 6) measured hours,
+      # limited to c_adjust_min..max and damped by the number of hours (3 of 6 hours = half the
+      # deviation). Applies to the coming c_adjust_hours hours and fades to 1 over them.
+      # From 3 hours with a learned profile; before that 1.
+      usage_factor: >
+        {%- set r = (state_attr('sensor.forecast_usage_profile', 'recent_hours') or []) | selectattr('ts', 'gt', now_ts - 7 * 3600) | list -%}
+        {%- set m = r | map(attribute='m') | sum -%}{%- set v = r | map(attribute='v') | sum -%}
+        {%- if r | length >= 3 and v >= c_adjust_min_kwh -%}
+          {%- set f = [[m / v, c_adjust_min] | max, c_adjust_max] | min -%}
+          {{ (1 + (f - 1) * ([r | length, c_adjust_hours] | min) / c_adjust_hours) | round(3) }}
+        {%- else -%}1{%- endif -%}
       hour_load: >
         {%- set ns = namespace(l=[]) -%}
         {%- set h0 = (now_ts // 3600) * 3600 -%}
@@ -1920,6 +1948,7 @@ template:
           {%- set wdg = [pdn / c_day_n_full, 1] | min -%}
           {%- set kw = (wdg * (pd[h] | float(kw)) + (1 - wdg) * kw) if pdn > 0 else kw -%}
           {%- set ok = ok or pdn >= c_day_n_full -%}
+          {%- set kw = kw * (1 + (usage_factor - 1) * ([1 - i / c_adjust_hours, 0] | max)) -%}
           {%- set ns.l = ns.l + [{'s': st, 'kw': kw | round(4), 'p': ok, 'wd': wd, 'dg': (wdg * 100) | round(0)}] -%}
         {%- endfor -%}
         {{ ns.l }}
@@ -2807,13 +2836,50 @@ template:
       # target (cheapest slots first); the rest is dropped
       pd_useful: "{{ pd_on and pd_window is mapping and pd_sim.e < s_max - 0.1 }}"
       pd_room_dc: "{{ ([pd_target_dc - pd_sim.e, 0] | max) | round(3) if pd_useful else 0 }}"
-      chosen: >
+      chosen_raw: >
         {%- if pd_useful -%}
           {%- set n_max = ((pd_room_dc / (e_slot * eff_in)) | int) if e_slot * eff_in > 0 else 0 -%}
           {%- set before = chosen_plan | selectattr('s', 'lt', pd_window.s) | sort(attribute='v') | list -%}
           {%- set keep = before[:n_max] | map(attribute='s') | list -%}
           {{ ((chosen_plan | rejectattr('s', 'lt', pd_window.s) | list) + (chosen_plan | selectattr('s', 'in', keep) | list)) | sort(attribute='s') }}
         {%- else -%}{{ chosen_plan }}{%- endif -%}
+      # Fewer charge starts: the allocation picks the cheapest per quarter, also when that leaves a
+      # single-quarter gap between two charge blocks or a lone charge quarter (often a hundredth of a
+      # cent apart). Swap a charge quarter at the edge of a block (or a lone quarter) for a quarter
+      # that closes a gap or joins a block, if it is at most c_gap_max_difference more expensive and
+      # no more expensive quarter lies between the two (so charging stays before the expensive quarter
+      # it is meant for). The number of quarters stays the same. The running quarter stays;
+      # pre-discharge: not across the start of the window.
+      chosen: >
+        {%- set ns = namespace(l=chosen_raw) -%}
+        {%- for ronde in range(6) -%}
+          {%- set ss = ns.l | map(attribute='s') | list -%}
+          {%- set es = ns.l | map(attribute='e') | list -%}
+          {%- set best = namespace(x=none, g=none, d=0, c=0) -%}
+          {%- if ss | length >= 2 -%}
+            {%- set pool = path_cand | selectattr('s', 'gt', now_ts) | selectattr('s', 'ge', (ss | min) - 3600) | selectattr('s', 'le', (ss | max) + 3600) | rejectattr('s', 'in', ss) | list -%}
+            {%- for x in ns.l if x.s > now_ts -%}
+              {%- set xl = x.s in es -%}{%- set xr = x.e in ss -%}
+              {%- if not (xl and xr) -%}
+                {%- set dx = -1 if not (xl or xr) else 0 -%}
+                {%- for g in pool if g.v - x.v <= c_gap_max_difference and (not pd_useful or ((g.s < pd_window.s) == (x.s < pd_window.s))) -%}
+                  {%- set gl = g.s in es and g.s != x.e -%}{%- set gr = g.e in ss and g.e != x.s -%}
+                  {%- set d = dx + (-1 if (gl and gr) else (0 if (gl or gr) else 1)) -%}
+                  {%- set c = g.v - x.v -%}
+                  {%- if d < 0 and (d < best.d or (d == best.d and c < best.c)) -%}
+                    {%- set lo = [x.s, g.s] | min -%}{%- set hi = [x.s, g.s] | max -%}
+                    {%- set duur = pool | selectattr('s', 'gt', lo) | selectattr('s', 'lt', hi) | selectattr('v', 'gt', [x.v, g.v] | max + c_gap_max_difference) | list | length -%}
+                    {%- if duur == 0 -%}{%- set best.x = x -%}{%- set best.g = g -%}{%- set best.d = d -%}{%- set best.c = c -%}{%- endif -%}
+                  {%- endif -%}
+                {%- endfor -%}
+              {%- endif -%}
+            {%- endfor -%}
+          {%- endif -%}
+          {%- if best.x is not none -%}
+            {%- set ns.l = ((ns.l | rejectattr('s', 'eq', best.x.s) | list) + [best.g]) | sort(attribute='s') -%}
+          {%- endif -%}
+        {%- endfor -%}
+        {{ ns.l }}
       pd_grid_dropped: "{{ (chosen_plan | length) - (chosen | length) }}"
       pd_grid_dc: >
         {{ ([(chosen | selectattr('s', 'lt', pd_window.s) | list | length) * e_slot * eff_in, pd_room_dc] | min) | round(3) if pd_useful else 0 }}
@@ -3145,7 +3211,7 @@ template:
           {%- endif -%}
         {%- endfor -%}
         {{ ns.l }}
-      tomorrow_allocation: >
+      tomorrow_allocation_raw: >
         {%- set ns = namespace(l=[], total=0) -%}
         {%- set max_ac = [tomorrow_grid_charge_balance, (s_max / eff_in) if eff_in > 0 else 0] | min -%}
         {%- if e_slot > 0 and eff_rt > 0 -%}
@@ -3170,6 +3236,45 @@ template:
           {%- endfor -%}
         {%- endif -%}
         {{ ns.l }}
+      # Fewer charge starts, as for chosen: summed per slot, then close gaps (the kWh moves along)
+      tomorrow_allocation: >
+        {%- set nm = namespace(l=[]) -%}
+        {%- set mts = tomorrow_allocation_raw | map(attribute='s') | unique | list -%}
+        {%- for x in tmrw | selectattr('s', 'in', mts) -%}
+          {%- set nm.l = nm.l + [dict(x, k=(tomorrow_allocation_raw | selectattr('s', 'eq', x.s) | map(attribute='k') | sum) | round(4))] -%}
+        {%- endfor -%}
+        {%- set mt = nm.l | sort(attribute='s') -%}
+        {%- set ns = namespace(l=mt) -%}
+        {%- for ronde in range(6) -%}
+          {%- set ss = ns.l | map(attribute='s') | list -%}
+          {%- set es = ns.l | map(attribute='e') | list -%}
+          {%- set best = namespace(x=none, g=none, d=0, c=0) -%}
+          {%- if ss | length >= 2 -%}
+            {%- set pool = tmrw | selectattr('s', 'gt', 0) | selectattr('s', 'ge', (ss | min) - 3600) | selectattr('s', 'le', (ss | max) + 3600) | rejectattr('s', 'in', ss) | list -%}
+            {%- for x in ns.l if x.s > 0 -%}
+              {%- set xl = x.s in es -%}{%- set xr = x.e in ss -%}
+              {%- if not (xl and xr) -%}
+                {%- set dx = -1 if not (xl or xr) else 0 -%}
+                {%- for g in pool if g.v - x.v <= c_gap_max_difference and (not false or ((g.s < 0) == (x.s < 0))) -%}
+                  {%- set gl = g.s in es and g.s != x.e -%}{%- set gr = g.e in ss and g.e != x.s -%}
+                  {%- set d = dx + (-1 if (gl and gr) else (0 if (gl or gr) else 1)) -%}
+                  {%- set c = g.v - x.v -%}
+                  {%- if d < 0 and (d < best.d or (d == best.d and c < best.c)) -%}
+                    {%- set lo = [x.s, g.s] | min -%}{%- set hi = [x.s, g.s] | max -%}
+                    {%- set duur = pool | selectattr('s', 'gt', lo) | selectattr('s', 'lt', hi) | selectattr('v', 'gt', [x.v, g.v] | max + c_gap_max_difference) | list | length -%}
+                    {%- if duur == 0 -%}{%- set best.x = x -%}{%- set best.g = g -%}{%- set best.d = d -%}{%- set best.c = c -%}{%- endif -%}
+                  {%- endif -%}
+                {%- endfor -%}
+              {%- endif -%}
+            {%- endfor -%}
+          {%- endif -%}
+          {%- if best.x is not none -%}
+            {%- set ns.l = ((ns.l | rejectattr('s', 'eq', best.x.s) | list) + [dict(best.g, k=best.x.k)]) | sort(attribute='s') -%}
+          {%- endif -%}
+        {%- endfor -%}
+        {%- set nu = namespace(l=[]) -%}
+        {%- for x in ns.l -%}{%- set nu.l = nu.l + [{'s': x.s, 'k': x.k}] -%}{%- endfor -%}
+        {{ nu.l }}
       tomorrow_grid_charge: "{{ (tomorrow_allocation | map(attribute='k') | sum) | round(2) }}"
       # What that charge delivers tomorrow in the expensive quarter hours (after charge and discharge
       # loss), plus the solar surplus that goes through the battery; the rest of the usage comes
@@ -3193,8 +3298,24 @@ template:
       # ---- Timeline (forecast per price slot, for the dashboard chart) ----
       # Simulates per slot: usage (profile), solar (detailed forecast), grid charging in the
       # planned slots (today) and tomorrow's indicative charge slots, and otherwise
-      # zero-on-the-meter: shortfall from the battery, surplus into the battery.
-      # Indicative: the cheap-dip hold is not included here.
+      # zero-on-the-meter: shortfall from the battery, surplus into the battery. Like the automation,
+      # the battery holds (supplies nothing, the house buys directly):
+      # - in cheap dips (Do not discharge in cheap dip);
+      # - between charge slots: a later charge slot (together at least c_hold_charge_min_kwh) is more
+      #   expensive after loss than the price of this slot;
+      # - smart hold today: below the threshold price (sh_threshold), until sh_end_ts;
+      # - smart hold tomorrow: below tl_threshold_tomorrow, the threshold price at which tomorrow's
+      #   expected charge (estimate + solar) exactly covers tomorrow's most expensive quarter hours.
+      # No hold before a pre-discharge window. Indicative: HVAC is not included.
+      tl_threshold_tomorrow: >
+        {%- set ns = namespace(e=tomorrow_from_battery, p=none) -%}
+        {%- set total = tomorrow_expensive | map(attribute='kwh') | sum -%}
+        {%- if is_state('input_boolean.forecast_setting_smart_hold', 'on') and tomorrow_known and ns.e > 0 and total > ns.e -%}
+          {%- for q in tomorrow_expensive | sort(attribute='v', reverse=true) -%}
+            {%- if ns.e > 0 -%}{%- set ns.p = q.v -%}{%- set ns.e = ns.e - q.kwh -%}{%- endif -%}
+          {%- endfor -%}
+        {%- endif -%}
+        {{ ns.p }}
       tl_slots: "{{ (cand + tmrw) | sort(attribute='s') | selectattr('e', 'gt', now_ts) | list }}"
       tl_end_ts: "{{ (tl_slots | map(attribute='e') | max) if tl_slots | length > 0 else now_ts }}"
       tl_solar: >
@@ -3223,7 +3344,8 @@ template:
       tl_charge_s: "{{ (chosen | map(attribute='s') | list) + tomorrow_charge_slots }}"
       p_disch_kw: "{{ [states('input_number.zendure_setting_max_discharge_power') | float(2400), 100] | max / 1000 }}"
       timeline: >
-        {%- set ns = namespace(soc=s_now, t=[], p=[], kn=[], ch=[], pv=[], load=[], bat=[], soc_l=[], grid=[], exp=[], ev=[]) -%}
+        {%- set ns = namespace(soc=s_now, t=[], p=[], kn=[], ch=[], pv=[], load=[], bat=[], soc_l=[], grid=[], exp=[], ev=[], hold=[]) -%}
+        {%- set charge_l = tl_slots | selectattr('s', 'in', tl_charge_s) | list -%}
         {%- set known_until = end_today_ts + (day_length if tomorrow_known else 0) -%}
         {#- Export from the battery (solar surplus and ahead of negative prices) and planned EV charging (night) -#}
         {%- set exp_l = (sx_slots if sx_slots is iterable and sx_slots is not string else []) + (pd_export_slots if pd_export_slots is iterable and pd_export_slots is not string else []) -%}
@@ -3249,10 +3371,20 @@ template:
               {%- set nt.ev = nt.ev + q[2] * ([q[1], x.e] | min - [q[0], a] | max) / ([q[1] - ([q[0], now_ts] | max), 1] | max) -%}
             {%- endfor -%}
             {%- set exporting = nt.k > 0.01 and not charging -%}
+            {#- Hold (see above) -#}
+            {%- set is_tomorrow = x.s >= end_today_ts -%}
+            {%- set later = charge_l | selectattr('s', 'gt', x.s) | list -%}
+            {%- set hold = not (pd_active and x.s < pd_window.s) and (
+                 (dip_hold_plan and ((x.v <= dip_threshold_tomorrow and x.v < p_tmrw_avg) if is_tomorrow else (x.v <= dip_threshold and x.v < p_day_avg)))
+                 or ((later | length) * e_slot >= c_hold_charge_min_kwh and eff_rt > 0 and x.v < (later | map(attribute='v') | max) / eff_rt - c_hold_min_difference)
+                 or (sh_plan_active and x.e <= sh_end_ts and x.v < sh_threshold - c_hold_min_difference)
+                 or (is_tomorrow and x.e > sh_end_ts and tl_threshold_tomorrow is number and x.v < tl_threshold_tomorrow - c_hold_min_difference)) -%}
             {%- if charging -%}
               {%- set bat = [p_max_kw * dur, room_ac] | min -%}
             {%- elif exporting -%}
               {%- set bat = 0 - ([[load - pv, 0] | max + nt.k, ns.soc * eff_out, p_disch_kw * dur] | min) -%}
+            {%- elif load >= pv and hold -%}
+              {%- set bat = 0 -%}
             {%- elif load >= pv -%}
               {%- set bat = 0 - ([load - pv, ns.soc * eff_out, p_disch_kw * dur] | min) -%}
             {%- else -%}
@@ -3272,10 +3404,11 @@ template:
             {%- set ns.grid = ns.grid + [((grid + nt.ev) / dur) | round(2)] -%}
             {%- set ns.exp = ns.exp + [1 if exporting else 0] -%}
             {%- set ns.ev = ns.ev + [(nt.ev / dur) | round(2)] -%}
+            {%- set ns.hold = ns.hold + [1 if (hold and not charging and not exporting and load >= pv and ns.soc > 0.01) else 0] -%}
           {%- endif -%}
         {%- endfor -%}
         {{ {'t': ns.t, 'price': ns.p, 'known': ns.kn, 'charge': ns.ch, 'solar_kw': ns.pv, 'usage_kw': ns.load,
-            'battery_kw': ns.bat, 'soc_pct': ns.soc_l, 'grid_kw': ns.grid, 'soc_now_pct': soc, 'export': ns.exp, 'ev_kw': ns.ev} }}
+            'battery_kw': ns.bat, 'soc_pct': ns.soc_l, 'grid_kw': ns.grid, 'soc_now_pct': soc, 'export': ns.exp, 'ev_kw': ns.ev, 'hold': ns.hold} }}
     sensor:
       - name: "Zendure Forecast Plan"
         unique_id: zendure_forecast_plan
@@ -3307,6 +3440,7 @@ template:
           grid_charge_today_kwh: "{{ grid_total_ac }}"
           grid_charge_energy_balance_kwh: "{{ grid_ac }}"
           planned_grid_charge_kwh: "{{ planned_ac }}"
+          usage_adjustment: "{{ usage_factor }}"
           target_stored_kwh: "{{ target_dc }}"
           battery_now_kwh: "{{ s_now }}"
           battery_max_kwh: "{{ s_max }}"
@@ -3362,10 +3496,16 @@ template:
               {%- endif -%}
             {%- else -%}
               {%- set first = blocks_today | first -%}
+              {#- All charging falls after midnight and there is an estimate for tomorrow: at 00:00 that
+                  estimate replaces this plan, so show that provisional plan (like Tomorrow on the dashboard) -#}
+              {%- set after_midnight = ((blocks_today | map(attribute='s') | min) | timestamp_custom('%Y-%m-%d', true)) != (now_ts | timestamp_custom('%Y-%m-%d', true)) -%}
+              {%- if after_midnight and not slot_now and tomorrow_known and tomorrow_blocks | length > 0 -%}Charging only after midnight. Provisional plan: charge {{ block(tomorrow_blocks | first) }}{% if tomorrow_blocks | length > 1 %} and {{ tomorrow_blocks | length - 1 }} more charge block(s), about {{ '%.1f' | format(tomorrow_grid_charge) }} kWh in total{% endif %}. At 00:00 this is planned for real, with the prices until the cheap hours of the day after tomorrow.
+              {%- else -%}
               {%- if slot_now -%}Charging from the grid now until {{ hm(first.e) }}, about {{ '%.1f' | format(first.kwh) }} kWh to go{% if price_now < 999 %} (€{{ '%.3f' | format(price_now) }}){% endif %}.
               {%- else -%}Next charge moment: {{ block(first) }}.{%- endif %}
               {%- if blocks_today | length > 1 %} Then {{ blocks_today | length - 1 }} more charge block(s).{% endif %} About {{ '%.1f' | format(planned_ac) }} kWh in total for €{{ '%.2f' | format(cost) }}{% if extra_slots | length > 0 %}, so the expensive quarter hours until {{ at(t_gap_end_ts) }} (average €{{ '%.3f' | format(p_gap_avg) }}) are supplied by the battery{% endif %}.
               {%- if empty and not slot_now %} Until then the house takes power directly from the grid.{% endif -%}
+              {%- endif -%}
             {%- endif -%}
             {%- if pd_active %} Pre-discharge: {{ at(pd_window.s) }}-{{ hm(pd_window.e) }} the feed-in price is negative, with about {{ '%.1f' | format(pd_window.kwh) }} kWh solar surplus.
               {%- if pd_threshold is number %} The battery supplies for this mainly in the quarter hours from €{{ '%.3f' | format(pd_threshold) }}{% else %} The battery supplies for this in all quarter hours{% endif %}

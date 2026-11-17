@@ -10,6 +10,7 @@ Versies volgen `jaar.maand.volgnummer`; het volgnummer begint elke maand bij 1. 
 - Automation (NL en EN): de 6 berekeningen met de EV- en HVAC-correctie trekken ook `sensor.zendure_quooker_ontlaad_correctie` / `sensor.zendure_quooker_discharge_correction` af. Zonder het pakket is die 0.
 - Dashboard: blok **Forecasting Configuratie (Quooker)**, alleen zichtbaar als het pakket geladen is, en een regel in de kaart Optionele pakketten.
 - **Apart tellen:** het verbruik boven de drempel telt niet mee in het verbruiksprofiel, het dagverbruik en het zelfverbruik van de planner, net als bij de auto en de airco (de accu levert het niet, dus de planner hoeft er niet voor te laden). Tellers `sensor.zendure_quooker_apart_totaal`, `..._apart_uit_zon_totaal` en de 7-daagse cijfers; regel *Apart geteld (7 dagen)* in het blok. *Verbruiksgegevens resetten* wist ook deze tellers.
+- Dashboard: sectie *Status* in het Quooker-blok (vermogen, afgetrokken van P1, apart geteld, waarvan uit zon) en grafiek *Quooker en accu (afgelopen 6 uur)* met Quooker, correctie, Zendure en P1.
 - Diagnose-export: kolom `quooker_correctie_w` in de momentopnames (oudere regels krijgen daar een lege waarde), `sensor.zendure_quooker_vermogen` en de apart-tellers bij details.
 
 **Pad-check: laden begrensd door de ruimte op het moment zelf, niet die van nu**
@@ -30,6 +31,12 @@ Versies volgen `jaar.maand.volgnummer`; het volgnummer begint elke maand bij 1. 
 
 **Melding bij een zeer lage betrouwbaarheid zonvoorspelling**
 - Staat de algemene of een maandwaarde tussen 0 en 10%, dan meldt de plankaart dat de planner met dat percentage van de verwachte zon rekent. Meestal is een factor (1 = 100%) ingevuld.
+
+**Planner: minder laadstarts, tijdlijn met vasthouden, bijsturen op het verbruik**
+- **Minder laadstarts:** de toewijzing koos per kwartier het goedkoopste, ook als dat een los gaatje van één kwartier tussen twee laadblokken gaf (vaak een honderdste cent verschil; aanleiding: QempZoR, 01:30–01:45 en 02:00–05:45). Nu ruilt de planner een kwartier aan de rand van een blok (of een los kwartier) tegen een kwartier dat het gat dicht of aansluit, als dat hooguit €0,005/kWh duurder is (`c_gat_max_verschil`) en er tussen de twee geen duurder kwartier ligt. Geldt voor het plan van vandaag en de indicatie van morgen; aantal kwartieren en kWh blijven gelijk, het lopende kwartier blijft staan.
+- **Regel *Plan* na middernacht:** valt al het laden na middernacht en is er een indicatie voor morgen, dan toont de regel *Plan* de voorlopige planning (die om 00:00 het plan vervangt), niet meer het laden van het plan van vandaag.
+- **Plan Tijdlijn houdt vast zoals de automation:** in goedkope dalen, tussen laadslots (later laadslot na verlies duurder), bij slim vasthouden vandaag onder de grensprijs en morgen onder een eigen grensprijs (`tl_grens_morgen`: de verwachte lading van morgen dekt precies de duurste kwartieren). Eerder ontlaadde de tijdlijn in de goedkopere middaguren en was hij vóór de avondpiek leeg, terwijl de accu in werkelijkheid vasthoudt (aanleiding: QempZoR). Nieuwe reeks `vasthouden` in de tijdlijn.
+- **Bijsturen als het verbruik afwijkt:** het verbruiksprofiel bewaart de laatste 6 gemeten uren met wat het profiel ervoor verwachtte (attribuut `recente_uren`). Wijkt het verbruik af, dan rekent de planner de komende 6 uur met een factor (gemeten ÷ verwacht, begrensd op 0,7–1,5, gedempt naar het aantal uren, aflopend naar 1). Attribuut `verbruik_bijsturing`; regel op de plankaart bij minstens 5% afwijking.
 
 **Tools**
 - `tools/scenario_sim.py`: gesloten-lus-simulatie per kwartier op synthetische scenario's, vergeleken met het optimum (dynamisch programmeren), en `--regels`: regeltests over 54 situaties (meer verbruik → nooit minder laden, geen verliesgevend slot, plan stabiel na een kwartier).

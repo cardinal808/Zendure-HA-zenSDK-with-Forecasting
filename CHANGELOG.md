@@ -10,6 +10,7 @@ Versions follow `year.month.sequence`; the sequence restarts at 1 every month. E
 - Automation (EN and NL): the 6 calculations with the EV and HVAC correction also subtract `sensor.zendure_quooker_discharge_correction` / `sensor.zendure_quooker_ontlaad_correctie`. Without the package it is 0.
 - Dashboard: block **Forecasting Configuration (Quooker)**, only visible when the package is loaded, and a row in the Optional packages card.
 - **Counted separately:** the energy above the threshold does not count in the planner's usage profile, daily usage and self-consumption, just like the car and the AC (the battery does not supply it, so the planner does not need to charge for it). Counters `sensor.zendure_quooker_separate_total`, `..._separate_from_solar_total` and the 7-day figures; row *Counted separately (7 days)* in the block. *Reset usage data* also clears these counters.
+- Dashboard: *Status* section in the Quooker block (power, subtracted from grid meter, counted separately, of which from solar) and chart *Quooker and battery (last 6 hours)* with Quooker, correction, Zendure and grid meter.
 - Diagnostics export: column `quooker_correction_w` in the snapshots (older rows get an empty value there), `sensor.zendure_quooker_power` and the separate counters in details.
 
 **Path check: charging limited by the room at that moment, not the room now**
@@ -30,6 +31,12 @@ Versions follow `year.month.sequence`; the sequence restarts at 1 every month. E
 
 **Notice for a very low solar forecast reliability**
 - When the general value or a month value is between 0 and 10%, the plan card notes that the planner uses that percentage of the expected solar. Usually a factor (1 = 100%) was entered.
+
+**Planner: fewer charge starts, timeline with holding, adjusting to usage**
+- **Fewer charge starts:** the allocation picked the cheapest per quarter, also when that left a single-quarter gap between two charge blocks (often a hundredth of a cent apart; prompted by QempZoR, 01:30–01:45 and 02:00–05:45). The planner now swaps a quarter at the edge of a block (or a lone quarter) for a quarter that closes the gap or joins a block, if it is at most €0.005/kWh more expensive (`c_gap_max_difference`) and no more expensive quarter lies between the two. Applies to today's plan and tomorrow's estimate; number of quarters and kWh stay the same, the running quarter stays.
+- **Line *Plan* after midnight:** when all charging falls after midnight and there is an estimate for tomorrow, the *Plan* line shows the provisional plan (which replaces the plan at 00:00), no longer the charging of today's plan.
+- **Plan Timeline holds like the automation:** in cheap dips, between charge slots (later charge slot more expensive after loss), with smart hold today below the threshold price and tomorrow below its own threshold (`tl_threshold_tomorrow`: tomorrow's expected charge exactly covers the most expensive quarters). Before, the timeline discharged in the cheaper afternoon hours and was empty before the evening peak, while the battery actually holds (prompted by QempZoR). New series `hold` in the timeline.
+- **Adjusting when usage deviates:** the usage profile keeps the last 6 measured hours with what the profile expected (attribute `recent_hours`). When usage deviates, the planner uses a factor for the coming 6 hours (measured ÷ expected, limited to 0.7–1.5, damped by the number of hours, fading to 1). Attribute `usage_adjustment`; line on the plan card at a deviation of at least 5%.
 
 **Tools**
 - `tools/scenario_sim.py`: closed-loop simulation per quarter hour on synthetic scenarios, compared with the optimum (dynamic programming), and `--regels`: rule tests over 54 situations (more usage → never less charging, no loss-making slot, plan stable after a quarter hour).
