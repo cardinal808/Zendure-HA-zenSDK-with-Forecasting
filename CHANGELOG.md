@@ -73,6 +73,10 @@ Versions follow `year.month.sequence`; the sequence restarts at 1 every month. E
 **Diagnostics: Flash counter (16-11)**
 - `sensor.zendure_flash_writes` (diagnostics export package) counts how often per day the Zendure switches to *Flash Memory*; `per_day` keeps 14 days and is in the export (`flash_writes`). Row *Switches to Flash (today)* in the Diagnostics export block.
 
+**After the test of 17-11**
+- Sensor detection choice lists: no more *Template variable warning* at a restart.
+- Diagnostics export: also `sensor.forecast_solar_month_measurement` and `sensor.hvac_power_from_counter` with attributes.
+
 **Tools (16-11)**
 - `tools/planner_sim.py` and `vergelijk.py` work again with the 2026.11.7 planner (`integration_entities` etc. emulated).
 

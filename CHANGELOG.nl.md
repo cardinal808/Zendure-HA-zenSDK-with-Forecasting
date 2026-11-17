@@ -73,6 +73,10 @@ Versies volgen `jaar.maand.volgnummer`; het volgnummer begint elke maand bij 1. 
 **Diagnose: Flash-teller (16-11)**
 - `sensor.zendure_flash_schrijfacties` (diagnose-export-pakket) telt hoe vaak de Zendure per dag naar *Opslaan in Flash* gaat; `per_dag` bewaart 14 dagen en staat in de export (`flash_schrijfacties`). Regel *Omzetten naar Flash (vandaag)* in het blok Diagnose-export.
 
+**Na de test van 17-11**
+- Keuzelijsten sensor-herkenning: geen *Template variable warning* meer bij een herstart.
+- Diagnose-export: ook `sensor.forecast_zon_maandmeting` en `sensor.hvac_vermogen_uit_teller` met attributen.
+
 **Tools (16-11)**
 - `tools/planner_sim.py` en `vergelijk.py` werken weer met de planner van 2026.11.7 (`integration_entities` e.d. nagebootst).
 
