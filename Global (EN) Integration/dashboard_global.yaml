@@ -4886,7 +4886,7 @@ views:
               - entity: input_number.savings_setting_battery_already_earned
                 name: Battery already earned back (before measuring)
               - entity: input_button.savings_total_reset
-                name: Restart total
+                name: Start again (all periods)
             visibility:
               - condition: state
                 entity: input_number.savings_setting_fixed_supply_price

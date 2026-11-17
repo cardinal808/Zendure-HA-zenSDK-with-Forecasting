@@ -102,8 +102,9 @@ input_number:
     unit_of_measurement: "€"
 
 input_button:
+  # Start everything again: total, day, month, year and yesterday (e.g. after a wrong setting)
   savings_total_reset:
-    name: Savings Restart Total
+    name: Savings Start Again
     icon: mdi:restart
 
 template:
@@ -277,7 +278,7 @@ template:
           {%- else -%}
             {%- set start = keys[b] -%}
             {#- compare as text: "2026" would otherwise be read as a number -#}
-            {%- set same = ob is not none and (ob.start | string) == (start | string) -%}
+            {%- set same = ob is not none and (ob.start | string) == (start | string) and not reset -%}
           {%- endif -%}
           {%- set nv = namespace(l=['"start": "' ~ start ~ '"']) -%}
           {%- for k in K -%}
@@ -290,7 +291,7 @@ template:
         {%- set od = o.get('day') if o.get('day') is mapping else none -%}
         {%- set oy = o.get('yesterday') if o.get('yesterday') is mapping else none -%}
         {%- set yest = od if (od is not none and (od.start | string) != (d_key | string)) else oy -%}
-        {%- if yest is not none -%}{%- set ns.out = ns.out + ['"yesterday": ' ~ (yest | to_json)] -%}{%- endif -%}
+        {%- if yest is not none and not reset -%}{%- set ns.out = ns.out + ['"yesterday": ' ~ (yest | to_json)] -%}{%- endif -%}
         {{ '{' ~ ns.out | join(', ') ~ '}' }}
 
       # ---- Battery payback time ----

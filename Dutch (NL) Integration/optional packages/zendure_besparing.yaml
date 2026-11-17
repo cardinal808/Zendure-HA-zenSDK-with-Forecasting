@@ -103,8 +103,9 @@ input_number:
     unit_of_measurement: "€"
 
 input_button:
+  # Alles opnieuw beginnen: totaal, dag, maand, jaar en gisteren (bv. na een foute instelling)
   besparing_totaal_reset:
-    name: Besparing Totaal Opnieuw Beginnen
+    name: Besparing Opnieuw Beginnen
     icon: mdi:restart
 
 template:
@@ -278,7 +279,7 @@ template:
           {%- else -%}
             {%- set start = sleutels[b] -%}
             {#- als tekst vergelijken: "2026" wordt anders als getal gelezen -#}
-            {%- set zelfde = ob is not none and (ob.start | string) == (start | string) -%}
+            {%- set zelfde = ob is not none and (ob.start | string) == (start | string) and not reset -%}
           {%- endif -%}
           {%- set nv = namespace(l=['"start": "' ~ start ~ '"']) -%}
           {%- for k in K -%}
@@ -291,7 +292,7 @@ template:
         {%- set od = o.get('dag') if o.get('dag') is mapping else none -%}
         {%- set og = o.get('gisteren') if o.get('gisteren') is mapping else none -%}
         {%- set gist = od if (od is not none and (od.start | string) != (d_key | string)) else og -%}
-        {%- if gist is not none -%}{%- set ns.uit = ns.uit + ['"gisteren": ' ~ (gist | to_json)] -%}{%- endif -%}
+        {%- if gist is not none and not reset -%}{%- set ns.uit = ns.uit + ['"gisteren": ' ~ (gist | to_json)] -%}{%- endif -%}
         {{ '{' ~ ns.uit | join(', ') ~ '}' }}
 
       # ---- Terugverdientijd accu ----

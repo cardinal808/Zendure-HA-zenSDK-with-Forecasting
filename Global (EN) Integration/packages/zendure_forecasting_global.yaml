@@ -431,6 +431,32 @@ template:
           {%- endfor -%}
         {%- endfor -%}
         {%- if nv.l | length > 0 -%}{%- set ns.l = ns.l + [{'id': 'velden', 'level': 'warning', 'text': 'Filled-in field does not point to an existing sensor: ' ~ nv.l | join(', ') ~ '. Check the entity ID (Settings → Entities). Without a valid solar panel counter the usage profile learns without solar production.'}] -%}{%- endif -%}
+        {%- set gs = state_attr('sensor.forecast_price_backup', 'no_prices_since') -%}
+        {%- if gs and as_timestamp(now()) - as_timestamp(gs, as_timestamp(now())) > 300 -%}
+          {%- set t = as_timestamp(gs) | timestamp_custom('%H:%M') -%}
+          {%- if state_attr('sensor.zendure_forecast_plan', 'price_source') == 'reserve' -%}
+            {%- set ns.l = ns.l + [{'id': 'prijzen', 'level': 'warning', 'text': 'Nord Pool has given no price for now since **' ~ t ~ '**. The planner uses the prices that were known yesterday for today. Reload the Nord Pool integration (Settings → Devices & services) or restart Home Assistant.'}] -%}
+          {%- else -%}
+            {%- set ns.l = ns.l + [{'id': 'prijzen', 'level': 'error', 'text': 'No prices since **' ~ t ~ '**: the planner cannot plan and nothing is charged. Reload the Nord Pool integration (Settings → Devices & services) or restart Home Assistant.'}] -%}
+          {%- endif -%}
+        {%- endif -%}
+        {%- set nr = namespace(l=[]) -%}
+        {%- set v = states('input_number.forecast_setting_solar_reliability') | float(100) -%}
+        {%- if 0 < v < 10 -%}{%- set nr.l = nr.l + ['general ' ~ v | round(1) ~ '%'] -%}{%- endif -%}
+        {%- for m in ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'] -%}
+          {%- set v = states('input_number.forecast_setting_solar_reliability_' ~ m) | float(0) -%}
+          {%- if 0 < v < 10 -%}{%- set nr.l = nr.l + [m ~ ' ' ~ v | round(1) ~ '%'] -%}{%- endif -%}
+        {%- endfor -%}
+        {%- if nr.l | length > 0 -%}{%- set ns.l = ns.l + [{'id': 'betrouwbaarheid', 'level': 'warning', 'text': 'Solar forecast reliability is set to **' ~ nr.l | join(', ') ~ '**. The planner then uses that percentage of the expected solar. Did you mean a factor (1 = 100%)? Then enter 100.'}] -%}{%- endif -%}
+        {%- set em = state_attr('sensor.zendure_savings', 'buckets') -%}
+        {%- if em is mapping -%}
+          {%- set nb = namespace(f=false) -%}
+          {%- for pk in ['month', 'total'] -%}
+            {%- set e = em.get(pk) -%}
+            {%- if e is mapping and (e.get('none_dyn', 0) | float(0)) < -1 and (e.get('imp', 0) | float(0)) > 1 -%}{%- set nb.f = true -%}{%- endif -%}
+          {%- endfor -%}
+          {%- if nb.f -%}{%- set ns.l = ns.l + [{'id': 'besparing', 'level': 'warning', 'text': 'The savings are probably wrong: the dynamic costs are negative while power was taken from the grid (probably a setting from before 2026.11.7). Press **Start again (all periods)** in Forecasting Configuration (Savings).'}] -%}{%- endif -%}
+        {%- endif -%}
         {{ ns.l }}
     sensor:
       - name: "Forecast Notices"
@@ -439,6 +465,45 @@ template:
         state: "{{ m_lijst | length }}"
         attributes:
           notices: "{{ m_lijst }}"
+
+  # ---- Price backup ----
+  # Keeps tomorrow's prices (raw_tomorrow of sensor.dynamic_nordpool). If the Nord Pool sensor gives
+  # no price for now after midnight (seen with a user: 12 hours, until a restart), the planner uses
+  # these saved prices. A trigger sensor: restored after a restart.
+  # Attribute no_prices_since = since when there is no price for now (for the notice).
+  - trigger:
+      - trigger: homeassistant
+        event: start
+      - trigger: state
+        entity_id: sensor.dynamic_nordpool
+      - trigger: time_pattern
+        minutes: "/5"
+    variables:
+      t_nu: "{{ as_timestamp(now()) }}"
+      r_today: "{{ state_attr('sensor.dynamic_nordpool', 'raw_today') or [] }}"
+      r_tomorrow: "{{ state_attr('sensor.dynamic_nordpool', 'raw_tomorrow') or [] }}"
+      covered: >
+        {%- set ns = namespace(ok=false) -%}
+        {%- for p in r_today -%}{%- if as_timestamp(p.start, 0) <= t_nu < as_timestamp(p.end, 0) -%}{%- set ns.ok = true -%}{%- endif -%}{%- endfor -%}
+        {{ ns.ok }}
+      old: "{{ (this.attributes.get('raw') if this is not none and this.attributes is defined else none) or [] }}"
+      saved: >
+        {%- set src = r_tomorrow if r_tomorrow | length > 0 else (old if old | length > 0 and as_timestamp((old | last).end, 0) > t_nu else []) -%}
+        [
+        {%- for p in src -%}
+          {"start": "{{ p.start }}", "end": "{{ p.end }}", "value": {{ p.value | float(0) }}}{{ ',' if not loop.last }}
+        {%- endfor -%}
+        ]
+    sensor:
+      - name: "Forecast Price Backup"
+        unique_id: forecast_price_backup
+        icon: mdi:cash-lock
+        state: "{{ (as_timestamp((saved | first).start, 0) | timestamp_custom('%Y-%m-%d')) if saved | length > 0 else 'none' }}"
+        attributes:
+          raw: "{{ saved }}"
+          no_prices_since: >
+            {%- if covered -%}{{ none }}
+            {%- else -%}{{ (this.attributes.get('no_prices_since') if this is not none and this.attributes is defined else none) or now().isoformat() }}{%- endif -%}
 
   # ---- Sensor detection ----
   # Looks for sensors that fit the input fields of Forecasting Configuration (Basic):
@@ -1954,8 +2019,23 @@ template:
       t_sun_ts: "{{ next_sun_ts + c_sun_offset_s }}"
 
       # ---- Price slots ------------------------------------------------
-      prices_today: "{{ state_attr('sensor.dynamic_nordpool', 'raw_today') or [] }}"
-      prices_tomorrow: "{{ state_attr('sensor.dynamic_nordpool', 'raw_tomorrow') or [] }}"
+      # Source of today's prices: Nord Pool, or the saved prices (sensor.forecast_price_backup) when
+      # Nord Pool has no price for now but the backup does (e.g. after midnight without new prices).
+      price_src: >
+        {%- set ns = namespace(ok=false, rok=false) -%}
+        {%- set r = state_attr('sensor.dynamic_nordpool', 'raw_today') or [] -%}
+        {%- for p in r -%}{%- if as_timestamp(p.start, 0) <= now_ts < as_timestamp(p.end, 0) -%}{%- set ns.ok = true -%}{%- endif -%}{%- endfor -%}
+        {%- for p in state_attr('sensor.forecast_price_backup', 'raw') or [] -%}{%- if as_timestamp(p.start, 0) <= now_ts < as_timestamp(p.end, 0) -%}{%- set ns.rok = true -%}{%- endif -%}{%- endfor -%}
+        {{ 'nordpool' if ns.ok else ('reserve' if ns.rok else ('nordpool' if r | length > 0 else 'none')) }}
+      prices_today: "{{ (state_attr('sensor.forecast_price_backup', 'raw') or []) if price_src == 'reserve' else (state_attr('sensor.dynamic_nordpool', 'raw_today') or []) }}"
+      prices_tomorrow: >
+        {%- set r = state_attr('sensor.dynamic_nordpool', 'raw_tomorrow') or [] -%}
+        {%- if price_src == 'reserve' and prices_today | length > 0 -%}
+          {%- set eind = as_timestamp((prices_today | last).end, 0) -%}
+          {%- set ns2 = namespace(l=[]) -%}
+          {%- for p in r if as_timestamp(p.start, 0) >= eind -%}{%- set ns2.l = ns2.l + [p] -%}{%- endfor -%}
+          {{ ns2.l }}
+        {%- else -%}{{ r }}{%- endif -%}
       prices_ok: "{{ prices_today | length > 0 }}"
       tomorrow_known: "{{ prices_tomorrow | length > 0 }}"
       # Today's slots that are still (partly) in the future
@@ -3303,6 +3383,7 @@ template:
           pathcheck_solar_room_kwh: "{{ solar_dc if path_day else 0 }}"
           # --- Dip and charge power ---
           price_now: "{{ price_now if price_now < 999 else none }}"
+          price_source: "{{ price_src }}"
           dip_threshold: "{{ dip_threshold }}"
           in_dip: "{{ in_dip }}"
           hold_discharge: "{{ hold_discharge }}"

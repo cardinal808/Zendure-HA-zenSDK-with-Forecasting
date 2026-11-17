@@ -17,6 +17,18 @@ Versions follow `year.month.sequence`; the sequence restarts at 1 every month. E
 - **At an equal price the latest quarter before the peak:** at exactly equal prices the allocation chose the earliest quarter; the battery then sat full for hours and was topped up again and again.
 - Closed loop (`tools/scenario_sim.py`), net cost old → new (optimum): afternoon + night at 60% €5.94 → €5.74 (€5.74), at 20% €6.71 → €6.49 (€6.49), at 95% €5.11 → €5.08 (€5.08); three tariffs with smart hold unchanged at the optimum.
 
+**Prices after midnight: backup from yesterday's prices**
+- If Nord Pool drops out after midnight (the HACS sensor then sometimes gives no `raw_today` for hours, or still yesterday's), the planner planned nothing and nothing was charged. New sensor **Forecast Price Backup** (`sensor.forecast_price_backup`) stores tomorrow's prices every 5 minutes as soon as they are known; when Nord Pool has no price for now, the planner uses that backup (attribute `price_source`: `nordpool`, `reserve` or `none`). Tomorrow's prices arriving later are appended after the backup.
+- Notice in the plan card when Nord Pool gives no price for now for more than 5 minutes: warning when the backup takes over, error when the backup is empty too (prompted by the QempZoR diagnostics export).
+
+**Savings start again**
+- The button is now called **Savings Start Again** (dashboard: *Start again (all periods)*) and resets today, this month, this year and yesterday as well as the total. Installations from before 2026.11.7 with a wrong fixed tariff setting had a negative dynamic cost item; resetting only the total left month and year wrong.
+- Notice in the plan card when the dynamic costs of this month or the total are negative while power was taken from the grid.
+- Note: in the per-source statistics graphs the reset gives a negative step on the day itself.
+
+**Notice for a very low solar forecast reliability**
+- When the general value or a month value is between 0 and 10%, the plan card notes that the planner uses that percentage of the expected solar. Usually a factor (1 = 100%) was entered.
+
 **Tools**
 - `tools/scenario_sim.py`: closed-loop simulation per quarter hour on synthetic scenarios, compared with the optimum (dynamic programming), and `--regels`: rule tests over 54 situations (more usage → never less charging, no loss-making slot, plan stable after a quarter hour).
 

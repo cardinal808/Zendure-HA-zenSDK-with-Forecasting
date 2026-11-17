@@ -4896,7 +4896,7 @@ views:
               - entity: input_number.besparing_accu_al_terugverdiend
                 name: Accu al terugverdiend (vóór de meting)
               - entity: input_button.besparing_totaal_reset
-                name: Totaal opnieuw beginnen
+                name: Opnieuw beginnen (alle periodes)
             visibility:
               - condition: state
                 entity: input_number.besparing_vast_leveringsprijs

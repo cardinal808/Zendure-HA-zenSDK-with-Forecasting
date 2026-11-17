@@ -17,6 +17,18 @@ Versies volgen `jaar.maand.volgnummer`; het volgnummer begint elke maand bij 1. 
 - **Bij gelijke prijs het laatste kwartier vóór de piek:** de toewijzing koos bij precies gelijke prijzen het vroegste kwartier; dan stond de accu uren vol en werd hij steeds een beetje bijgeladen.
 - Gesloten lus (`tools/scenario_sim.py`), netto kosten oud → nieuw (optimum): middag + nacht bij 60% €5,94 → €5,74 (€5,74), bij 20% €6,71 → €6,49 (€6,49), bij 95% €5,11 → €5,08 (€5,08); drie tarieven met slim vasthouden ongewijzigd op het optimum.
 
+**Prijzen na middernacht: reserve uit de prijzen van gisteren**
+- Valt Nord Pool na middernacht uit (de HACS-sensor geeft dan soms uren geen `raw_today`, of nog die van gisteren), dan plande de planner niets meer en werd er niet geladen. Nieuwe sensor **Forecast Prijzen Reserve** (`sensor.forecast_prijzen_reserve`) bewaart elke 5 minuten de prijzen van morgen zodra ze bekend zijn; heeft Nord Pool geen prijs voor nu, dan rekent de planner met die reserve (attribuut `prijzen_bron`: `nordpool`, `reserve` of `none`). Prijzen van morgen die later binnenkomen worden achter de reserve geplakt.
+- Melding in de plankaart als Nord Pool langer dan 5 minuten geen prijs voor nu geeft: waarschuwing als de reserve het overneemt, fout als ook de reserve leeg is (aanleiding: diagnose-export QempZoR).
+
+**Besparing opnieuw beginnen**
+- De knop heet nu **Besparing Opnieuw Beginnen** (dashboard: *Opnieuw beginnen (alle periodes)*) en zet naast het totaal ook vandaag, deze maand, dit jaar en gisteren op nul. Installaties van vóór 2026.11.7 met een verkeerde vaste-tariefinstelling hadden een negatieve dynamische kostenpost; alleen het totaal resetten liet maand en jaar fout.
+- Melding in de plankaart als de dynamische kosten van deze maand of het totaal negatief zijn terwijl er wel stroom uit het net is gehaald.
+- Let op: in de statistiekgrafieken per bron geeft de reset een negatieve sprong op de dag zelf.
+
+**Melding bij een zeer lage betrouwbaarheid zonvoorspelling**
+- Staat de algemene of een maandwaarde tussen 0 en 10%, dan meldt de plankaart dat de planner met dat percentage van de verwachte zon rekent. Meestal is een factor (1 = 100%) ingevuld.
+
 **Tools**
 - `tools/scenario_sim.py`: gesloten-lus-simulatie per kwartier op synthetische scenario's, vergeleken met het optimum (dynamisch programmeren), en `--regels`: regeltests over 54 situaties (meer verbruik → nooit minder laden, geen verliesgevend slot, plan stabiel na een kwartier).
 
