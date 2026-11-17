@@ -2,6 +2,14 @@
 
 Versies volgen `jaar.maand.volgnummer`; het volgnummer begint elke maand bij 1. Elke versie vermeldt op welke Gielz-versie hij is gebaseerd. [English](CHANGELOG.md)
 
+## 2026.11.8 (in ontwikkeling) — gebaseerd op Gielz v20261113
+
+**Pad-check: laden begrensd door de ruimte op het moment zelf, niet die van nu**
+- De toewijzing van laadslots aan dure kwartieren begrensde het totaal op de ruimte die de accu *nu* heeft. Laden in de middag voor de avondpiek en 's nachts voor de ochtendpiek deelden dan die ruimte, en de nacht at hem op (aanleiding: Omnibattery 2.0, discussie #865). Nu rekent de planner het verloop van de accu per prijsslot door (verbruik eruit, zon erin) en mag een laadslot alleen vullen tot de ruimte tot aan het dure kwartier dat het bedient. Nieuwe variabelen `pad_slots` en `pad_basis`.
+
+**Tools**
+- `tools/scenario_sim.py`: gesloten-lus-simulatie per kwartier op synthetische scenario's, vergeleken met het optimum (dynamisch programmeren).
+
 ## 2026.11.7 — gebaseerd op Gielz v20261113
 
 **Helios Forecast als zonvoorspelling, met detail per kwartier**

@@ -2451,25 +2451,58 @@ template:
         {%- if eerste is not none and marge_tekort_ac > 0 -%}
           {{ gap_na_zon + [{'s': eerste.s, 'v': eerste.v, 'kwh': marge_tekort_ac}] }}
         {%- else -%}{{ gap_na_zon }}{%- endif -%}
+      # Verloop van de accu zonder netladen (kWh DC aan het begin van elk toekomstig prijsslot):
+      # verbruik eruit (niet in een dal), zon-overschot erin, tussen 0 en s_max. De toewijzing
+      # hieronder mag per slot alleen vullen tot de ruimte op dát moment: laden in de middag voor
+      # de avondpiek en 's nachts voor de ochtendpiek kan dan samen, ook als de accu nu bijna vol is.
+      pad_slots: "{{ pad_kand | selectattr('e', 'gt', nu_ts) | sort(attribute='s') | list }}"
+      pad_basis: >
+        {%- set ns = namespace(e=s_nu, l=[]) -%}
+        {%- for x in pad_slots -%}
+          {%- set ns.l = ns.l + [ns.e | round(4)] -%}
+          {%- set a = [x.s, nu_ts] | max -%}{%- set b = x.e -%}
+          {%- set nk = namespace(k=0) -%}{%- for i in range(((a - kwart_s0) // 900) | int, ((b - kwart_s0 - 0.001) // 900) | int + 1) -%}{%- set qa = kwart_s0 + i * 900 -%}{%- set ov = [qa + 900, b] | min - [qa, a] | max -%}{%- if ov > 0 -%}{%- set nk.k = nk.k + (kwart_kw[[i, 0] | max] if i < kwart_kw | length else l_uur) * ov / 3600 -%}{%- endif -%}{%- endfor -%}
+          {%- set nz = namespace(d=0, o=0) -%}
+          {%- for p in pad_zon -%}
+            {%- set pa = [p.s, a] | max -%}{%- set pb = [p.s + c_detail_periode_s, b] | min -%}
+            {%- if pb > pa -%}
+              {%- set nz.d = nz.d + ([p.pv, p.kw] | min) * (pb - pa) / 3600 -%}
+              {%- set nz.o = nz.o + ([p.pv - p.kw, 0] | max) * (pb - pa) / 3600 -%}
+            {%- endif -%}
+          {%- endfor -%}
+          {%- set ns.e = [ns.e + nz.o * eff_in, s_max] | min -%}
+          {%- set is_morgen = x.s >= eind_vandaag_ts -%}
+          {%- set dal = dal_blokkade_plan and ((x.v <= dal_drempel_morgen and x.v < p_morg_gem) if is_morgen else (x.v <= dal_drempel and x.v < p_dag_gem)) -%}
+          {%- if not dal and eff_out > 0 -%}{%- set ns.e = [ns.e - ([nk.k - nz.d, 0] | max) / eff_out, 0] | max -%}{%- endif -%}
+        {%- endfor -%}
+        {{ ns.l }}
       pad_toewijzing: >
-        {%- set ns = namespace(l=[], totaal=0) -%}
-        {%- set ruimte = ([room - zon_dc, 0] | max) if pad_dag else room -%}
-        {%- set max_ac = (ruimte / eff_in) if eff_in > 0 else 0 -%}
-        {%- if pad_actief and e_slot > 0 and eff_rt > 0 -%}
-          {%- set laad_kand = pad_kand | sort(attribute='v') -%}
+        {%- set ns = namespace(l=[], vrij=[]) -%}
+        {%- set ts = pad_slots | map(attribute='s') | list -%}
+        {%- for b in pad_basis -%}{%- set ns.vrij = ns.vrij + [[s_max - b, 0] | max] -%}{%- endfor -%}
+        {%- if pad_actief and e_slot > 0 and eff_rt > 0 and eff_in > 0 -%}
+          {%- set laad_kand = pad_slots | sort(attribute='v') -%}
           {%- for q in gap_met_marge | sort(attribute='v', reverse=true) -%}
             {%- set nq = namespace(nodig=q.kwh / eff_rt) -%}
+            {%- set iq = ts.index(q.s) if q.s in ts else 0 -%}
             {%- for x in laad_kand -%}
-              {%- if nq.nodig > 0.001 and ns.totaal < max_ac and x.e <= q.s and x.e > nu_ts -%}
+              {%- if nq.nodig > 0.001 and x.e <= q.s -%}
                 {%- set sp = (q.v * eff_rt - x.v) / ([x.v | abs, c_prijs_noemer] | max) * 100 -%}
                 {%- set sp_bruto = (q.v - x.v) / ([x.v | abs, c_prijs_noemer] | max) * 100 -%}
                 {%- if sp > 0 and sp_bruto >= spread_min -%}
+                  {%- set ix = ts.index(x.s) -%}
+                  {#- De lading zit in de accu van het laadslot tot het dure kwartier -#}
+                  {%- set ruimte_ac = (ns.vrij[ix:iq] | min) / eff_in if iq > ix else 0 -%}
                   {%- set gebruikt = ns.l | selectattr('s', 'eq', x.s) | map(attribute='k') | sum -%}
-                  {%- set neem = [e_slot - gebruikt, nq.nodig, max_ac - ns.totaal] | min -%}
+                  {%- set neem = [e_slot - gebruikt, nq.nodig, ruimte_ac] | min -%}
                   {%- if neem > 0.001 -%}
                     {%- set ns.l = ns.l + [{'s': x.s, 'k': neem | round(4)}] -%}
-                    {%- set ns.totaal = ns.totaal + neem -%}
                     {%- set nq.nodig = nq.nodig - neem -%}
+                    {%- set nv = namespace(l=[]) -%}
+                    {%- for i in range(ns.vrij | length) -%}
+                      {%- set nv.l = nv.l + [ns.vrij[i] - neem * eff_in if ix <= i < iq else ns.vrij[i]] -%}
+                    {%- endfor -%}
+                    {%- set ns.vrij = nv.l -%}
                   {%- endif -%}
                 {%- endif -%}
               {%- endif -%}

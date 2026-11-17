@@ -2452,25 +2452,59 @@ template:
         {%- if first is not none and margin_shortfall_ac > 0 -%}
           {{ gap_after_solar + [{'s': first.s, 'v': first.v, 'kwh': margin_shortfall_ac}] }}
         {%- else -%}{{ gap_after_solar }}{%- endif -%}
+      # Battery content without grid charging (kWh DC at the start of every future price slot):
+      # usage out (not in a dip), solar surplus in, between 0 and s_max. The allocation below may
+      # fill a slot only up to the room at THAT moment: charging in the afternoon for the evening
+      # peak and at night for the morning peak can then go together, even when the battery is
+      # almost full now.
+      path_slots: "{{ path_cand | selectattr('e', 'gt', now_ts) | sort(attribute='s') | list }}"
+      path_base: >
+        {%- set ns = namespace(e=s_now, l=[]) -%}
+        {%- for x in path_slots -%}
+          {%- set ns.l = ns.l + [ns.e | round(4)] -%}
+          {%- set a = [x.s, now_ts] | max -%}{%- set b = x.e -%}
+          {%- set nk = namespace(k=0) -%}{%- for i in range(((a - q_s0) // 900) | int, ((b - q_s0 - 0.001) // 900) | int + 1) -%}{%- set qa = q_s0 + i * 900 -%}{%- set ov = [qa + 900, b] | min - [qa, a] | max -%}{%- if ov > 0 -%}{%- set nk.k = nk.k + (q_kw[[i, 0] | max] if i < q_kw | length else l_hour) * ov / 3600 -%}{%- endif -%}{%- endfor -%}
+          {%- set nz = namespace(d=0, o=0) -%}
+          {%- for p in path_solar -%}
+            {%- set pa = [p.s, a] | max -%}{%- set pb = [p.s + c_detail_period_s, b] | min -%}
+            {%- if pb > pa -%}
+              {%- set nz.d = nz.d + ([p.pv, p.kw] | min) * (pb - pa) / 3600 -%}
+              {%- set nz.o = nz.o + ([p.pv - p.kw, 0] | max) * (pb - pa) / 3600 -%}
+            {%- endif -%}
+          {%- endfor -%}
+          {%- set ns.e = [ns.e + nz.o * eff_in, s_max] | min -%}
+          {%- set is_tmrw = x.s >= end_today_ts -%}
+          {%- set dip = dip_hold_plan and ((x.v <= dip_threshold_tomorrow and x.v < p_tmrw_avg) if is_tmrw else (x.v <= dip_threshold and x.v < p_day_avg)) -%}
+          {%- if not dip and eff_out > 0 -%}{%- set ns.e = [ns.e - ([nk.k - nz.d, 0] | max) / eff_out, 0] | max -%}{%- endif -%}
+        {%- endfor -%}
+        {{ ns.l }}
       path_allocation: >
-        {%- set ns = namespace(l=[], total=0) -%}
-        {%- set space = ([room - solar_dc, 0] | max) if path_day else room -%}
-        {%- set max_ac = (space / eff_in) if eff_in > 0 else 0 -%}
-        {%- if path_active and e_slot > 0 and eff_rt > 0 -%}
-          {%- set charge_cand = path_cand | sort(attribute='v') -%}
+        {%- set ns = namespace(l=[], free=[]) -%}
+        {%- set ts = path_slots | map(attribute='s') | list -%}
+        {%- for b in path_base -%}{%- set ns.free = ns.free + [[s_max - b, 0] | max] -%}{%- endfor -%}
+        {%- if path_active and e_slot > 0 and eff_rt > 0 and eff_in > 0 -%}
+          {%- set charge_cand = path_slots | sort(attribute='v') -%}
           {%- for q in gap_with_margin | sort(attribute='v', reverse=true) -%}
             {%- set nq = namespace(need=q.kwh / eff_rt) -%}
+            {%- set iq = ts.index(q.s) if q.s in ts else 0 -%}
             {%- for x in charge_cand -%}
-              {%- if nq.need > 0.001 and ns.total < max_ac and x.e <= q.s and x.e > now_ts -%}
+              {%- if nq.need > 0.001 and x.e <= q.s -%}
                 {%- set sp = (q.v * eff_rt - x.v) / ([x.v | abs, c_price_floor] | max) * 100 -%}
                 {%- set sp_gross = (q.v - x.v) / ([x.v | abs, c_price_floor] | max) * 100 -%}
                 {%- if sp > 0 and sp_gross >= spread_min -%}
+                  {%- set ix = ts.index(x.s) -%}
+                  {#- The charge stays in the battery from the charge slot until the expensive quarter -#}
+                  {%- set space_ac = (ns.free[ix:iq] | min) / eff_in if iq > ix else 0 -%}
                   {%- set used = ns.l | selectattr('s', 'eq', x.s) | map(attribute='k') | sum -%}
-                  {%- set take = [e_slot - used, nq.need, max_ac - ns.total] | min -%}
+                  {%- set take = [e_slot - used, nq.need, space_ac] | min -%}
                   {%- if take > 0.001 -%}
                     {%- set ns.l = ns.l + [{'s': x.s, 'k': take | round(4)}] -%}
-                    {%- set ns.total = ns.total + take -%}
                     {%- set nq.need = nq.need - take -%}
+                    {%- set nf = namespace(l=[]) -%}
+                    {%- for i in range(ns.free | length) -%}
+                      {%- set nf.l = nf.l + [ns.free[i] - take * eff_in if ix <= i < iq else ns.free[i]] -%}
+                    {%- endfor -%}
+                    {%- set ns.free = nf.l -%}
                   {%- endif -%}
                 {%- endif -%}
               {%- endif -%}

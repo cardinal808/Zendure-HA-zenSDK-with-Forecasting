@@ -24,6 +24,19 @@ python3 tools/vergelijk.py /tmp/oud.yaml "Dutch (NL) Integration/packages/zendur
     sensor.zendure_2400_ac_laadpercentage=10 --varieer input_number.dynamisch_minimale_spread=0,3,25
 ```
 
+## scenario_sim.py
+
+Test de planner in een **gesloten lus** op een synthetisch scenario (vaste prijzen per uur, vast verbruik, geen zon, eigen accu) en vergelijkt de uitkomst met het **optimum** (dynamisch programmeren over dezelfde acties: laden / vasthouden / nul op de meter). Een echte export dient alleen als basis voor alle entiteiten. Elk kwartier draait de planner en voert de simulatie uit wat de automation zou doen. Beide krijgen dezelfde eindwaarde voor de lading die overblijft. Scenario's staan in `SCENARIOS` in het script.
+
+```bash
+python3 tools/scenario_sim.py export.json                  # alle scenario's
+python3 tools/scenario_sim.py export.json omni1_60 --log   # één scenario, met elk kwartier
+git show HEAD~1:"Dutch (NL) Integration/packages/zendure_forecasting.yaml" > /tmp/oud.yaml
+python3 tools/scenario_sim.py export.json --yaml /tmp/oud.yaml   # oude planner
+```
+
+Kolommen: netto kosten van het plan, van het optimum, het verschil, het aantal laadstarts, kWh uit het net geladen en de lading aan het eind. Alleen de NL-planner (de scenario's zetten NL-entiteiten).
+
 ## Beperkingen
 
 - De functies van Home Assistant zijn nagebootst. Kleine verschillen met HA zijn mogelijk; vergelijk daarom vooral oud met nieuw.
@@ -43,5 +56,6 @@ Requires Python 3.11+ with `jinja2` and `pyyaml`.
 
 - `planner_sim.py <forecasting.yaml> <export.json> [entity=value ...] [--tijd YYYY-MM-DDTHH:MM]` calculates the plan; `entity=value` overrides a state, `--tijd` sets the time of day.
 - `vergelijk.py <old.yaml> <new.yaml> <export.json> [entity=value ...] [--varieer entity=v1,v2,...]` compares two planner versions on the same export, optionally for a range of values of one setting.
+- `scenario_sim.py <export.json> [scenario ...] [--yaml planner.yaml] [--log]` runs the planner in a closed loop on synthetic scenarios (fixed prices and usage, no solar) and compares the cost with the optimum (dynamic programming over charge / hold / zero on the meter). The export only provides the entities; scenarios are in `SCENARIOS`. NL planner only.
 
 Limitations: Home Assistant functions are emulated (compare old against new rather than trusting absolute values); `sun.sun` is estimated roughly; `integration_entities()` is approximated from entity names; the detailed solar forecast (Solcast) is only in exports from Forecasting 2026.11.3 on; an NL export only works with the NL planner and an EN export with the EN planner.

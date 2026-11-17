@@ -2,6 +2,14 @@
 
 Versions follow `year.month.sequence`; the sequence restarts at 1 every month. Each version states which Gielz version it is based on. [Nederlands](CHANGELOG.nl.md)
 
+## 2026.11.8 (in development) — based on Gielz v20261113
+
+**Path check: charging limited by the room at that moment, not the room now**
+- Allocating charge slots to expensive quarter hours capped the total at the room the battery has *now*. Charging in the afternoon for the evening peak and at night for the morning peak then shared that room, and the night used it up (prompted by Omnibattery 2.0, discussion #865). The planner now runs the battery content per price slot (usage out, solar in) and a charge slot may only fill up to the room until the expensive quarter it serves. New variables `path_slots` and `path_base`.
+
+**Tools**
+- `tools/scenario_sim.py`: closed-loop simulation per quarter hour on synthetic scenarios, compared with the optimum (dynamic programming).
+
 ## 2026.11.7 — based on Gielz v20261113
 
 **Helios Forecast as solar forecast, with detail per quarter hour**
