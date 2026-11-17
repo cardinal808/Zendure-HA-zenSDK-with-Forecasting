@@ -2910,10 +2910,18 @@ template:
       # laadmoment meer gepland, dan krijgt de lading de duurste kwartieren. Vasthouden kost geen
       # extra verlies (de stroom gaat er later net zo goed uit), dus het loont zodra de prijs nu
       # lager is dan het goedkoopste kwartier dat de accu dan nog dekt (de grensprijs).
+      # Tot waar slim vasthouden kijkt: het einde van het gat, of eerder het begin van het eerstvolgende
+      # geplande laden (minstens c_vasthouden_laden_min_kwh). Daar wordt de accu weer bijgeladen, dus
+      # de lading van nu hoort bij de dure kwartieren daarvóór; laden ná de piek (bv. de nacht voor de
+      # ochtend) zet vasthouden voor de avondpiek dan niet meer uit.
+      vh_eind_ts: >
+        {%- set later = gekozen | selectattr('s', 'gt', nu_ts) | selectattr('s', 'lt', t_gap_eind_ts) | sort(attribute='s') | list -%}
+        {%- set later_ac = [later | length * e_slot, gepland_ac] | min -%}
+        {{ (later | first).s if later | length > 0 and later_ac >= c_vasthouden_laden_min_kwh else t_gap_eind_ts }}
       vh_kwartieren: >
         {%- set ns = namespace(l=[]) -%}
         {%- for x in pad_kand -%}
-          {%- set a = [x.s, nu_ts] | max -%}{%- set b = [x.e, t_gap_eind_ts] | min -%}
+          {%- set a = [x.s, nu_ts] | max -%}{%- set b = [x.e, vh_eind_ts] | min -%}
           {%- if b > a -%}
             {%- set nz = namespace(k=0) -%}
             {%- for z in pad_zon -%}
@@ -2929,7 +2937,7 @@ template:
       # Gepland netladen vóór het einde van het gat (kWh AC). Een restje (bv. twee bijlaadslots met een
       # bijna volle accu) zet slim vasthouden niet uit; het telt mee in wat de accu kan leveren.
       vh_gepland_ac: >
-        {{ ([(gekozen | selectattr('e', 'gt', nu_ts) | selectattr('s', 'lt', t_gap_eind_ts) | list | length) * e_slot, gepland_ac] | min) | round(3) }}
+        {{ ([(gekozen | selectattr('e', 'gt', nu_ts) | selectattr('s', 'lt', vh_eind_ts) | list | length) * e_slot, gepland_ac] | min) | round(3) }}
       vh_laden_gepland: "{{ vh_gepland_ac >= c_vasthouden_laden_min_kwh }}"
       vh_grens: >
         {%- set ns = namespace(e=(s_nu + [vh_gepland_ac * eff_in, room] | min) * eff_out, p=none) -%}

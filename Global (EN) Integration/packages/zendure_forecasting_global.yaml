@@ -2913,10 +2913,18 @@ template:
       # charge moment is planned any more, the charge goes to the most expensive quarters. Holding
       # costs no extra loss (the power comes out later just the same), so it pays off as soon as the
       # price now is below the cheapest quarter the battery still covers then (the threshold price).
+      # How far smart hold looks: the end of the gap, or earlier the start of the next planned charging
+      # (at least c_hold_charge_min_kwh). There the battery is charged again, so the charge of now
+      # belongs to the expensive quarters before it; charging after the peak (e.g. the night for the
+      # morning) then no longer turns off holding for the evening peak.
+      sh_end_ts: >
+        {%- set later = chosen | selectattr('s', 'gt', now_ts) | selectattr('s', 'lt', t_gap_end_ts) | sort(attribute='s') | list -%}
+        {%- set later_ac = [later | length * e_slot, planned_ac] | min -%}
+        {{ (later | first).s if later | length > 0 and later_ac >= c_hold_charge_min_kwh else t_gap_end_ts }}
       sh_quarters: >
         {%- set ns = namespace(l=[]) -%}
         {%- for x in path_cand -%}
-          {%- set a = [x.s, now_ts] | max -%}{%- set b = [x.e, t_gap_end_ts] | min -%}
+          {%- set a = [x.s, now_ts] | max -%}{%- set b = [x.e, sh_end_ts] | min -%}
           {%- if b > a -%}
             {%- set nz = namespace(k=0) -%}
             {%- for z in path_solar -%}
@@ -2933,7 +2941,7 @@ template:
       # slots with an almost full battery) does not turn smart hold off; it counts towards what the
       # battery can supply.
       sh_planned_ac: >
-        {{ ([(chosen | selectattr('e', 'gt', now_ts) | selectattr('s', 'lt', t_gap_end_ts) | list | length) * e_slot, planned_ac] | min) | round(3) }}
+        {{ ([(chosen | selectattr('e', 'gt', now_ts) | selectattr('s', 'lt', sh_end_ts) | list | length) * e_slot, planned_ac] | min) | round(3) }}
       sh_charge_planned: "{{ sh_planned_ac >= c_hold_charge_min_kwh }}"
       sh_threshold: >
         {%- set ns = namespace(e=(s_now + [sh_planned_ac * eff_in, room] | min) * eff_out, p=none) -%}

@@ -193,39 +193,43 @@ def gesloten_lus(basis, sc, yaml_path=YAML_NL, uitvoer=False):
             'laadstarts': starts, 'netladen_kwh': round(laden_kwh, 2), 'log': log}
 
 
-def optimum(sc, stap=0.01):
-    """Dynamisch programmeren over de bruikbare DC-energie; acties laden / vasthouden / NOM."""
+def optimum(sc, stap=0.005):
+    """Dynamisch programmeren over de bruikbare DC-energie; acties laden / vasthouden / NOM.
+    Tussen de rasterpunten wordt lineair geïnterpoleerd (anders stapelen afrondingen op)."""
     t0 = datetime.fromisoformat(sc['start']).replace(tzinfo=TZ)
     eind = datetime.fromisoformat(sc['eind']).replace(tzinfo=TZ)
     n = int((eind - t0).total_seconds() // 900)
     eff = (sc['rte'] / 100) ** 0.5
     e_max = sc['cap'] * (sc['soc_max'] - sc['soc_min']) / 100
     N = int(round(e_max / stap))
+    stap = e_max / N
     p_eind = min(sc['prijs'](h) for h in range(24)) / eff
     V = [-(i * stap) * p_eind for i in range(N + 1)]
+
+    def waarde(W, E):
+        x = min(max(E / stap, 0), N)
+        i = min(int(x), N - 1)
+        f = x - i
+        return W[i] * (1 - f) + W[i + 1] * f
+
+    ac_max = sc['p_max_w'] / 1000 / 4
     for k in range(n - 1, -1, -1):
         t = t0 + timedelta(minutes=15 * k)
         p = sc['prijs'](t.hour)
         last = sc['last'](t.hour) / 4
-        ac_max = sc['p_max_w'] / 1000 / 4
         W = [0.0] * (N + 1)
         for i in range(N + 1):
             E = i * stap
-            # vasthouden
-            best = last * p + V[i]
-            # NOM
+            best = last * p + V[i]                                   # vasthouden
             dc = min(last / eff, E)
-            j = int(round((E - dc) / stap))
-            best = min(best, (last - dc * eff) * p + V[j])
-            # laden
+            best = min(best, (last - dc * eff) * p + waarde(V, E - dc))  # nul op de meter
             ac = min(ac_max, (e_max - E) / eff)
-            if ac > 0.001:
-                j = min(N, int(round((E + ac * eff) / stap)))
-                best = min(best, (last + ac) * p + V[j])
+            if ac > 1e-6:
+                best = min(best, (last + ac) * p + waarde(V, E + ac * eff))  # laden
             W[i] = best
         V = W
     E0 = sc['cap'] * (sc['soc'] - sc['soc_min']) / 100
-    return round(V[int(round(E0 / stap))], 3)
+    return round(waarde(V, E0), 3)
 
 
 def main():
