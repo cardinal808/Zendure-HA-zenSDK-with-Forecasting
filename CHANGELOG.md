@@ -4,11 +4,11 @@ Versions follow `year.month.sequence`; the sequence restarts at 1 every month. E
 
 ## 2026.11.8 (in development) — based on Gielz v20261113
 
-**New optional package: Peak loads (`zendure_peak_loads_global.yaml`)**
+**New optional package: Quooker (`zendure_quooker_global.yaml`)**
 - Short, high peaks from e.g. a boiling-water tap such as a Quooker (reheating, also at night every few hours ~2.2 kW), kettle or induction hob come from the grid instead of the battery. Without this package the battery follows every peak in the Smart Matching modes: ramping up and down, frequent relay switching and, because of the control delay, a brief export after the peak.
-- Enter one or more **power sensors**, separated by commas (W, kW or A; A × 230 V). Above the **threshold** (default 1000 W) `sensor.peak_discharge_correction` is the summed power; the Smart Matching discharge blocks subtract it from the grid meter, just like the car and the air conditioner. Charging from solar is unchanged: the peak then comes off the charging power.
-- Automation (EN and NL): the 6 calculations with the EV and HVAC correction also subtract `sensor.peak_discharge_correction` / `sensor.piek_ontlaad_correctie`. Without the package it is 0.
-- Dashboard: block **Forecasting Configuration (Peak loads)**, only visible when the package is loaded, and a row in the Optional packages card.
+- Enter one or more **power sensors**, separated by commas (W, kW or A; A × 230 V). Above the **threshold** (default 1000 W) `sensor.zendure_quooker_discharge_correction` is the summed power; the Smart Matching discharge blocks subtract it from the grid meter, just like the car and the air conditioner. Charging from solar is unchanged: the peak then comes off the charging power.
+- Automation (EN and NL): the 6 calculations with the EV and HVAC correction also subtract `sensor.zendure_quooker_discharge_correction` / `sensor.zendure_quooker_ontlaad_correctie`. Without the package it is 0.
+- Dashboard: block **Forecasting Configuration (Quooker)**, only visible when the package is loaded, and a row in the Optional packages card.
 
 **Path check: charging limited by the room at that moment, not the room now**
 - Allocating charge slots to expensive quarter hours capped the total at the room the battery has *now*. Charging in the afternoon for the evening peak and at night for the morning peak then shared that room, and the night used it up (prompted by Omnibattery 2.0, discussion #865). The planner now runs the battery content per price slot (usage out, solar in) and a charge slot may only fill up to the room until the expensive quarter it serves. New variables `path_slots` and `path_base`.

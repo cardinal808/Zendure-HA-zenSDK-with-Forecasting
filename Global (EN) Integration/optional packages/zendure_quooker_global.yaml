@@ -3,24 +3,24 @@
 # OPTIONAL PACKAGE - not needed for Dynamic Smart Matching + Forecasting. Leave it out = feature off.
 # In the repo this file is in the "optional packages" folder. To add it: copy it to your packages folder
 # and restart Home Assistant. Removing it and restarting turns the feature off again.
-# Needs: a measurement (W, kW or A) per peak load, e.g. a Shelly Plug or Shelly 1PM.
+# Needs: a measurement (W, kW or A) of the Quooker, e.g. a Shelly Plug or Shelly 1PM.
 # =====================================================================
-# Zendure Peak Loads - short, high peaks not from the battery (optional)
+# Zendure Quooker - the Quooker's peaks not from the battery (optional)
 #
 # Put this file next to zendure_gielz1986_global.yaml (same packages folder).
 # Without this file nothing changes: the automation then uses 0 W.
-# The Forecasting Configuration (Peak loads) block on the Settings tab appears by itself as soon as
+# The Forecasting Configuration (Quooker) block on the Settings tab appears by itself as soon as
 # this file is loaded.
 #
-# Meant for appliances that often draw a lot of power for a short time: a boiling-water tap such as
-# a Quooker (reheating, also at night every few hours, ~2.2 kW for tens of seconds), kettle, coffee
-# machine, induction hob. Without this package the battery follows every peak in the Smart Matching
+# Meant for a boiling-water tap such as a Quooker: it often reheats briefly at high power (also at
+# night every few hours, ~2.2 kW for tens of seconds). Other short peak loads (kettle, coffee machine,
+# induction hob) can be added in the same field. Without this package the battery follows every peak in the Smart Matching
 # modes: ramping up, ramping down, the relay switches often, and because of the control delay the
 # battery briefly exports to the grid after the peak.
 #
 # What the package does:
-#   sensor.peak_power is the summed power of the sensors entered (W, kW or A; A x 230 V).
-#   sensor.peak_discharge_correction is that power once it is above the threshold (standby does not count).
+#   sensor.zendure_quooker_power is the summed power of the sensors entered (W, kW or A; A x 230 V).
+#   sensor.zendure_quooker_discharge_correction is that power once it is above the threshold (standby does not count).
 #   The Smart Matching discharge blocks in the automation subtract that correction from the grid meter
 #   (like for the car and the air conditioner): the battery keeps supplying the house and the grid
 #   supplies the peak.
@@ -36,16 +36,16 @@
 
 input_text:
   # One or more sensors, separated by commas (e.g. sensor.quooker_power, sensor.kettle_power)
-  peak_power_sensors:
-    name: Peak Power Sensors
+  zendure_quooker_power_sensors:
+    name: Zendure Quooker Power Sensors
     icon: mdi:kettle-steam
     max: 255
     mode: text
 
 input_number:
   # Power above which a peak does not come from the battery (default 1000 W)
-  peak_threshold_power:
-    name: Peak Threshold Power
+  zendure_quooker_threshold_power:
+    name: Zendure Quooker Threshold Power
     icon: mdi:flash-alert
     min: 0
     max: 5000
@@ -56,15 +56,15 @@ input_number:
 template:
   - sensor:
       # Summed power of the peak loads in W (0 if nothing is entered)
-      - name: "Peak Power"
-        unique_id: peak_power
+      - name: "Zendure Quooker Power"
+        unique_id: zendure_quooker_power
         icon: mdi:kettle-steam
         unit_of_measurement: "W"
         device_class: power
         state_class: measurement
         state: >
           {% set ns = namespace(w=0) %}
-          {% for e in states('input_text.peak_power_sensors').split(',') | map('trim') %}
+          {% for e in states('input_text.zendure_quooker_power_sensors').split(',') | map('trim') %}
             {% if e | lower | regex_match('^sensor\\..+') and has_value(e) %}
               {% set u = state_attr(e, 'unit_of_measurement') %}
               {% set v = states(e) | float(0) %}
@@ -75,48 +75,48 @@ template:
           {{ ns.w | round(0) }}
         attributes:
           sensors: >
-            {{ states('input_text.peak_power_sensors').split(',') | map('trim')
+            {{ states('input_text.zendure_quooker_power_sensors').split(',') | map('trim')
                | select('match', '(?i)^sensor\\..+') | list }}
           without_value: >
-            {{ states('input_text.peak_power_sensors').split(',') | map('trim')
+            {{ states('input_text.zendure_quooker_power_sensors').split(',') | map('trim')
                | select('match', '(?i)^sensor\\..+') | reject('has_value') | list }}
 
       # What the Smart Matching discharge blocks subtract from the grid meter: the peak power once
       # it is above the threshold (standby and small loads do not count).
-      - name: "Peak Discharge Correction"
-        unique_id: peak_discharge_correction
+      - name: "Zendure Quooker Discharge Correction"
+        unique_id: zendure_quooker_discharge_correction
         icon: mdi:battery-minus-outline
         unit_of_measurement: "W"
         device_class: power
         state_class: measurement
         state: >
-          {% set d = states('input_number.peak_threshold_power') | float(0) %}
-          {% set p = states('sensor.peak_power') | float(0) %}
+          {% set d = states('input_number.zendure_quooker_threshold_power') | float(0) %}
+          {% set p = states('sensor.zendure_quooker_power') | float(0) %}
           {{ p if p > (d if d > 0 else 1000) else 0 }}
 
 automation:
   # Threshold at 0 (e.g. new installation): fill in the default 1000 W (visible in the field).
-  - id: peak_default_values
-    alias: Peak Default Values
+  - id: zendure_quooker_default_values
+    alias: Zendure Quooker Default Values
     description: >-
-      Forecasting 2026.11.8 - Fills in 1000 W as the peak load threshold when it is 0.
+      Forecasting 2026.11.8 - Fills in 1000 W as the Quooker threshold when it is 0.
     mode: queued
     max: 5
     triggers:
       - trigger: homeassistant
         event: start
       - trigger: state
-        entity_id: input_number.peak_threshold_power
+        entity_id: input_number.zendure_quooker_threshold_power
     conditions: []
     actions:
       - delay:
           seconds: 10
       - if:
           - condition: template
-            value_template: "{{ states('input_number.peak_threshold_power') | float(-1) == 0 }}"
+            value_template: "{{ states('input_number.zendure_quooker_threshold_power') | float(-1) == 0 }}"
         then:
           - action: input_number.set_value
             target:
-              entity_id: input_number.peak_threshold_power
+              entity_id: input_number.zendure_quooker_threshold_power
             data:
               value: 1000

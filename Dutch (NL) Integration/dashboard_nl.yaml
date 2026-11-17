@@ -5013,12 +5013,12 @@ views:
           - type: heading
             icon: ''
             heading_style: title
-            heading: Forecasting Configuratie (Piekverbruikers)
+            heading: Forecasting Configuratie (Quooker)
             badges:
               - type: entity
                 show_state: true
                 show_icon: true
-                entity: sensor.piek_vermogen
+                entity: sensor.zendure_quooker_vermogen
                 name: Nu
                 state_content:
                   - name
@@ -5028,18 +5028,19 @@ views:
                   action: more-info
                 visibility:
                   - condition: numeric_state
-                    entity: sensor.piek_vermogen
+                    entity: sensor.zendure_quooker_vermogen
                     above: 0
             visibility:
               - condition: state
-                entity: input_text.piek_vermogen_sensoren
+                entity: input_text.zendure_quooker_vermogen_sensoren
                 state_not: unavailable
           - type: markdown
             content: >-
-              <ha-alert alert-type="info">Helptekst</ha-alert>Voor apparaten
-              die vaak kort veel vermogen vragen, zoals een Quooker, waterkoker
-              of inductieplaat. Vul de **vermogenssensoren** in (W, kW of A,
-              gescheiden door komma's). Komt het opgetelde vermogen boven de
+              <ha-alert alert-type="info">Helptekst</ha-alert>Een Quooker
+              warmt vaak kort na met veel vermogen, ook 's nachts. Vul de
+              **vermogenssensor** van de Quooker in (W, kW of A); andere korte
+              piekverbruikers (waterkoker, inductieplaat) mag je erbij zetten,
+              gescheiden door komma's. Komt het opgetelde vermogen boven de
               **drempel** (standaard 1000 W), dan trekken de NOM-modussen het af
               van de P1-meter: de accu blijft het huis voeden en het net levert
               de piek. Zo schakelt de accu niet bij elke piek op en af en levert
@@ -5054,28 +5055,28 @@ views:
                 entity: input_boolean.help_tonen_op_dashboard
                 state: 'on'
               - condition: state
-                entity: input_text.piek_vermogen_sensoren
+                entity: input_text.zendure_quooker_vermogen_sensoren
                 state_not: unavailable
           - type: entities
             entities:
-              - entity: input_text.piek_vermogen_sensoren
-                name: Vermogenssensoren (komma's, W/kW/A)
-              - entity: input_number.piek_drempel_vermogen
+              - entity: input_text.zendure_quooker_vermogen_sensoren
+                name: Vermogenssensor Quooker (W/kW/A, meer met komma's)
+              - entity: input_number.zendure_quooker_drempel_vermogen
                 name: Drempel W
             visibility:
               - condition: state
-                entity: input_text.piek_vermogen_sensoren
+                entity: input_text.zendure_quooker_vermogen_sensoren
                 state_not: unavailable
           - type: markdown
             text_only: true
             content: |-
-              {%- set z = state_attr('sensor.piek_vermogen', 'zonder_waarde') or [] -%}
-              {%- set c = states('sensor.piek_ontlaad_correctie') | float(0) -%}
+              {%- set z = state_attr('sensor.zendure_quooker_vermogen', 'zonder_waarde') or [] -%}
+              {%- set c = states('sensor.zendure_quooker_ontlaad_correctie') | float(0) -%}
               {% if z | length > 0 %}⚠️ Geen waarde: {{ z | join(', ') }}
               {% endif %}{% if c > 0 %}Piek van {{ c | round(0) | int }} W: de accu ontlaadt daar niet in.{% endif %}
             visibility:
               - condition: state
-                entity: input_text.piek_vermogen_sensoren
+                entity: input_text.zendure_quooker_vermogen_sensoren
                 state_not: unavailable
           - type: heading
             icon: ''
@@ -5332,7 +5333,7 @@ views:
               {%- set p = [
                 ['Besparing', 'Besparing', 'zendure_besparing.yaml', 'Tab Besparing: wat zon, accu en dynamisch contract opleveren, terugverdientijd.'],
                 ['EV', 'EV', 'zendure_ev.yaml', 'Auto laden zonder dat de accu erin ontlaadt, laadsessie nacht of overdag.'],
-                ['Piekverbruikers', 'Piekverbruikers', 'zendure_piekverbruikers.yaml', 'Korte pieken (Quooker, waterkoker) uit het net in plaats van uit de accu.'],
+                ['Quooker', 'Quooker', 'zendure_quooker.yaml', 'Quooker (en andere korte pieken, bv. waterkoker) uit het net in plaats van uit de accu.'],
                 ['HVAC', 'HVAC', 'zendure_hvac.yaml', 'Airco niet uit de accu, per airco-modus: niet ontladen of het airco-vermogen aftrekken.'],
                 ['Diagnose-export', 'Export', 'zendure_export.yaml', 'Instellingen, sensoren en logs exporteren voor een vraag of issue.'],
                 ['Nordpool', 'Nordpool', 'zendure_nordpool.yaml', 'Nord Pool-sensoren: all-in prijs voor levering en kale marktprijs voor teruglevering.']

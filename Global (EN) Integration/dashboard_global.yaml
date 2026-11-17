@@ -5003,12 +5003,12 @@ views:
           - type: heading
             icon: ''
             heading_style: title
-            heading: Forecasting Configuration (Peak loads)
+            heading: Forecasting Configuration (Quooker)
             badges:
               - type: entity
                 show_state: true
                 show_icon: true
-                entity: sensor.peak_power
+                entity: sensor.zendure_quooker_power
                 name: Now
                 state_content:
                   - name
@@ -5018,18 +5018,19 @@ views:
                   action: more-info
                 visibility:
                   - condition: numeric_state
-                    entity: sensor.peak_power
+                    entity: sensor.zendure_quooker_power
                     above: 0
             visibility:
               - condition: state
-                entity: input_text.peak_power_sensors
+                entity: input_text.zendure_quooker_power_sensors
                 state_not: unavailable
           - type: markdown
             content: >-
-              <ha-alert alert-type="info">Help text</ha-alert>For appliances
-              that often draw a lot of power for a short time, such as a
-              boiling-water tap (Quooker), kettle or induction hob. Enter the
-              **power sensors** (W, kW or A, separated by commas). Once the
+              <ha-alert alert-type="info">Help text</ha-alert>A Quooker
+              (boiling-water tap) often reheats briefly at high power, also at
+              night. Enter the Quooker's **power sensor** (W, kW or A); other
+              short peak loads (kettle, induction hob) may be added, separated
+              by commas. Once the
               summed power is above the **threshold** (default 1000 W), the
               Smart Matching modes subtract it from the grid meter: the battery
               keeps supplying the house and the grid supplies the peak. This way
@@ -5045,28 +5046,28 @@ views:
                 entity: input_boolean.dashboard_setting_show_help
                 state: 'on'
               - condition: state
-                entity: input_text.peak_power_sensors
+                entity: input_text.zendure_quooker_power_sensors
                 state_not: unavailable
           - type: entities
             entities:
-              - entity: input_text.peak_power_sensors
-                name: Power sensors (commas, W/kW/A)
-              - entity: input_number.peak_threshold_power
+              - entity: input_text.zendure_quooker_power_sensors
+                name: Quooker power sensor (W/kW/A, more with commas)
+              - entity: input_number.zendure_quooker_threshold_power
                 name: Threshold W
             visibility:
               - condition: state
-                entity: input_text.peak_power_sensors
+                entity: input_text.zendure_quooker_power_sensors
                 state_not: unavailable
           - type: markdown
             text_only: true
             content: |-
-              {%- set z = state_attr('sensor.peak_power', 'without_value') or [] -%}
-              {%- set c = states('sensor.peak_discharge_correction') | float(0) -%}
+              {%- set z = state_attr('sensor.zendure_quooker_power', 'without_value') or [] -%}
+              {%- set c = states('sensor.zendure_quooker_discharge_correction') | float(0) -%}
               {% if z | length > 0 %}⚠️ No value: {{ z | join(', ') }}
               {% endif %}{% if c > 0 %}Peak of {{ c | round(0) | int }} W: the battery does not discharge into it.{% endif %}
             visibility:
               - condition: state
-                entity: input_text.peak_power_sensors
+                entity: input_text.zendure_quooker_power_sensors
                 state_not: unavailable
           - type: heading
             icon: ''
@@ -5322,7 +5323,7 @@ views:
               {%- set p = [
                 ['Savings', 'Savings', 'zendure_savings_global.yaml', 'Savings tab: what solar, the battery and a dynamic contract earn, payback time.'],
                 ['EV', 'EV', 'zendure_ev_global.yaml', 'Charge the car without the battery discharging into it, night or daytime session.'],
-                ['Peak loads', 'Peak loads', 'zendure_peak_loads_global.yaml', 'Short peaks (Quooker, kettle) from the grid instead of the battery.'],
+                ['Quooker', 'Quooker', 'zendure_quooker_global.yaml', 'Quooker (and other short peaks, e.g. a kettle) from the grid instead of the battery.'],
                 ['HVAC', 'HVAC', 'zendure_hvac_global.yaml', 'AC not from the battery, per AC mode: no discharging or subtract the AC power.'],
                 ['Diagnostics export', 'Export', 'zendure_export_global.yaml', 'Export settings, sensors and logs for a question or issue.'],
                 ['Nordpool', 'Nordpool', 'zendure_nordpool_global.yaml', 'Nord Pool sensors: all-in price for supply and bare market price for export.']

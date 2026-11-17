@@ -1015,7 +1015,7 @@ actions:
               input_number.zendure_2400_ac_start_ontladen_bij
             condition: template
             value_template: |
-              {{ states('sensor.p1_aansturing_vermogen') | float(0) - states('sensor.ev_ontlaad_correctie') | float(0) - states('sensor.hvac_ontlaad_correctie') | float(0) - states('sensor.piek_ontlaad_correctie') | float(0)
+              {{ states('sensor.p1_aansturing_vermogen') | float(0) - states('sensor.ev_ontlaad_correctie') | float(0) - states('sensor.hvac_ontlaad_correctie') | float(0) - states('sensor.zendure_quooker_ontlaad_correctie') | float(0)
                  > states('input_number.zendure_2400_ac_ontladen_starten_bij') | float(0) }}
           - condition: state
             entity_id: sensor.zendure_2400_ac_soc_limiet_status
@@ -1110,7 +1110,7 @@ actions:
                 states('input_number.zendure_2400_ac_max_ontlaadvermogen') |
                 float(0) %} {% set correctie = -1 *
                 (states('input_number.zendure_2400_ac_ontlaadmarge') | float(0))
-                %} {% set p1 = states('sensor.p1_aansturing_vermogen') | float(0) - states('sensor.ev_ontlaad_correctie') | float(0) - states('sensor.hvac_ontlaad_correctie') | float(0) - states('sensor.piek_ontlaad_correctie') | float(0) %}  {% set zendure =
+                %} {% set p1 = states('sensor.p1_aansturing_vermogen') | float(0) - states('sensor.ev_ontlaad_correctie') | float(0) - states('sensor.hvac_ontlaad_correctie') | float(0) - states('sensor.zendure_quooker_ontlaad_correctie') | float(0) %}  {% set zendure =
                 states('sensor.zendure_2400_ac_vermogen_aansturing') | float(0)
                 %}
 
@@ -1126,7 +1126,7 @@ actions:
                 %} 
                   {% set cap = states('input_number.zendure_2400_ac_max_ontlaadvermogen') | float(0) %}
                   {% set correctie = -1 * (states('input_number.zendure_2400_ac_ontlaadmarge') | float(0)) %}
-                  {% set p1 = states('sensor.p1_aansturing_vermogen') | float(0) - states('sensor.ev_ontlaad_correctie') | float(0) - states('sensor.hvac_ontlaad_correctie') | float(0) - states('sensor.piek_ontlaad_correctie') | float(0) %} 
+                  {% set p1 = states('sensor.p1_aansturing_vermogen') | float(0) - states('sensor.ev_ontlaad_correctie') | float(0) - states('sensor.hvac_ontlaad_correctie') | float(0) - states('sensor.zendure_quooker_ontlaad_correctie') | float(0) %} 
                   {% set zendure = states('sensor.zendure_2400_ac_vermogen_aansturing') | float(0) %}
 
                   {% set totaal = (p1 - zendure - correctie) * factor %} {% set beperkt = [
@@ -1164,7 +1164,7 @@ actions:
             condition: template
             value_template: |-
               {% set factor = 1.00 %} {% set cap =
-                states('input_number.zendure_2400_ac_max_ontlaadvermogen') | float(0) %} {% set correctie = -1 * (states('input_number.zendure_2400_ac_ontlaadmarge') | float(0)) %} {% set p1 = states('sensor.p1_aansturing_vermogen') | float(0) - states('sensor.ev_ontlaad_correctie') | float(0) - states('sensor.hvac_ontlaad_correctie') | float(0) - states('sensor.piek_ontlaad_correctie') | float(0) %} {% set zendure = states('sensor.zendure_2400_ac_vermogen_aansturing') | float(0) %} {% set totaal = (p1 - zendure - correctie) * factor %} {% set beperkt = [ [totaal, 0] | max, cap ] | min %} {% set target = beperkt | int %} {% set huidig = states('sensor.zendure_2400_ac_ingesteld_ontlaadvermogen') | int(0) %} {{ huidig != target }}
+                states('input_number.zendure_2400_ac_max_ontlaadvermogen') | float(0) %} {% set correctie = -1 * (states('input_number.zendure_2400_ac_ontlaadmarge') | float(0)) %} {% set p1 = states('sensor.p1_aansturing_vermogen') | float(0) - states('sensor.ev_ontlaad_correctie') | float(0) - states('sensor.hvac_ontlaad_correctie') | float(0) - states('sensor.zendure_quooker_ontlaad_correctie') | float(0) %} {% set zendure = states('sensor.zendure_2400_ac_vermogen_aansturing') | float(0) %} {% set totaal = (p1 - zendure - correctie) * factor %} {% set beperkt = [ [totaal, 0] | max, cap ] | min %} {% set target = beperkt | int %} {% set huidig = states('sensor.zendure_2400_ac_ingesteld_ontlaadvermogen') | int(0) %} {{ huidig != target }}
           - condition: numeric_state
             entity_id: sensor.zendure_2400_ac_vermogen_aansturing
             below: 0
@@ -1230,7 +1230,7 @@ actions:
                 states('input_number.zendure_2400_ac_max_ontlaadvermogen') |
                 float(0) %} {% set correctie = -1 *
                 (states('input_number.zendure_2400_ac_ontlaadmarge') | float(0))
-                %} {% set p1 = states('sensor.p1_aansturing_vermogen') | float(0) - states('sensor.ev_ontlaad_correctie') | float(0) - states('sensor.hvac_ontlaad_correctie') | float(0) - states('sensor.piek_ontlaad_correctie') | float(0) %}  {% set zendure =
+                %} {% set p1 = states('sensor.p1_aansturing_vermogen') | float(0) - states('sensor.ev_ontlaad_correctie') | float(0) - states('sensor.hvac_ontlaad_correctie') | float(0) - states('sensor.zendure_quooker_ontlaad_correctie') | float(0) %}  {% set zendure =
                 states('sensor.zendure_2400_ac_vermogen_aansturing') | float(0)
                 %}
 
@@ -1245,7 +1245,7 @@ actions:
                 1.00 %} 
                   {% set cap = states('input_number.zendure_2400_ac_max_ontlaadvermogen') | float(0) %}
                   {% set correctie = -1 * (states('input_number.zendure_2400_ac_ontlaadmarge') | float(0)) %}
-                  {% set p1 = states('sensor.p1_aansturing_vermogen') | float(0) - states('sensor.ev_ontlaad_correctie') | float(0) - states('sensor.hvac_ontlaad_correctie') | float(0) - states('sensor.piek_ontlaad_correctie') | float(0) %} 
+                  {% set p1 = states('sensor.p1_aansturing_vermogen') | float(0) - states('sensor.ev_ontlaad_correctie') | float(0) - states('sensor.hvac_ontlaad_correctie') | float(0) - states('sensor.zendure_quooker_ontlaad_correctie') | float(0) %} 
                   {% set zendure = states('sensor.zendure_2400_ac_vermogen_aansturing') | float(0) %}
 
                   {% set totaal = (p1 - zendure - correctie) * factor %} {% set beperkt = [

@@ -3,23 +3,24 @@
 # OPTIONEEL PAKKET - niet nodig voor Dynamisch NOM + Forecasting. Weglaten = functie uit.
 # Staat in de repo in de map "optional packages". Toevoegen: kopieer het naar je packages-map en herstart
 # Home Assistant. Weghalen en herstarten zet de functie weer uit.
-# Nodig: een meting (W, kW of A) per piekverbruiker, bv. een Shelly Plug of Shelly 1PM.
+# Nodig: een meting (W, kW of A) van de Quooker, bv. een Shelly Plug of Shelly 1PM.
 # =====================================================================
-# Zendure Piekverbruikers - korte, hoge pieken niet uit de accu (optioneel)
+# Zendure Quooker - de pieken van de Quooker niet uit de accu (optioneel)
 #
 # Plaats dit bestand naast zendure_gielz1986_nl.yaml (zelfde packages-map).
 # Zonder dit bestand verandert er niets: de automation rekent dan met 0 W.
-# Het blok Forecasting Configuratie (Piekverbruikers) op de tab Configuratie verschijnt vanzelf
+# Het blok Forecasting Configuratie (Quooker) op de tab Configuratie verschijnt vanzelf
 # zodra dit bestand geladen is.
 #
-# Bedoeld voor apparaten die vaak kort veel vermogen vragen: een Quooker (naverwarmen, ook 's nachts
-# om de paar uur ~2,2 kW gedurende tientallen seconden), waterkoker, koffiemachine, inductieplaat.
+# Bedoeld voor een Quooker: die warmt vaak kort na met veel vermogen (ook 's nachts om de paar uur
+# ~2,2 kW gedurende tientallen seconden). Andere korte piekverbruikers (waterkoker, koffiemachine,
+# inductieplaat) kun je in hetzelfde veld erbij zetten.
 # Zonder dit pakket volgt de accu in de NOM-modussen elke piek: opschakelen, afschakelen, het relais
 # schakelt vaak om en door de regelvertraging levert de accu na de piek kort terug aan het net.
 #
 # Wat het pakket doet:
-#   sensor.piek_vermogen is het opgetelde vermogen van de ingevulde sensoren (W, kW of A; A x 230 V).
-#   sensor.piek_ontlaad_correctie is dat vermogen zodra het boven de drempel komt (stand-by telt niet).
+#   sensor.zendure_quooker_vermogen is het opgetelde vermogen van de ingevulde sensoren (W, kW of A; A x 230 V).
+#   sensor.zendure_quooker_ontlaad_correctie is dat vermogen zodra het boven de drempel komt (stand-by telt niet).
 #   De NOM-ontlaadblokken in de automation trekken die correctie af van de P1-meter (zoals bij de auto
 #   en de airco): de accu blijft het huis voeden en het net levert de piek.
 #   Bij laden (zonoverschot) verandert er niets: de piek gaat dan van het laadvermogen af, dus de zon
@@ -34,16 +35,16 @@
 
 input_text:
   # Eén of meer sensoren, gescheiden door komma's (bv. sensor.quooker_vermogen, sensor.waterkoker_vermogen)
-  piek_vermogen_sensoren:
-    name: Piek Vermogen Sensoren
+  zendure_quooker_vermogen_sensoren:
+    name: Zendure Quooker Vermogen Sensoren
     icon: mdi:kettle-steam
     max: 255
     mode: text
 
 input_number:
   # Vermogen waarboven een piek niet uit de accu komt (standaard 1000 W)
-  piek_drempel_vermogen:
-    name: Piek Drempel Vermogen
+  zendure_quooker_drempel_vermogen:
+    name: Zendure Quooker Drempel Vermogen
     icon: mdi:flash-alert
     min: 0
     max: 5000
@@ -54,15 +55,15 @@ input_number:
 template:
   - sensor:
       # Opgeteld vermogen van de piekverbruikers in W (0 als niets is ingevuld)
-      - name: "Piek Vermogen"
-        unique_id: piek_vermogen
+      - name: "Zendure Quooker Vermogen"
+        unique_id: zendure_quooker_vermogen
         icon: mdi:kettle-steam
         unit_of_measurement: "W"
         device_class: power
         state_class: measurement
         state: >
           {% set ns = namespace(w=0) %}
-          {% for e in states('input_text.piek_vermogen_sensoren').split(',') | map('trim') %}
+          {% for e in states('input_text.zendure_quooker_vermogen_sensoren').split(',') | map('trim') %}
             {% if e | lower | regex_match('^sensor\\..+') and has_value(e) %}
               {% set u = state_attr(e, 'unit_of_measurement') %}
               {% set v = states(e) | float(0) %}
@@ -73,48 +74,48 @@ template:
           {{ ns.w | round(0) }}
         attributes:
           sensoren: >
-            {{ states('input_text.piek_vermogen_sensoren').split(',') | map('trim')
+            {{ states('input_text.zendure_quooker_vermogen_sensoren').split(',') | map('trim')
                | select('match', '(?i)^sensor\\..+') | list }}
           zonder_waarde: >
-            {{ states('input_text.piek_vermogen_sensoren').split(',') | map('trim')
+            {{ states('input_text.zendure_quooker_vermogen_sensoren').split(',') | map('trim')
                | select('match', '(?i)^sensor\\..+') | reject('has_value') | list }}
 
       # Wat de NOM-ontlaadblokken van de P1-meter aftrekken: het piekvermogen zodra het
       # boven de drempel komt (stand-by en kleine verbruikers tellen niet).
-      - name: "Piek Ontlaad Correctie"
-        unique_id: piek_ontlaad_correctie
+      - name: "Zendure Quooker Ontlaad Correctie"
+        unique_id: zendure_quooker_ontlaad_correctie
         icon: mdi:battery-minus-outline
         unit_of_measurement: "W"
         device_class: power
         state_class: measurement
         state: >
-          {% set d = states('input_number.piek_drempel_vermogen') | float(0) %}
-          {% set p = states('sensor.piek_vermogen') | float(0) %}
+          {% set d = states('input_number.zendure_quooker_drempel_vermogen') | float(0) %}
+          {% set p = states('sensor.zendure_quooker_vermogen') | float(0) %}
           {{ p if p > (d if d > 0 else 1000) else 0 }}
 
 automation:
   # Drempel op 0 (bv. nieuwe installatie): standaardwaarde 1000 W invullen (zichtbaar in het veld).
-  - id: piek_standaardwaarden
-    alias: Piek Standaardwaarden
+  - id: zendure_quooker_standaardwaarden
+    alias: Zendure Quooker Standaardwaarden
     description: >-
-      Forecasting 2026.11.8 - Vult de drempel van de piekverbruikers in met 1000 W als die op 0 staat.
+      Forecasting 2026.11.8 - Vult de drempel van de Quooker in met 1000 W als die op 0 staat.
     mode: queued
     max: 5
     triggers:
       - trigger: homeassistant
         event: start
       - trigger: state
-        entity_id: input_number.piek_drempel_vermogen
+        entity_id: input_number.zendure_quooker_drempel_vermogen
     conditions: []
     actions:
       - delay:
           seconds: 10
       - if:
           - condition: template
-            value_template: "{{ states('input_number.piek_drempel_vermogen') | float(-1) == 0 }}"
+            value_template: "{{ states('input_number.zendure_quooker_drempel_vermogen') | float(-1) == 0 }}"
         then:
           - action: input_number.set_value
             target:
-              entity_id: input_number.piek_drempel_vermogen
+              entity_id: input_number.zendure_quooker_drempel_vermogen
             data:
               value: 1000
