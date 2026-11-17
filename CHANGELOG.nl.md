@@ -4,6 +4,12 @@ Versies volgen `jaar.maand.volgnummer`; het volgnummer begint elke maand bij 1. 
 
 ## 2026.11.8 (in ontwikkeling) — gebaseerd op Gielz v20261113
 
+**Nieuw optioneel pakket: Piekverbruikers (`zendure_piekverbruikers.yaml`)**
+- Korte, hoge pieken van bv. een Quooker (naverwarmen, ook 's nachts om de paar uur ~2,2 kW), waterkoker of inductieplaat komen uit het net in plaats van uit de accu. Zonder dit pakket volgt de accu in de NOM-modussen elke piek: op- en afschakelen, vaak omschakelen van het relais en na de piek kort terugleveren door de regelvertraging.
+- Vul bij **Vermogenssensoren** één of meer sensoren in, gescheiden door komma's (W, kW of A; A × 230 V). Boven de **drempel** (standaard 1000 W) is `sensor.piek_ontlaad_correctie` het opgetelde vermogen; de NOM-ontlaadblokken trekken dat af van de P1-meter, net als bij de auto en de airco. Bij laden uit zon verandert er niets: de piek gaat dan van het laadvermogen af.
+- Automation (NL en EN): de 6 berekeningen met de EV- en HVAC-correctie trekken ook `sensor.piek_ontlaad_correctie` / `sensor.peak_discharge_correction` af. Zonder het pakket is die 0.
+- Dashboard: blok **Forecasting Configuratie (Piekverbruikers)**, alleen zichtbaar als het pakket geladen is, en een regel in de kaart Optionele pakketten.
+
 **Pad-check: laden begrensd door de ruimte op het moment zelf, niet die van nu**
 - De toewijzing van laadslots aan dure kwartieren begrensde het totaal op de ruimte die de accu *nu* heeft. Laden in de middag voor de avondpiek en 's nachts voor de ochtendpiek deelden dan die ruimte, en de nacht at hem op (aanleiding: Omnibattery 2.0, discussie #865). Nu rekent de planner het verloop van de accu per prijsslot door (verbruik eruit, zon erin) en mag een laadslot alleen vullen tot de ruimte tot aan het dure kwartier dat het bedient. Nieuwe variabelen `pad_slots` en `pad_basis`.
 - **Slim vasthouden kijkt tot het eerstvolgende geplande laden** (`vh_eind_ts`): de lading van nu gaat naar de duurste kwartieren vóór dat laden. Eerder zette elk gepland laden vóór het einde van het gat (ook de nacht ná de avondpiek) slim vasthouden helemaal uit.

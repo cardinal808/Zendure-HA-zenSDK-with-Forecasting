@@ -1,0 +1,120 @@
+# Zendure zenSDK (Gielz) + Forecasting 2026.11.8 | gebaseerd op Gielz v20261113
+# Gebaseerd op Gielz1986/Zendure-HA-zenSDK (Michiel Hofker). Zie README.md voor licentie en wijzigingen.
+# OPTIONEEL PAKKET - niet nodig voor Dynamisch NOM + Forecasting. Weglaten = functie uit.
+# Staat in de repo in de map "optional packages". Toevoegen: kopieer het naar je packages-map en herstart
+# Home Assistant. Weghalen en herstarten zet de functie weer uit.
+# Nodig: een meting (W, kW of A) per piekverbruiker, bv. een Shelly Plug of Shelly 1PM.
+# =====================================================================
+# Zendure Piekverbruikers - korte, hoge pieken niet uit de accu (optioneel)
+#
+# Plaats dit bestand naast zendure_gielz1986_nl.yaml (zelfde packages-map).
+# Zonder dit bestand verandert er niets: de automation rekent dan met 0 W.
+# Het blok Forecasting Configuratie (Piekverbruikers) op de tab Configuratie verschijnt vanzelf
+# zodra dit bestand geladen is.
+#
+# Bedoeld voor apparaten die vaak kort veel vermogen vragen: een Quooker (naverwarmen, ook 's nachts
+# om de paar uur ~2,2 kW gedurende tientallen seconden), waterkoker, koffiemachine, inductieplaat.
+# Zonder dit pakket volgt de accu in de NOM-modussen elke piek: opschakelen, afschakelen, het relais
+# schakelt vaak om en door de regelvertraging levert de accu na de piek kort terug aan het net.
+#
+# Wat het pakket doet:
+#   sensor.piek_vermogen is het opgetelde vermogen van de ingevulde sensoren (W, kW of A; A x 230 V).
+#   sensor.piek_ontlaad_correctie is dat vermogen zodra het boven de drempel komt (stand-by telt niet).
+#   De NOM-ontlaadblokken in de automation trekken die correctie af van de P1-meter (zoals bij de auto
+#   en de airco): de accu blijft het huis voeden en het net levert de piek.
+#   Bij laden (zonoverschot) verandert er niets: de piek gaat dan van het laadvermogen af, dus de zon
+#   voedt de piek en er komt niets uit het net.
+#
+# Let op:
+# - Vul hier niet de lader van de auto of de airco in als je het EV- of HVAC-pakket gebruikt;
+#   die trekken hun vermogen al af (dan telt het dubbel).
+# - Het verbruik van de piekverbruikers blijft in het verbruiksprofiel van de planner. De accu levert
+#   het niet meer, dus de planner schat de benodigde energie iets ruim (bij een Quooker ~0,3-0,7 kWh/dag).
+# =====================================================================
+
+input_text:
+  # Eén of meer sensoren, gescheiden door komma's (bv. sensor.quooker_vermogen, sensor.waterkoker_vermogen)
+  piek_vermogen_sensoren:
+    name: Piek Vermogen Sensoren
+    icon: mdi:kettle-steam
+    max: 255
+    mode: text
+
+input_number:
+  # Vermogen waarboven een piek niet uit de accu komt (standaard 1000 W)
+  piek_drempel_vermogen:
+    name: Piek Drempel Vermogen
+    icon: mdi:flash-alert
+    min: 0
+    max: 5000
+    step: 50
+    mode: box
+    unit_of_measurement: "W"
+
+template:
+  - sensor:
+      # Opgeteld vermogen van de piekverbruikers in W (0 als niets is ingevuld)
+      - name: "Piek Vermogen"
+        unique_id: piek_vermogen
+        icon: mdi:kettle-steam
+        unit_of_measurement: "W"
+        device_class: power
+        state_class: measurement
+        state: >
+          {% set ns = namespace(w=0) %}
+          {% for e in states('input_text.piek_vermogen_sensoren').split(',') | map('trim') %}
+            {% if e | lower | regex_match('^sensor\\..+') and has_value(e) %}
+              {% set u = state_attr(e, 'unit_of_measurement') %}
+              {% set v = states(e) | float(0) %}
+              {% set w = v * 1000 if u == 'kW' else (v * 230 if u == 'A' else v) %}
+              {% set ns.w = ns.w + [w, 0] | max %}
+            {% endif %}
+          {% endfor %}
+          {{ ns.w | round(0) }}
+        attributes:
+          sensoren: >
+            {{ states('input_text.piek_vermogen_sensoren').split(',') | map('trim')
+               | select('match', '(?i)^sensor\\..+') | list }}
+          zonder_waarde: >
+            {{ states('input_text.piek_vermogen_sensoren').split(',') | map('trim')
+               | select('match', '(?i)^sensor\\..+') | reject('has_value') | list }}
+
+      # Wat de NOM-ontlaadblokken van de P1-meter aftrekken: het piekvermogen zodra het
+      # boven de drempel komt (stand-by en kleine verbruikers tellen niet).
+      - name: "Piek Ontlaad Correctie"
+        unique_id: piek_ontlaad_correctie
+        icon: mdi:battery-minus-outline
+        unit_of_measurement: "W"
+        device_class: power
+        state_class: measurement
+        state: >
+          {% set d = states('input_number.piek_drempel_vermogen') | float(0) %}
+          {% set p = states('sensor.piek_vermogen') | float(0) %}
+          {{ p if p > (d if d > 0 else 1000) else 0 }}
+
+automation:
+  # Drempel op 0 (bv. nieuwe installatie): standaardwaarde 1000 W invullen (zichtbaar in het veld).
+  - id: piek_standaardwaarden
+    alias: Piek Standaardwaarden
+    description: >-
+      Forecasting 2026.11.8 - Vult de drempel van de piekverbruikers in met 1000 W als die op 0 staat.
+    mode: queued
+    max: 5
+    triggers:
+      - trigger: homeassistant
+        event: start
+      - trigger: state
+        entity_id: input_number.piek_drempel_vermogen
+    conditions: []
+    actions:
+      - delay:
+          seconds: 10
+      - if:
+          - condition: template
+            value_template: "{{ states('input_number.piek_drempel_vermogen') | float(-1) == 0 }}"
+        then:
+          - action: input_number.set_value
+            target:
+              entity_id: input_number.piek_drempel_vermogen
+            data:
+              value: 1000
