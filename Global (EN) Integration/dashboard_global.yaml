@@ -2176,7 +2176,7 @@ views:
               **Negative purchase price:** {{ a.negative_purchase_quarters }} quarter hour(s) {{ (a.negative_purchase_from or '')[11:] }}–{{ (a.negative_purchase_until or '')[11:] }} (average €{{ '%.3f' | format(a.negative_purchase_price | float(0)) }}): {% if a.negative_purchase_charge %}the battery charges to full at full power, because taking power earns money.{% else %}the battery is (almost) full.{% endif %}
               {% endif %}{% set ks = a.calibration_status %}{% if ks %}
 
-              **Calibration:** {{ a.calibration_days }} days ago (threshold {{ a.calibration_threshold }}). {% if ks == 'max_too_low' %}Max. State Of Charge is set to {{ states('sensor.zendure_maximum_state_of_charge') }}%: the Zendure only calibrates at 100%.{% elif ks == 'sun_today' %}The sun fills the battery today; it then calibrates by itself.{% elif ks == 'sun_tomorrow' %}Waiting for sun: enough sun is expected tomorrow to fill the battery. Otherwise it charges full from the grid from day {{ a.calibration_threshold }}.{% elif ks == 'waiting' %}Waiting for a sunny day; otherwise it charges full from the grid from day {{ a.calibration_threshold }}.{% elif ks == 'charge' %}The battery is charged to 100% from the grid in the cheapest quarter hours (about {{ '%.1f' | format(a.calibration_extra_kwh | float(0)) }} kWh).{% else %}The battery is (almost) full; the Zendure calibrates as soon as it reaches 100%.{% endif %}{% endif %}
+              **Calibration:** {{ a.calibration_days }} days ago (threshold {{ a.calibration_threshold }}). {% if ks == 'max_too_low' %}Max. State Of Charge is set to {{ states('sensor.zendure_maximum_state_of_charge') }}%: the Zendure only calibrates at 100%.{% elif ks == 'sun_today' %}The sun fills the battery today; it then calibrates by itself.{% elif ks == 'sun_tomorrow' %}Waiting for sun: enough sun is expected tomorrow to fill the battery. Otherwise it charges full from the grid from day {{ a.calibration_threshold }}.{% elif ks == 'waiting' %}Waiting for a sunny day; otherwise it charges full from the grid from day {{ a.calibration_threshold }}.{% elif ks == 'early' %}Planned charging brings the battery to about {{ a.calibration_early_soc }}% anyway: it continues to 100% (about {{ '%.1f' | format(a.calibration_extra_kwh | float(0)) }} kWh extra) and calibrates now.{% elif ks == 'charge' %}The battery is charged to 100% from the grid in the cheapest quarter hours (about {{ '%.1f' | format(a.calibration_extra_kwh | float(0)) }} kWh).{% else %}The battery is (almost) full; the Zendure calibrates as soon as it reaches 100%.{% endif %}{% endif %}
 
               ### Today
 
@@ -4269,8 +4269,9 @@ views:
               **Reliability per month**: a separate solar forecast correction per
               month (0 = the general value); after a month ends the set fills in the measured value for
               next year. **Calibration after days**: the Zendure calibrates at 100%.
-              From half this number of days the planner waits for a sunny day;
-              after that it charges the battery full from the grid (cheapest
+              From half this number of days the planner waits for a sunny day, and if
+              planned charging brings the battery to 85% anyway it continues to 100%;
+              at the threshold it charges the battery full from the grid (cheapest
               quarter hours). **Calibration charging** is on by default. **Sensors**: the set
               looks for Solcast / Helios Forecast / Forecast.Solar, the counter of your inverter and your P1
               meter (HomeWizard, DSMR, P1 Monitor, SlimmeLezer, DSMR Reader, Shelly). If it finds

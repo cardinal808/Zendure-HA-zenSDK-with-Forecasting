@@ -1627,6 +1627,7 @@ template:
       c_sx_margin_eur: 0.01              # discharge at solar surplus: minimum gain per kWh after losses
       c_shape_n_full_workday: 10         # shape per quarter counts fully after this many complete hours (workday)
       c_calibration_days: 21             # calibration charging: default after this many days without 100%
+      c_calibration_early_soc: 85        # calibration charging from half the threshold: if planned charging brings the battery to at least this %, continue to 100%
       c_day_n_full: 3                    # profile per weekday counts fully after this many measurements (weeks) of that hour
       c_shape_n_full_weekend: 5          # same for weekends; before that gradually (fewer measurements = closer to even)
 
@@ -2604,11 +2605,6 @@ template:
       cal_sun_tomorrow: "{{ tomorrow_known and ([solar_tomorrow - direct_tomorrow_kwh - ev_solar_tomorrow_kwh, 0] | max) * eff_in >= s_max * 0.8 }}"
       cal_charge: "{{ cal_on and cal_max_ok and prices_ok and cal_days >= cal_threshold and room > 0.05 * cap and not cal_sun_today }}"
       cal_extra_ac: "{{ (([room - solar_dc, 0] | max) / eff_in) | round(3) if cal_charge and eff_in > 0 else 0 }}"
-      cal_status: >
-        {% if not cal_on or cal_days < cal_wait_from %}{{ none }}
-        {% elif not cal_max_ok %}max_too_low
-        {% elif cal_days >= cal_threshold %}{{ 'sun_today' if cal_sun_today else ('charge' if cal_charge else 'full') }}
-        {% else %}{{ 'sun_today' if cal_sun_today else ('sun_tomorrow' if cal_sun_tomorrow else 'waiting') }}{% endif %}
 
       # ---- Negative purchase price ---------------------------------------------
       # When the all-in supply price is negative you get paid to take power: then charge in all those
@@ -2617,7 +2613,34 @@ template:
       neg_slots: "{{ (path_cand | selectattr('e', 'gt', now_ts) | selectattr('v', 'lt', 0) | list) if prices_ok else [] }}"
       neg_charge: "{{ neg_slots | length > 0 and room > 0.05 and eff_in > 0 }}"
       neg_extra_ac: "{{ (room / eff_in) | round(3) if neg_charge else 0 }}"
-      grid_total_ac: "{{ ([grid_ac, path_grid_ac if extra_slots | length > 0 else 0, cal_extra_ac, neg_extra_ac] | max) | round(3) }}"
+      # Early calibration (from half the threshold): if planned grid charging brings the battery to at
+      # least c_calibration_early_soc % anyway, or it is charging now and already there, it continues
+      # to 100%. The extra charging goes in the cheapest quarter hours around the planned charge block
+      # (up to 1 hour after it), or in the current quarter hour when already charging. Not when the
+      # sun fills the battery today.
+      grid_base_ac: "{{ ([grid_ac, path_grid_ac if extra_slots | length > 0 else 0, neg_extra_ac] | max) | round(3) }}"
+      # What is really planned: the energy balance can ask for more than there are slots (after the efficiency filter)
+      cal_planned_ac: >
+        {%- set es = extra_slots | map(attribute='s') | list -%}
+        {%- set n = (extra_slots | length) + (chosen_base | rejectattr('s', 'in', es) | list | length) -%}
+        {{ ([grid_base_ac, n * e_slot] | min) | round(3) }}
+      cal_early_rest_dc: "{{ ([room - solar_dc - cal_planned_ac * eff_in, 0] | max) | round(3) }}"
+      cal_early_soc: "{{ (100 - (cal_early_rest_dc / cap * 100)) | round(0) if cap > 0 else 0 }}"
+      cal_early_running: "{{ is_state('input_boolean.dynamic_charging_running', 'on') and soc >= c_calibration_early_soc }}"
+      cal_early: >
+        {{ cal_on and cal_max_ok and prices_ok and eff_in > 0 and cal_days >= cal_wait_from and cal_days < cal_threshold
+           and not cal_sun_today and cal_early_rest_dc > 0.1
+           and ((cal_planned_ac >= 0.5 and cal_early_soc >= c_calibration_early_soc) or cal_early_running) }}
+      cal_early_ac: "{{ (cal_early_rest_dc / eff_in) | round(3) if cal_early else 0 }}"
+      cal_status: >
+        {% if not cal_on or cal_days < cal_wait_from %}{{ none }}
+        {% elif not cal_max_ok %}max_too_low
+        {% elif cal_days >= cal_threshold %}{{ 'sun_today' if cal_sun_today else ('charge' if cal_charge else 'full') }}
+        {% elif cal_early %}early
+        {% else %}{{ 'sun_today' if cal_sun_today else ('sun_tomorrow' if cal_sun_tomorrow else 'waiting') }}{% endif %}
+      grid_total_ac: "{{ ([grid_base_ac, cal_extra_ac] | max + cal_early_ac) | round(3) }}"
+      n_base: >
+        {% if grid_base_ac >= c_charge_stop_kwh and e_slot > 0 %}{{ (grid_base_ac / e_slot) | round(0, 'ceil') | int }}{% else %}0{% endif %}
       n_total: >
         {% if grid_total_ac >= c_charge_stop_kwh and e_slot > 0 %}{{ (grid_total_ac / e_slot) | round(0, 'ceil') | int }}{% else %}0{% endif %}
       chosen_plan: >
@@ -2625,11 +2648,22 @@ template:
         {%- set ns = namespace(l=extra_slots) -%}
         {#- Calibration charging: the cheapest quarter hours of today and (known) tomorrow, outside the efficiency filter -#}
         {%- set base = (path_cand | selectattr('e', 'gt', now_ts) | list) if cal_charge else chosen_base -%}
+        {%- set n_first = n_base if cal_early else n_total -%}
         {%- for x in base | sort(attribute='v') -%}
-          {%- if x.s not in extra_s and ns.l | length < n_total -%}
+          {%- if x.s not in extra_s and ns.l | length < n_first -%}
             {%- set ns.l = ns.l + [x] -%}
           {%- endif -%}
         {%- endfor -%}
+        {#- Early calibration: extra quarter hours around the planned charge block (or the current quarter hour) -#}
+        {%- if cal_early -%}
+          {%- set gs = ns.l | map(attribute='s') | list -%}
+          {%- set until = ((gs | max) + 3600) if gs | length > 0 else now_ts + 900 -%}
+          {%- for x in path_cand | selectattr('e', 'gt', now_ts) | selectattr('s', 'lt', until) | sort(attribute='v') -%}
+            {%- if x.s not in gs and ns.l | length < (gs | length) + ((cal_early_ac / e_slot) | round(0, 'ceil') | int if e_slot > 0 else 0) -%}
+              {%- set ns.l = ns.l + [x] -%}
+            {%- endif -%}
+          {%- endfor -%}
+        {%- endif -%}
         {#- Negative purchase price: charge in all those quarter hours (until full) -#}
         {%- if neg_charge -%}
           {%- set gs = ns.l | map(attribute='s') | list -%}
@@ -3272,7 +3306,8 @@ template:
           calibration_status: "{{ cal_status }}"
           calibration_days: "{{ cal_days | int if cal_days >= 0 else none }}"
           calibration_threshold: "{{ cal_threshold | int }}"
-          calibration_extra_kwh: "{{ cal_extra_ac }}"
+          calibration_extra_kwh: "{{ (cal_extra_ac + cal_early_ac) | round(3) }}"
+          calibration_early_soc: "{{ cal_early_soc | int if cal_early else none }}"
           # --- Negative purchase price ---
           negative_purchase_charge: "{{ neg_charge }}"
           negative_purchase_quarters: "{{ neg_slots | length }}"

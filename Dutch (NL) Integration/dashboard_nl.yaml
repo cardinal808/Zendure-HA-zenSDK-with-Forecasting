@@ -2181,7 +2181,7 @@ views:
               **Negatieve inkoopprijs:** {{ a.negatief_inkoop_kwartieren }} kwartier(en) {{ (a.negatief_inkoop_van or '')[11:] }}–{{ (a.negatief_inkoop_tot or '')[11:] }} (gemiddeld €{{ '%.3f' | format(a.negatief_inkoop_prijs | float(0)) }}): {% if a.negatief_inkoop_laden %}de accu laadt dan tot vol met vol vermogen, want afnemen levert geld op.{% else %}de accu is (bijna) vol.{% endif %}
               {% endif %}{% set ks = a.kalibratie_status %}{% if ks %}
 
-              **Kalibratie:** {{ a.kalibratie_dagen }} dagen geleden (drempel {{ a.kalibratie_drempel }}). {% if ks == 'max_te_laag' %}Max. Laadpercentage staat op {{ states('sensor.zendure_2400_ac_maximale_laadpercentage') }}%: de Zendure kalibreert alleen bij 100%.{% elif ks == 'zon_vandaag' %}De zon vult de accu vandaag; dan kalibreert hij vanzelf.{% elif ks == 'zon_morgen' %}Wacht op zon: morgen wordt genoeg zon verwacht om de accu vol te krijgen. Anders laadt hij vanaf dag {{ a.kalibratie_drempel }} vol uit het net.{% elif ks == 'wachten' %}Wacht op een zonnige dag; anders laadt hij vanaf dag {{ a.kalibratie_drempel }} vol uit het net.{% elif ks == 'laden' %}De accu wordt tot 100% geladen uit het net in de goedkoopste kwartieren (ongeveer {{ '%.1f' | format(a.kalibratie_extra_kwh | float(0)) | replace('.', ',') }} kWh).{% else %}De accu is (bijna) vol; de Zendure kalibreert zodra hij 100% haalt.{% endif %}{% endif %}
+              **Kalibratie:** {{ a.kalibratie_dagen }} dagen geleden (drempel {{ a.kalibratie_drempel }}). {% if ks == 'max_te_laag' %}Max. Laadpercentage staat op {{ states('sensor.zendure_2400_ac_maximale_laadpercentage') }}%: de Zendure kalibreert alleen bij 100%.{% elif ks == 'zon_vandaag' %}De zon vult de accu vandaag; dan kalibreert hij vanzelf.{% elif ks == 'zon_morgen' %}Wacht op zon: morgen wordt genoeg zon verwacht om de accu vol te krijgen. Anders laadt hij vanaf dag {{ a.kalibratie_drempel }} vol uit het net.{% elif ks == 'wachten' %}Wacht op een zonnige dag; anders laadt hij vanaf dag {{ a.kalibratie_drempel }} vol uit het net.{% elif ks == 'vroeg' %}De accu komt met het geplande laden toch op ongeveer {{ a.kalibratie_vroeg_soc }}%: hij laadt door tot 100% (ongeveer {{ '%.1f' | format(a.kalibratie_extra_kwh | float(0)) | replace('.', ',') }} kWh extra) en kalibreert nu al.{% elif ks == 'laden' %}De accu wordt tot 100% geladen uit het net in de goedkoopste kwartieren (ongeveer {{ '%.1f' | format(a.kalibratie_extra_kwh | float(0)) | replace('.', ',') }} kWh).{% else %}De accu is (bijna) vol; de Zendure kalibreert zodra hij 100% haalt.{% endif %}{% endif %}
 
               ### Vandaag
 
@@ -4276,7 +4276,8 @@ views:
               zonvoorspelling (0 = de algemene waarde); na afloop van een maand vult de set de gemeten waarde
               in voor volgend jaar. **Kalibratie na dagen**: de Zendure kalibreert bij
               100%. Vanaf de helft van dit aantal dagen wacht de planner op een
-              zonnige dag; daarna laadt hij de accu vol uit het net (goedkoopste
+              zonnige dag, en komt de accu met gepland laden toch op 85%, dan laadt hij
+              door tot 100%; op de drempel laadt hij de accu vol uit het net (goedkoopste
               kwartieren). **Kalibratieladen** staat standaard aan. **Sensoren**: de set zoekt
               zelf naar Solcast / Helios Forecast / Forecast.Solar, de teller van je omvormer en je P1-meter
               (HomeWizard, DSMR, P1 Monitor, SlimmeLezer, DSMR Reader, Shelly). Vindt hij er

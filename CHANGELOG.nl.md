@@ -50,6 +50,8 @@ Versies volgen `jaar.maand.volgnummer`; het volgnummer begint elke maand bij 1. 
 
 **Kalibratieladen standaard na 21 dagen** (was 14). Geldt voor nieuwe installaties en als het veld op 0 staat; een eerder ingestelde waarde blijft staan.
 
+**Kalibratieladen: vroeg doorladen naar 100% (17-11)** — vanaf de halve drempel: komt de accu met het geplande netladen toch op minstens 85% (of laadt hij al en zit hij daar), dan laadt hij door tot 100% in de goedkoopste kwartieren rond dat laadblok. Kost weinig extra en de teller begint eerder opnieuw. Plan-regel *Kalibratie*: "… komt toch op ongeveer X%: hij laadt door tot 100%". Attribuut `kalibratie_vroeg_soc`.
+
 **Fix: vasthouden tussen laadslots alleen bij echt bijladen (16-11)**
 - Een volle accu (98%) bleef 's ochtends in een duur kwartier (€0,407) in stand-by, omdat er om 13:15 een restje van 0,24 kWh bijladen gepland stond (€0,357 / 84,5% rendement = €0,423). Wat de accu nu levert, wordt dan niet bijgeladen maar gewoon eerder gebruikt; het plan zelf rekende ook al met ontladen.
 - Vasthouden tussen laadslots geldt nu pas bij minstens 0,5 kWh gepland netladen later (dezelfde grens als slim vasthouden), en de prijs nu moet minstens €0,01 onder de laadprijs na verlies liggen.

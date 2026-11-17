@@ -1628,6 +1628,7 @@ template:
       c_zo_marge_eur: 0.01               # ontladen bij zonoverschot: minimale winst per kWh na verlies
       c_vorm_n_vol_werkdag: 10           # vorm per kwartier telt volledig mee na zoveel complete uren (werkdag)
       c_kalibratie_dagen: 21             # kalibratieladen: standaard na zoveel dagen zonder 100% netladen
+      c_kalibratie_vroeg_soc: 85         # kalibratieladen vanaf de halve drempel: komt de accu met gepland laden op minstens dit %, doorladen tot 100%
       c_dag_n_vol: 3                     # profiel per weekdag telt volledig mee na zoveel metingen (weken) van dat uur
       c_vorm_n_vol_weekend: 5            # idem weekend; daarvoor geleidelijk (minder metingen = dichter bij gelijk verdeeld)
 
@@ -2603,11 +2604,6 @@ template:
       kal_zon_morgen: "{{ morgen_bekend and ([zon_morgen - direct_morgen_kwh - ev_zon_morgen_kwh, 0] | max) * eff_in >= s_max * 0.8 }}"
       kal_laden: "{{ kal_aan and kal_max_ok and prijzen_ok and kal_dagen >= kal_drempel and room > 0.05 * cap and not kal_zon_vandaag }}"
       kal_extra_ac: "{{ (([room - zon_dc, 0] | max) / eff_in) | round(3) if kal_laden and eff_in > 0 else 0 }}"
-      kal_status: >
-        {% if not kal_aan or kal_dagen < kal_wacht_vanaf %}{{ none }}
-        {% elif not kal_max_ok %}max_te_laag
-        {% elif kal_dagen >= kal_drempel %}{{ 'zon_vandaag' if kal_zon_vandaag else ('laden' if kal_laden else 'vol') }}
-        {% else %}{{ 'zon_vandaag' if kal_zon_vandaag else ('zon_morgen' if kal_zon_morgen else 'wachten') }}{% endif %}
 
       # ---- Negatieve inkoopprijs ----------------------------------------------
       # Is de all-in leveringsprijs negatief, dan krijg je betaald om stroom af te nemen: laad dan in
@@ -2616,7 +2612,33 @@ template:
       neg_slots: "{{ (pad_kand | selectattr('e', 'gt', nu_ts) | selectattr('v', 'lt', 0) | list) if prijzen_ok else [] }}"
       neg_laden: "{{ neg_slots | length > 0 and room > 0.05 and eff_in > 0 }}"
       neg_extra_ac: "{{ (room / eff_in) | round(3) if neg_laden else 0 }}"
-      netladen_ac: "{{ ([grid_ac, pad_netladen_ac if extra_slots | length > 0 else 0, kal_extra_ac, neg_extra_ac] | max) | round(3) }}"
+      # Vroeg kalibreren (vanaf de halve drempel): komt de accu met het geplande netladen toch al op
+      # minstens c_kalibratie_vroeg_soc %, of laadt hij nu en zit hij daar al, dan laadt hij door tot
+      # 100%. Het extra laden komt in de goedkoopste kwartieren rond het geplande laadblok (tot 1 uur
+      # erna), of in het lopende kwartier als hij al laadt. Niet als de zon de accu vandaag vult.
+      netladen_basis_ac: "{{ ([grid_ac, pad_netladen_ac if extra_slots | length > 0 else 0, neg_extra_ac] | max) | round(3) }}"
+      # Wat er echt gepland wordt: de energiebalans kan meer vragen dan er (na het rendementsfilter) slots zijn
+      kal_gepland_ac: >
+        {%- set es = extra_slots | map(attribute='s') | list -%}
+        {%- set n = (extra_slots | length) + (gekozen_basis | rejectattr('s', 'in', es) | list | length) -%}
+        {{ ([netladen_basis_ac, n * e_slot] | min) | round(3) }}
+      kal_vroeg_rest_dc: "{{ ([room - zon_dc - kal_gepland_ac * eff_in, 0] | max) | round(3) }}"
+      kal_vroeg_soc: "{{ (100 - (kal_vroeg_rest_dc / cap * 100)) | round(0) if cap > 0 else 0 }}"
+      kal_vroeg_loopt: "{{ is_state('input_boolean.dynamisch_laden_loopt', 'on') and soc >= c_kalibratie_vroeg_soc }}"
+      kal_vroeg: >
+        {{ kal_aan and kal_max_ok and prijzen_ok and eff_in > 0 and kal_dagen >= kal_wacht_vanaf and kal_dagen < kal_drempel
+           and not kal_zon_vandaag and kal_vroeg_rest_dc > 0.1
+           and ((kal_gepland_ac >= 0.5 and kal_vroeg_soc >= c_kalibratie_vroeg_soc) or kal_vroeg_loopt) }}
+      kal_vroeg_ac: "{{ (kal_vroeg_rest_dc / eff_in) | round(3) if kal_vroeg else 0 }}"
+      kal_status: >
+        {% if not kal_aan or kal_dagen < kal_wacht_vanaf %}{{ none }}
+        {% elif not kal_max_ok %}max_te_laag
+        {% elif kal_dagen >= kal_drempel %}{{ 'zon_vandaag' if kal_zon_vandaag else ('laden' if kal_laden else 'vol') }}
+        {% elif kal_vroeg %}vroeg
+        {% else %}{{ 'zon_vandaag' if kal_zon_vandaag else ('zon_morgen' if kal_zon_morgen else 'wachten') }}{% endif %}
+      netladen_ac: "{{ ([netladen_basis_ac, kal_extra_ac] | max + kal_vroeg_ac) | round(3) }}"
+      n_basis: >
+        {% if netladen_basis_ac >= c_laden_stop_kwh and e_slot > 0 %}{{ (netladen_basis_ac / e_slot) | round(0, 'ceil') | int }}{% else %}0{% endif %}
       n_totaal: >
         {% if netladen_ac >= c_laden_stop_kwh and e_slot > 0 %}{{ (netladen_ac / e_slot) | round(0, 'ceil') | int }}{% else %}0{% endif %}
       gekozen_plan: >
@@ -2624,11 +2646,22 @@ template:
         {%- set ns = namespace(l=extra_slots) -%}
         {#- Kalibratieladen: de goedkoopste kwartieren van vandaag en (bekend) morgen, buiten het rendementsfilter -#}
         {%- set basis = (pad_kand | selectattr('e', 'gt', nu_ts) | list) if kal_laden else gekozen_basis -%}
+        {%- set n_eerst = n_basis if kal_vroeg else n_totaal -%}
         {%- for x in basis | sort(attribute='v') -%}
-          {%- if x.s not in extra_s and ns.l | length < n_totaal -%}
+          {%- if x.s not in extra_s and ns.l | length < n_eerst -%}
             {%- set ns.l = ns.l + [x] -%}
           {%- endif -%}
         {%- endfor -%}
+        {#- Vroeg kalibreren: extra kwartieren rond het geplande laadblok (of het lopende kwartier) -#}
+        {%- if kal_vroeg -%}
+          {%- set gs = ns.l | map(attribute='s') | list -%}
+          {%- set tot = ((gs | max) + 3600) if gs | length > 0 else nu_ts + 900 -%}
+          {%- for x in pad_kand | selectattr('e', 'gt', nu_ts) | selectattr('s', 'lt', tot) | sort(attribute='v') -%}
+            {%- if x.s not in gs and ns.l | length < (gs | length) + ((kal_vroeg_ac / e_slot) | round(0, 'ceil') | int if e_slot > 0 else 0) -%}
+              {%- set ns.l = ns.l + [x] -%}
+            {%- endif -%}
+          {%- endfor -%}
+        {%- endif -%}
         {#- Negatieve inkoopprijs: al die kwartieren laden (tot vol) -#}
         {%- if neg_laden -%}
           {%- set gs = ns.l | map(attribute='s') | list -%}
@@ -3272,7 +3305,8 @@ template:
           kalibratie_status: "{{ kal_status }}"
           kalibratie_dagen: "{{ kal_dagen | int if kal_dagen >= 0 else none }}"
           kalibratie_drempel: "{{ kal_drempel | int }}"
-          kalibratie_extra_kwh: "{{ kal_extra_ac }}"
+          kalibratie_extra_kwh: "{{ (kal_extra_ac + kal_vroeg_ac) | round(3) }}"
+          kalibratie_vroeg_soc: "{{ kal_vroeg_soc | int if kal_vroeg else none }}"
           # --- Negatieve inkoopprijs ---
           negatief_inkoop_laden: "{{ neg_laden }}"
           negatief_inkoop_kwartieren: "{{ neg_slots | length }}"

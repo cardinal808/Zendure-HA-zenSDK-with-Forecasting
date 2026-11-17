@@ -50,6 +50,8 @@ Versions follow `year.month.sequence`; the sequence restarts at 1 every month. E
 
 **Calibration charging by default after 21 days** (was 14). Applies to new installations and when the field is 0; a value set earlier stays.
 
+**Calibration charging: continue to 100% early (17-11)** — from half the threshold: if planned grid charging brings the battery to at least 85% anyway (or it is charging and already there), it continues to 100% in the cheapest quarter hours around that charge block. Costs little extra and the counter restarts earlier. Plan line *Calibration*: "… brings the battery to about X% anyway: it continues to 100%". Attribute `calibration_early_soc`.
+
 **Fix: hold between charge slots only with real charging (16-11)**
 - A full battery (98%) stayed in standby in the morning in an expensive quarter (€0.407), because a remainder of 0.24 kWh charging was planned at 13:15 (€0.357 / 84.5% efficiency = €0.423). What the battery supplies now is then not charged back but simply used earlier; the plan itself already counted on discharging.
 - Hold between charge slots now only applies with at least 0.5 kWh planned grid charging later (the same limit as smart hold), and the price now must be at least €0.01 below the charge price after loss.
