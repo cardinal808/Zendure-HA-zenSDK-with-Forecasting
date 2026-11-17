@@ -191,7 +191,11 @@ template:
       # ---- Tariffs ----
       fixed_in: "{{ states('input_number.savings_setting_fixed_supply_price') | float(0) }}"
       fixed_out: "{{ states('input_number.savings_setting_fixed_feedin_price') | float(0) }}"
-      markup_in: "{{ states('input_number.savings_setting_dynamic_supply_markup') | float(0) }}"
+      # With the Nordpool package the price is already all-in (supply markup included) and the
+      # dashboard hides this field: then it does not count, also not if it still holds a value.
+      markup_in: >
+        {{ 0 if has_value('input_number.nordpool_setting_energy_tax')
+           else states('input_number.savings_setting_dynamic_supply_markup') | float(0) }}
       markup_out: "{{ states('input_number.savings_setting_dynamic_feedin_markup') | float(0) }}"
       # Solar bonus (%) for export: on (bare market price + markup), only when that is positive
       # and only in daylight (middle of the quarter hour between sunrise and sunset, sun.sun)
@@ -435,3 +439,47 @@ template:
           of_which_solar_energy: "{{ buckets.total.solar_batt | round(2) }}"
           of_which_smart_charging: "{{ (pb_measured - buckets.total.solar_batt) | round(2) }}"
           battery_solar_share_pct: "{{ (solar_share * 100) | round(0) }}"
+
+# ---------------------------------------------------------------------
+# Default values: Home Assistant starts an input_number without a stored value at its minimum
+# (-1 €/kWh here). A fresh installation then counted a supply markup of -1 €/kWh and a fixed
+# feed-in price of -1 €/kWh. Such a value is never realistic: set it to 0.
+# ---------------------------------------------------------------------
+automation:
+  - id: savings_default_values
+    alias: Savings Default Values
+    description: >-
+      Forecasting 2026.11.7 - Sets Fixed Feed-in Price and Dynamic Supply Markup to 0 when they are at the minimum of -1 €/kWh (start value of a new installation).
+    mode: queued
+    max: 3
+    triggers:
+      - trigger: homeassistant
+        event: start
+      - trigger: state
+        entity_id:
+          - input_number.savings_setting_fixed_feedin_price
+          - input_number.savings_setting_dynamic_supply_markup
+    conditions: []
+    actions:
+      - delay:
+          seconds: 10
+      - repeat:
+          for_each:
+            - input_number.savings_setting_fixed_feedin_price
+            - input_number.savings_setting_dynamic_supply_markup
+          sequence:
+            - if:
+                - condition: template
+                  value_template: "{{ states(repeat.item) | float(0) <= -0.999 }}"
+              then:
+                - action: input_number.set_value
+                  target:
+                    entity_id: "{{ repeat.item }}"
+                  data:
+                    value: 0
+                - action: logbook.log
+                  data:
+                    name: Savings
+                    message: >-
+                      {{ state_attr(repeat.item, 'friendly_name') or repeat.item }} was at the minimum of -1 €/kWh and has been set to 0. Enter your own value if needed.
+                    entity_id: "{{ repeat.item }}"

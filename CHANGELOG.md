@@ -14,6 +14,11 @@ Versions follow `year.month.sequence`; the sequence restarts at 1 every month. E
 - The charging check (since 2026.11.5) looked for the planner status `Charging`, but the English planner says `Charge`. As a result it stopped every charge after one minute and the charging branch restarted it two minutes later. Every restart left a waiting run behind, until the automation hit its maximum of parallel runs (*Maximum number of runs exceeded*) and, at the end of the slot, all waiting runs sent a stop to the Zendure at the same time (*Client error … /properties/write*). The Dutch set was not affected.
 - In addition, a charging run now ends by itself when charging was already stopped elsewhere (e.g. by the charging check), so runs can no longer pile up (EN and NL).
 
+**Fix: savings counted a supply markup of −1 €/kWh on a new installation**
+- Home Assistant starts an `input_number` without a stored value at its minimum. **Dynamic supply markup** and **Fixed contract feed-in tariff** then started at −1 €/kWh. With the Nordpool package the markup field is hidden on the dashboard, so it went unnoticed, but the savings still counted it: every kWh became about €1 cheaper and *Savings* and the battery payback time came out far too high (seen in an export: €86 in 8 days).
+- With the Nordpool package the supply markup no longer counts at all (the all-in price already includes it).
+- New automation *Savings Default Values*: sets both fields to 0 at start when they are at −1 (logbook line). Savings already collected stay as they were.
+
 **Feed-in price: Dutch net metering (salderingsregeling) until the end of 2026, then without VAT (switches by itself on 1 January 2027)**
 - **Net metering until 31-12-2026, then without** (no choice): every quarter hour that starts before 1 January 2027 00:00 counts with net metering, after that without. Outside the Netherlands: leave the energy tax at 0.
 - While net metering applies: feed-in price = market price **with** VAT + energy tax (incl. VAT) + bonus + markup. Through net metering you get the energy tax back; it did not count before. As a result *no export at negative price* now only steps in when the market price drops below about −€0.11 (before already below €0, while exporting still earned money), and the savings value export higher.

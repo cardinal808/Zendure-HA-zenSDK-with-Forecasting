@@ -192,7 +192,11 @@ template:
       # ---- Tarieven ----
       vast_in: "{{ states('input_number.besparing_vast_leveringsprijs') | float(0) }}"
       vast_uit: "{{ states('input_number.besparing_vast_terugleverprijs') | float(0) }}"
-      opsl_in: "{{ states('input_number.besparing_dyn_opslag_levering') | float(0) }}"
+      # Met het Nordpool-pakket is de prijs al all-in (opslag levering zit erin) en verbergt het
+      # dashboard dit veld: dan telt het niet mee, ook niet als er nog een waarde in staat.
+      opsl_in: >
+        {{ 0 if has_value('input_number.nordpool_energiebelasting')
+           else states('input_number.besparing_dyn_opslag_levering') | float(0) }}
       opsl_uit: "{{ states('input_number.besparing_dyn_opslag_teruglevering') | float(0) }}"
       # Zonnebonus (%) bij teruglevering: over (kale marktprijs + opslag), alleen als dat positief is
       # en alleen overdag (midden van het kwartier tussen zonsopkomst en zonsondergang, sun.sun)
@@ -436,3 +440,47 @@ template:
           waarvan_zonnestroom: "{{ emmers.totaal.zon_accu | round(2) }}"
           waarvan_slim_laden: "{{ (tv_gemeten - emmers.totaal.zon_accu) | round(2) }}"
           zon_aandeel_accu_pct: "{{ (zon_aandeel * 100) | round(0) }}"
+
+# ---------------------------------------------------------------------
+# Standaardwaarden: Home Assistant start een input_number zonder opgeslagen waarde op zijn
+# minimum (hier -1 €/kWh). Een nieuwe installatie rekende dan met een opslag levering van
+# -1 €/kWh en een vaste terugleverprijs van -1 €/kWh. Zo'n waarde is nooit echt: op 0 zetten.
+# ---------------------------------------------------------------------
+automation:
+  - id: besparing_standaardwaarden
+    alias: Besparing Standaardwaarden
+    description: >-
+      Forecasting 2026.11.7 - Zet Vaste Terugleverprijs en Dynamische Opslag Levering op 0 als ze op het minimum van -1 €/kWh staan (beginwaarde van een nieuwe installatie).
+    mode: queued
+    max: 3
+    triggers:
+      - trigger: homeassistant
+        event: start
+      - trigger: state
+        entity_id:
+          - input_number.besparing_vast_terugleverprijs
+          - input_number.besparing_dyn_opslag_levering
+    conditions: []
+    actions:
+      - delay:
+          seconds: 10
+      - repeat:
+          for_each:
+            - input_number.besparing_vast_terugleverprijs
+            - input_number.besparing_dyn_opslag_levering
+          sequence:
+            - if:
+                - condition: template
+                  value_template: "{{ states(repeat.item) | float(0) <= -0.999 }}"
+              then:
+                - action: input_number.set_value
+                  target:
+                    entity_id: "{{ repeat.item }}"
+                  data:
+                    value: 0
+                - action: logbook.log
+                  data:
+                    name: Besparing
+                    message: >-
+                      {{ state_attr(repeat.item, 'friendly_name') or repeat.item }} stond op het minimum van -1 €/kWh en is op 0 gezet. Vul zo nodig je eigen waarde in.
+                    entity_id: "{{ repeat.item }}"
