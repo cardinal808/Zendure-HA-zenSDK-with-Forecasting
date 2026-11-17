@@ -621,12 +621,12 @@ template:
       - name: "Forecast Choose Solar Remaining Today Sensor"
         unique_id: forecast_choose_solar_remaining_today_sensor
         icon: mdi:form-dropdown
-        availability: "{{ ((state_attr('sensor.forecast_sensor_candidates', 'solar_remaining') or {}).options or []) | length > 1 }}"
+        availability: "{{ ((state_attr('sensor.forecast_sensor_candidates', 'solar_remaining') or {}).get('options') or []) | length > 1 }}"
         state: >
           {%- set v = states('input_text.forecast_setting_solar_remaining_today_sensor') | trim | lower | replace(' ', '') -%}
           {{ v if v not in ['', 'unknown', 'unavailable'] else none }}
         options: >
-          {%- set l = (state_attr('sensor.forecast_sensor_candidates', 'solar_remaining') or {}).options or [] -%}
+          {%- set l = (state_attr('sensor.forecast_sensor_candidates', 'solar_remaining') or {}).get('options') or [] -%}
           {%- set v = states('input_text.forecast_setting_solar_remaining_today_sensor') | trim | lower | replace(' ', '') -%}
           {{ l + ([v] if v not in l and v not in ['', 'unknown', 'unavailable'] else []) }}
         select_option:
@@ -638,12 +638,12 @@ template:
       - name: "Forecast Choose Solar Tomorrow Sensor"
         unique_id: forecast_choose_solar_tomorrow_sensor
         icon: mdi:form-dropdown
-        availability: "{{ ((state_attr('sensor.forecast_sensor_candidates', 'solar_tomorrow') or {}).options or []) | length > 1 }}"
+        availability: "{{ ((state_attr('sensor.forecast_sensor_candidates', 'solar_tomorrow') or {}).get('options') or []) | length > 1 }}"
         state: >
           {%- set v = states('input_text.forecast_setting_solar_tomorrow_sensor') | trim | lower | replace(' ', '') -%}
           {{ v if v not in ['', 'unknown', 'unavailable'] else none }}
         options: >
-          {%- set l = (state_attr('sensor.forecast_sensor_candidates', 'solar_tomorrow') or {}).options or [] -%}
+          {%- set l = (state_attr('sensor.forecast_sensor_candidates', 'solar_tomorrow') or {}).get('options') or [] -%}
           {%- set v = states('input_text.forecast_setting_solar_tomorrow_sensor') | trim | lower | replace(' ', '') -%}
           {{ l + ([v] if v not in l and v not in ['', 'unknown', 'unavailable'] else []) }}
         select_option:
@@ -655,12 +655,12 @@ template:
       - name: "Forecast Choose Solar Production Sensor"
         unique_id: forecast_choose_solar_production_sensor
         icon: mdi:form-dropdown
-        availability: "{{ ((state_attr('sensor.forecast_sensor_candidates', 'solar_production') or {}).options or []) | length > 1 }}"
+        availability: "{{ ((state_attr('sensor.forecast_sensor_candidates', 'solar_production') or {}).get('options') or []) | length > 1 }}"
         state: >
           {%- set v = states('input_text.forecast_setting_solar_production_sensor') | trim | lower | replace(' ', '') -%}
           {{ v if v not in ['', 'unknown', 'unavailable'] else none }}
         options: >
-          {%- set l = (state_attr('sensor.forecast_sensor_candidates', 'solar_production') or {}).options or [] -%}
+          {%- set l = (state_attr('sensor.forecast_sensor_candidates', 'solar_production') or {}).get('options') or [] -%}
           {%- set v = states('input_text.forecast_setting_solar_production_sensor') | trim | lower | replace(' ', '') -%}
           {{ l + ([v] if v not in l and v not in ['', 'unknown', 'unavailable'] else []) }}
         select_option:
@@ -672,12 +672,12 @@ template:
       - name: "Forecast Choose Grid Import Counter"
         unique_id: forecast_choose_grid_import_counter
         icon: mdi:form-dropdown
-        availability: "{{ ((state_attr('sensor.forecast_sensor_candidates', 'grid_import') or {}).options or []) | length > 1 }}"
+        availability: "{{ ((state_attr('sensor.forecast_sensor_candidates', 'grid_import') or {}).get('options') or []) | length > 1 }}"
         state: >
           {%- set v = states('input_text.forecast_setting_grid_import_counter_sensor') | trim | lower | replace(' ', '') -%}
           {{ v if v not in ['', 'unknown', 'unavailable'] else none }}
         options: >
-          {%- set l = (state_attr('sensor.forecast_sensor_candidates', 'grid_import') or {}).options or [] -%}
+          {%- set l = (state_attr('sensor.forecast_sensor_candidates', 'grid_import') or {}).get('options') or [] -%}
           {%- set v = states('input_text.forecast_setting_grid_import_counter_sensor') | trim | lower | replace(' ', '') -%}
           {{ l + ([v] if v not in l and v not in ['', 'unknown', 'unavailable'] else []) }}
         select_option:
@@ -689,12 +689,12 @@ template:
       - name: "Forecast Choose Grid Export Counter"
         unique_id: forecast_choose_grid_export_counter
         icon: mdi:form-dropdown
-        availability: "{{ ((state_attr('sensor.forecast_sensor_candidates', 'grid_export') or {}).options or []) | length > 1 }}"
+        availability: "{{ ((state_attr('sensor.forecast_sensor_candidates', 'grid_export') or {}).get('options') or []) | length > 1 }}"
         state: >
           {%- set v = states('input_text.forecast_setting_grid_export_counter_sensor') | trim | lower | replace(' ', '') -%}
           {{ v if v not in ['', 'unknown', 'unavailable'] else none }}
         options: >
-          {%- set l = (state_attr('sensor.forecast_sensor_candidates', 'grid_export') or {}).options or [] -%}
+          {%- set l = (state_attr('sensor.forecast_sensor_candidates', 'grid_export') or {}).get('options') or [] -%}
           {%- set v = states('input_text.forecast_setting_grid_export_counter_sensor') | trim | lower | replace(' ', '') -%}
           {{ l + ([v] if v not in l and v not in ['', 'unknown', 'unavailable'] else []) }}
         select_option:
@@ -706,12 +706,12 @@ template:
       - name: "Forecast Choose Home Energy Meter Sensor"
         unique_id: forecast_choose_home_energy_meter_sensor
         icon: mdi:form-dropdown
-        availability: "{{ ((state_attr('sensor.forecast_sensor_candidates', 'p1_power') or {}).options or []) | length > 1 }}"
+        availability: "{{ ((state_attr('sensor.forecast_sensor_candidates', 'p1_power') or {}).get('options') or []) | length > 1 }}"
         state: >
           {%- set v = states('input_text.home_energy_setting_meter_sensor') | trim | lower | replace(' ', '') -%}
           {{ v if v not in ['', 'unknown', 'unavailable'] else none }}
         options: >
-          {%- set l = (state_attr('sensor.forecast_sensor_candidates', 'p1_power') or {}).options or [] -%}
+          {%- set l = (state_attr('sensor.forecast_sensor_candidates', 'p1_power') or {}).get('options') or [] -%}
           {%- set v = states('input_text.home_energy_setting_meter_sensor') | trim | lower | replace(' ', '') -%}
           {{ l + ([v] if v not in l and v not in ['', 'unknown', 'unavailable'] else []) }}
         select_option:
@@ -723,12 +723,12 @@ template:
       - name: "Forecast Choose Dynamic Nordpool Sensor"
         unique_id: forecast_choose_dynamic_nordpool_sensor
         icon: mdi:form-dropdown
-        availability: "{{ ((state_attr('sensor.forecast_sensor_candidates', 'nordpool') or {}).options or []) | length > 1 }}"
+        availability: "{{ ((state_attr('sensor.forecast_sensor_candidates', 'nordpool') or {}).get('options') or []) | length > 1 }}"
         state: >
           {%- set v = states('input_text.dynamic_setting_nordpool_sensor') | trim | lower | replace(' ', '') -%}
           {{ v if v not in ['', 'unknown', 'unavailable'] else none }}
         options: >
-          {%- set l = (state_attr('sensor.forecast_sensor_candidates', 'nordpool') or {}).options or [] -%}
+          {%- set l = (state_attr('sensor.forecast_sensor_candidates', 'nordpool') or {}).get('options') or [] -%}
           {%- set v = states('input_text.dynamic_setting_nordpool_sensor') | trim | lower | replace(' ', '') -%}
           {{ l + ([v] if v not in l and v not in ['', 'unknown', 'unavailable'] else []) }}
         select_option:

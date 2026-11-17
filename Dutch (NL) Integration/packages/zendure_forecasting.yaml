@@ -622,12 +622,12 @@ template:
       - name: "Forecast Kies Zon Resterend Vandaag Sensor"
         unique_id: forecast_kies_zon_resterend_vandaag_sensor
         icon: mdi:form-dropdown
-        availability: "{{ ((state_attr('sensor.forecast_sensor_kandidaten', 'zon_resterend') or {}).opties or []) | length > 1 }}"
+        availability: "{{ ((state_attr('sensor.forecast_sensor_kandidaten', 'zon_resterend') or {}).get('opties') or []) | length > 1 }}"
         state: >
           {%- set v = states('input_text.forecast_zon_resterend_vandaag_sensor') | trim | lower | replace(' ', '') -%}
           {{ v if v not in ['', 'unknown', 'unavailable'] else none }}
         options: >
-          {%- set l = (state_attr('sensor.forecast_sensor_kandidaten', 'zon_resterend') or {}).opties or [] -%}
+          {%- set l = (state_attr('sensor.forecast_sensor_kandidaten', 'zon_resterend') or {}).get('opties') or [] -%}
           {%- set v = states('input_text.forecast_zon_resterend_vandaag_sensor') | trim | lower | replace(' ', '') -%}
           {{ l + ([v] if v not in l and v not in ['', 'unknown', 'unavailable'] else []) }}
         select_option:
@@ -639,12 +639,12 @@ template:
       - name: "Forecast Kies Zon Morgen Sensor"
         unique_id: forecast_kies_zon_morgen_sensor
         icon: mdi:form-dropdown
-        availability: "{{ ((state_attr('sensor.forecast_sensor_kandidaten', 'zon_morgen') or {}).opties or []) | length > 1 }}"
+        availability: "{{ ((state_attr('sensor.forecast_sensor_kandidaten', 'zon_morgen') or {}).get('opties') or []) | length > 1 }}"
         state: >
           {%- set v = states('input_text.forecast_zon_morgen_sensor') | trim | lower | replace(' ', '') -%}
           {{ v if v not in ['', 'unknown', 'unavailable'] else none }}
         options: >
-          {%- set l = (state_attr('sensor.forecast_sensor_kandidaten', 'zon_morgen') or {}).opties or [] -%}
+          {%- set l = (state_attr('sensor.forecast_sensor_kandidaten', 'zon_morgen') or {}).get('opties') or [] -%}
           {%- set v = states('input_text.forecast_zon_morgen_sensor') | trim | lower | replace(' ', '') -%}
           {{ l + ([v] if v not in l and v not in ['', 'unknown', 'unavailable'] else []) }}
         select_option:
@@ -656,12 +656,12 @@ template:
       - name: "Forecast Kies Zonnepanelen Productie Sensor"
         unique_id: forecast_kies_zonnepanelen_productie_sensor
         icon: mdi:form-dropdown
-        availability: "{{ ((state_attr('sensor.forecast_sensor_kandidaten', 'zon_productie') or {}).opties or []) | length > 1 }}"
+        availability: "{{ ((state_attr('sensor.forecast_sensor_kandidaten', 'zon_productie') or {}).get('opties') or []) | length > 1 }}"
         state: >
           {%- set v = states('input_text.forecast_zon_productie_sensor') | trim | lower | replace(' ', '') -%}
           {{ v if v not in ['', 'unknown', 'unavailable'] else none }}
         options: >
-          {%- set l = (state_attr('sensor.forecast_sensor_kandidaten', 'zon_productie') or {}).opties or [] -%}
+          {%- set l = (state_attr('sensor.forecast_sensor_kandidaten', 'zon_productie') or {}).get('opties') or [] -%}
           {%- set v = states('input_text.forecast_zon_productie_sensor') | trim | lower | replace(' ', '') -%}
           {{ l + ([v] if v not in l and v not in ['', 'unknown', 'unavailable'] else []) }}
         select_option:
@@ -673,12 +673,12 @@ template:
       - name: "Forecast Kies Net Import Teller"
         unique_id: forecast_kies_net_import_teller
         icon: mdi:form-dropdown
-        availability: "{{ ((state_attr('sensor.forecast_sensor_kandidaten', 'net_import') or {}).opties or []) | length > 1 }}"
+        availability: "{{ ((state_attr('sensor.forecast_sensor_kandidaten', 'net_import') or {}).get('opties') or []) | length > 1 }}"
         state: >
           {%- set v = states('input_text.forecast_net_import_teller_sensor') | trim | lower | replace(' ', '') -%}
           {{ v if v not in ['', 'unknown', 'unavailable'] else none }}
         options: >
-          {%- set l = (state_attr('sensor.forecast_sensor_kandidaten', 'net_import') or {}).opties or [] -%}
+          {%- set l = (state_attr('sensor.forecast_sensor_kandidaten', 'net_import') or {}).get('opties') or [] -%}
           {%- set v = states('input_text.forecast_net_import_teller_sensor') | trim | lower | replace(' ', '') -%}
           {{ l + ([v] if v not in l and v not in ['', 'unknown', 'unavailable'] else []) }}
         select_option:
@@ -690,12 +690,12 @@ template:
       - name: "Forecast Kies Net Export Teller"
         unique_id: forecast_kies_net_export_teller
         icon: mdi:form-dropdown
-        availability: "{{ ((state_attr('sensor.forecast_sensor_kandidaten', 'net_export') or {}).opties or []) | length > 1 }}"
+        availability: "{{ ((state_attr('sensor.forecast_sensor_kandidaten', 'net_export') or {}).get('opties') or []) | length > 1 }}"
         state: >
           {%- set v = states('input_text.forecast_net_export_teller_sensor') | trim | lower | replace(' ', '') -%}
           {{ v if v not in ['', 'unknown', 'unavailable'] else none }}
         options: >
-          {%- set l = (state_attr('sensor.forecast_sensor_kandidaten', 'net_export') or {}).opties or [] -%}
+          {%- set l = (state_attr('sensor.forecast_sensor_kandidaten', 'net_export') or {}).get('opties') or [] -%}
           {%- set v = states('input_text.forecast_net_export_teller_sensor') | trim | lower | replace(' ', '') -%}
           {{ l + ([v] if v not in l and v not in ['', 'unknown', 'unavailable'] else []) }}
         select_option:
@@ -707,12 +707,12 @@ template:
       - name: "Forecast Kies Afwijkende P1 Sensor"
         unique_id: forecast_kies_afwijkende_p1_sensor
         icon: mdi:form-dropdown
-        availability: "{{ ((state_attr('sensor.forecast_sensor_kandidaten', 'p1_vermogen') or {}).opties or []) | length > 1 }}"
+        availability: "{{ ((state_attr('sensor.forecast_sensor_kandidaten', 'p1_vermogen') or {}).get('opties') or []) | length > 1 }}"
         state: >
           {%- set v = states('input_text.afwijkende_p1_sensor') | trim | lower | replace(' ', '') -%}
           {{ v if v not in ['', 'unknown', 'unavailable'] else none }}
         options: >
-          {%- set l = (state_attr('sensor.forecast_sensor_kandidaten', 'p1_vermogen') or {}).opties or [] -%}
+          {%- set l = (state_attr('sensor.forecast_sensor_kandidaten', 'p1_vermogen') or {}).get('opties') or [] -%}
           {%- set v = states('input_text.afwijkende_p1_sensor') | trim | lower | replace(' ', '') -%}
           {{ l + ([v] if v not in l and v not in ['', 'unknown', 'unavailable'] else []) }}
         select_option:
@@ -724,12 +724,12 @@ template:
       - name: "Forecast Kies Dynamisch Nordpool Sensor"
         unique_id: forecast_kies_dynamisch_nordpool_sensor
         icon: mdi:form-dropdown
-        availability: "{{ ((state_attr('sensor.forecast_sensor_kandidaten', 'nordpool') or {}).opties or []) | length > 1 }}"
+        availability: "{{ ((state_attr('sensor.forecast_sensor_kandidaten', 'nordpool') or {}).get('opties') or []) | length > 1 }}"
         state: >
           {%- set v = states('input_text.dynamisch_nordpool_sensor') | trim | lower | replace(' ', '') -%}
           {{ v if v not in ['', 'unknown', 'unavailable'] else none }}
         options: >
-          {%- set l = (state_attr('sensor.forecast_sensor_kandidaten', 'nordpool') or {}).opties or [] -%}
+          {%- set l = (state_attr('sensor.forecast_sensor_kandidaten', 'nordpool') or {}).get('opties') or [] -%}
           {%- set v = states('input_text.dynamisch_nordpool_sensor') | trim | lower | replace(' ', '') -%}
           {{ l + ([v] if v not in l and v not in ['', 'unknown', 'unavailable'] else []) }}
         select_option:
