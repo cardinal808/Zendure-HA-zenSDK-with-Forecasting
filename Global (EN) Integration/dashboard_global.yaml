@@ -5038,6 +5038,9 @@ views:
               keeps supplying the house and the grid supplies the peak. This way
               the battery does not ramp up and down for every peak and does not
               briefly export afterwards. Charging from solar is unchanged.
+              The energy above the threshold is counted separately, like the car
+              and the air conditioner: not in the usage profile, so the planner
+              does not charge for it.
 
 
               Do not enter the car charger or the air conditioner here if you use
@@ -5056,6 +5059,8 @@ views:
                 name: Quooker power sensor (W/kW/A, more with commas)
               - entity: input_number.zendure_quooker_threshold_power
                 name: Threshold W
+              - entity: sensor.zendure_quooker_separate_7_days
+                name: Counted separately (7 days)
             visibility:
               - condition: state
                 entity: input_text.zendure_quooker_power_sensors

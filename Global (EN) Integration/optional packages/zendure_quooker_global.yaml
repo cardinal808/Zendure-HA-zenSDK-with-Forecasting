@@ -30,9 +30,51 @@
 # Note:
 # - Do not enter the car charger or the air conditioner here if you use the EV or HVAC package;
 #   those already subtract their power (it would count twice).
-# - The energy of the peak loads stays in the planner's usage profile. The battery no longer supplies
-#   it, so the planner estimates the required energy slightly high (for a Quooker ~0.3-0.7 kWh/day).
+# - The energy above the threshold is counted separately (sensor.zendure_quooker_separate_total and
+#   the 7-day figures), like the car and the air conditioner: it does not count in the planner's
+#   usage profile, daily usage and self-consumption. The battery does not supply it, so the planner
+#   does not need to charge for it either. Standby (below the threshold) stays normal house usage.
 # =====================================================================
+
+# ---------------------------------------------------------------------
+# kWh counters of the separately counted energy (method "left", like the car and the air conditioner)
+# ---------------------------------------------------------------------
+sensor:
+  - platform: integration
+    name: "Zendure Quooker Separate Total"
+    unique_id: zendure_quooker_separate_total
+    source: sensor.zendure_quooker_discharge_correction
+    unit_prefix: k
+    round: 3
+    method: left
+
+  - platform: integration
+    name: "Zendure Quooker Separate From Solar Total"
+    unique_id: zendure_quooker_separate_from_solar_total
+    source: sensor.zendure_quooker_separate_from_solar_power
+    unit_prefix: k
+    round: 3
+    method: left
+
+  - platform: statistics
+    name: "Zendure Quooker Separate 7 Days"
+    unique_id: zendure_quooker_separate_7_days
+    entity_id: sensor.zendure_quooker_counter_separate
+    state_characteristic: change
+    max_age:
+      days: 7
+    sampling_size: 1500
+    precision: 2
+
+  - platform: statistics
+    name: "Zendure Quooker Separate From Solar 7 Days"
+    unique_id: zendure_quooker_separate_from_solar_7_days
+    entity_id: sensor.zendure_quooker_counter_separate_from_solar
+    state_characteristic: change
+    max_age:
+      days: 7
+    sampling_size: 1500
+    precision: 2
 
 input_text:
   # One or more sensors, separated by commas (e.g. sensor.quooker_power, sensor.kettle_power)
@@ -93,6 +135,45 @@ template:
           {% set d = states('input_number.zendure_quooker_threshold_power') | float(0) %}
           {% set p = states('sensor.zendure_quooker_power') | float(0) %}
           {{ p if p > (d if d > 0 else 1000) else 0 }}
+
+      # Part of the separately counted energy that does not come from the grid (so from solar). What
+      # the car and the air conditioner take from the grid goes first.
+      - name: "Zendure Quooker Separate From Solar Power"
+        unique_id: zendure_quooker_separate_from_solar_power
+        icon: mdi:solar-power
+        unit_of_measurement: "W"
+        device_class: power
+        state_class: measurement
+        state: >
+          {% set q = states('sensor.zendure_quooker_discharge_correction') | float(0) %}
+          {% set other = states('sensor.ev_charging_power') | float(0) + states('sensor.hvac_separate_power') | float(0) %}
+          {% set import_w = [states('sensor.home_energy_meter_power') | float(0) - other, 0] | max %}
+          {{ (q - [import_w, q] | min) | round(0) }}
+
+  # Freeze the counters every quarter hour (for the 7-day statistics, as in zendure_forecasting_global.yaml)
+  - trigger:
+      - trigger: time_pattern
+        minutes: "/15"
+      - trigger: homeassistant
+        event: start
+    sensor:
+      - name: "Zendure Quooker Counter Separate"
+        unique_id: zendure_quooker_counter_separate
+        unit_of_measurement: "kWh"
+        device_class: energy
+        state_class: total_increasing
+        # Source briefly gone (e.g. just after a restart): keep the previous value, not unavailable
+        availability: "{{ has_value('sensor.zendure_quooker_separate_total') or this.state | is_number }}"
+        state: "{{ states('sensor.zendure_quooker_separate_total') | float(0) if has_value('sensor.zendure_quooker_separate_total') else this.state }}"
+
+      - name: "Zendure Quooker Counter Separate From Solar"
+        unique_id: zendure_quooker_counter_separate_from_solar
+        unit_of_measurement: "kWh"
+        device_class: energy
+        state_class: total_increasing
+        # Source briefly gone (e.g. just after a restart): keep the previous value, not unavailable
+        availability: "{{ has_value('sensor.zendure_quooker_separate_from_solar_total') or this.state | is_number }}"
+        state: "{{ states('sensor.zendure_quooker_separate_from_solar_total') | float(0) if has_value('sensor.zendure_quooker_separate_from_solar_total') else this.state }}"
 
 automation:
   # Threshold at 0 (e.g. new installation): fill in the default 1000 W (visible in the field).

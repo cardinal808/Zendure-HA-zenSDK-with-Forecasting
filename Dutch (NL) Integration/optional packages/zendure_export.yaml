@@ -16,7 +16,7 @@
 #    pakketten in het logboek zetten (logbook.log op de modus-selectie), met tijd, modus en SOC.
 #    De laatste 50 regels.
 # 2. Momentopnames (sensor.zendure_diagnose_momentopnames): elk kwartier modus, SOC, P1, vermogen
-#    Zendure, PV, prijs, gepland netladen, HVAC-blokkade en EV-correctie. De laatste 24 uur.
+#    Zendure, PV, prijs, gepland netladen, HVAC-blokkade, EV- en Quooker-correctie. De laatste 24 uur.
 # 3. Foutmeldingen (sensor.zendure_diagnose_fouten): waarschuwingen en fouten uit het
 #    Home Assistant-log die over deze set gaan (Zendure, Forecasting, Dynamisch, HVAC, EV, ...).
 #    De laatste 20. Daarvoor zet dit pakket system_log: fire_event: true aan (zie onderaan).
@@ -133,9 +133,12 @@ template:
         attributes:
           kolommen: >-
             {{ ['tijd', 'modus', 'soc_pct', 'p1_w', 'zendure_w', 'pv_zendure_w', 'prijs_eur_kwh',
-                'gepland_netladen_kwh', 'hvac_blokkeert', 'ev_correctie_w'] }}
+                'gepland_netladen_kwh', 'hvac_blokkeert', 'ev_correctie_w', 'quooker_correctie_w'] }}
           regels: >-
-            {%- set oud = this.attributes.get('regels') or [] -%}
+            {#- Regels van vóór de kolom quooker_correctie_w aanvullen met none -#}
+            {%- set nr = namespace(l=[]) -%}
+            {%- for r in this.attributes.get('regels') or [] -%}{%- set nr.l = nr.l + [r + [none] * ([11 - (r | length), 0] | max)] -%}{%- endfor -%}
+            {%- set oud = nr.l -%}
             {%- if trigger.id == 'momentopname' -%}
               {%- set hvac = states('binary_sensor.hvac_ontladen_geblokkeerd') -%}
               {{ (oud + [[now().strftime('%Y-%m-%d %H:%M'),
@@ -147,7 +150,8 @@ template:
                          states('sensor.dynamisch_nordpool') | float(none),
                          state_attr('sensor.zendure_forecast_plan', 'gepland_netladen_kwh') | float(none),
                          1 if hvac == 'on' else (0 if hvac == 'off' else none),
-                         states('sensor.ev_ontlaad_correctie') | float(none)]])[-96:] }}
+                         states('sensor.ev_ontlaad_correctie') | float(none),
+                         states('sensor.zendure_quooker_ontlaad_correctie') | float(none)]])[-96:] }}
             {%- else -%}
               {{ oud }}
             {%- endif -%}
@@ -248,11 +252,11 @@ script:
                  'sensor.zendure_2400_ac_indicatie_beschikbare_energie', 'sensor.zendure_terugleverprijs_nu',
                  'sensor.zendure_besparing', 'sensor.ev_laadplan', 'sensor.hvac_modus',
                  'binary_sensor.hvac_ontladen_geblokkeerd', 'binary_sensor.zendure_export_geblokkeerd_negatieve_prijs',
-                 'sensor.zendure_forecast_grafiek', 'sensor.forecast_sensor_kandidaten', 'sensor.forecast_zon_maandmeting', 'sensor.hvac_vermogen_uit_teller', 'sensor.dynamisch_spread_indicatie', 'sensor.dynamisch_spread_indicatie_nom',
+                 'sensor.zendure_forecast_grafiek', 'sensor.forecast_sensor_kandidaten', 'sensor.forecast_zon_maandmeting', 'sensor.hvac_vermogen_uit_teller', 'sensor.zendure_quooker_vermogen', 'sensor.forecast_prijzen_reserve', 'sensor.dynamisch_spread_indicatie', 'sensor.dynamisch_spread_indicatie_nom',
                  'sensor.dynamisch_spread_indicatie_morgen', 'sensor.dynamisch_spread_indicatie_nom_morgen'] -%}
             {#- Verzamelde gegevens: alle tellers en 7-dagen-statistieken met hun attributen
                 (age_coverage_ratio, bron, laatste_sprong, ...) -#}
-            {%- set detail = detail + (states.sensor | selectattr('object_id', 'match', '^(forecast_teller_|forecast_gemeten_|forecast_.*_7_dagen$|hvac_teller_|hvac_.*_7_dagen$|ev_teller_|ev_.*_7_dagen$)')
+            {%- set detail = detail + (states.sensor | selectattr('object_id', 'match', '^(forecast_teller_|forecast_gemeten_|forecast_.*_7_dagen$|hvac_teller_|hvac_.*_7_dagen$|ev_teller_|ev_.*_7_dagen$|zendure_quooker_teller_|zendure_quooker_.*_7_dagen$)')
                  | map(attribute='entity_id') | sort | list) -%}
             {#- (een attribuut van meer dan 20.000 tekens wordt vervangen door alleen de grootte) -#}
             {%- for s in expand(detail) -%}

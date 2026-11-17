@@ -29,9 +29,51 @@
 # Let op:
 # - Vul hier niet de lader van de auto of de airco in als je het EV- of HVAC-pakket gebruikt;
 #   die trekken hun vermogen al af (dan telt het dubbel).
-# - Het verbruik van de piekverbruikers blijft in het verbruiksprofiel van de planner. De accu levert
-#   het niet meer, dus de planner schat de benodigde energie iets ruim (bij een Quooker ~0,3-0,7 kWh/dag).
+# - Het verbruik boven de drempel telt apart (sensor.zendure_quooker_apart_totaal en de 7-daagse
+#   cijfers), net als bij de auto en de airco: het telt niet mee in het verbruiksprofiel, het
+#   dagverbruik en het zelfverbruik van de planner. De accu levert het niet, dus de planner hoeft er
+#   ook niet voor te laden. Stand-by (onder de drempel) blijft gewoon huisverbruik.
 # =====================================================================
+
+# ---------------------------------------------------------------------
+# kWh-tellers van het apart getelde verbruik (methode "left", zoals bij de auto en de airco)
+# ---------------------------------------------------------------------
+sensor:
+  - platform: integration
+    name: "Zendure Quooker Apart Totaal"
+    unique_id: zendure_quooker_apart_totaal
+    source: sensor.zendure_quooker_ontlaad_correctie
+    unit_prefix: k
+    round: 3
+    method: left
+
+  - platform: integration
+    name: "Zendure Quooker Apart Uit Zon Totaal"
+    unique_id: zendure_quooker_apart_uit_zon_totaal
+    source: sensor.zendure_quooker_apart_uit_zon_vermogen
+    unit_prefix: k
+    round: 3
+    method: left
+
+  - platform: statistics
+    name: "Zendure Quooker Apart 7 Dagen"
+    unique_id: zendure_quooker_apart_7_dagen
+    entity_id: sensor.zendure_quooker_teller_apart
+    state_characteristic: change
+    max_age:
+      days: 7
+    sampling_size: 1500
+    precision: 2
+
+  - platform: statistics
+    name: "Zendure Quooker Apart Uit Zon 7 Dagen"
+    unique_id: zendure_quooker_apart_uit_zon_7_dagen
+    entity_id: sensor.zendure_quooker_teller_apart_uit_zon
+    state_characteristic: change
+    max_age:
+      days: 7
+    sampling_size: 1500
+    precision: 2
 
 input_text:
   # Eén of meer sensoren, gescheiden door komma's (bv. sensor.quooker_vermogen, sensor.waterkoker_vermogen)
@@ -92,6 +134,45 @@ template:
           {% set d = states('input_number.zendure_quooker_drempel_vermogen') | float(0) %}
           {% set p = states('sensor.zendure_quooker_vermogen') | float(0) %}
           {{ p if p > (d if d > 0 else 1000) else 0 }}
+
+      # Deel van het apart getelde verbruik dat niet uit het net komt (dus uit zon). Wat de auto en
+      # de airco uit het net halen gaat voor.
+      - name: "Zendure Quooker Apart Uit Zon Vermogen"
+        unique_id: zendure_quooker_apart_uit_zon_vermogen
+        icon: mdi:solar-power
+        unit_of_measurement: "W"
+        device_class: power
+        state_class: measurement
+        state: >
+          {% set q = states('sensor.zendure_quooker_ontlaad_correctie') | float(0) %}
+          {% set ander = states('sensor.ev_laadvermogen') | float(0) + states('sensor.hvac_apart_vermogen') | float(0) %}
+          {% set import_w = [states('sensor.p1_aansturing_vermogen') | float(0) - ander, 0] | max %}
+          {{ (q - [import_w, q] | min) | round(0) }}
+
+  # Tellers elk kwartier bevriezen (voor de 7-daagse statistiek, zoals in zendure_forecasting.yaml)
+  - trigger:
+      - trigger: time_pattern
+        minutes: "/15"
+      - trigger: homeassistant
+        event: start
+    sensor:
+      - name: "Zendure Quooker Teller Apart"
+        unique_id: zendure_quooker_teller_apart
+        unit_of_measurement: "kWh"
+        device_class: energy
+        state_class: total_increasing
+        # Bron even weg (bv. net na een herstart): vorige stand houden, niet unavailable
+        availability: "{{ has_value('sensor.zendure_quooker_apart_totaal') or this.state | is_number }}"
+        state: "{{ states('sensor.zendure_quooker_apart_totaal') | float(0) if has_value('sensor.zendure_quooker_apart_totaal') else this.state }}"
+
+      - name: "Zendure Quooker Teller Apart Uit Zon"
+        unique_id: zendure_quooker_teller_apart_uit_zon
+        unit_of_measurement: "kWh"
+        device_class: energy
+        state_class: total_increasing
+        # Bron even weg (bv. net na een herstart): vorige stand houden, niet unavailable
+        availability: "{{ has_value('sensor.zendure_quooker_apart_uit_zon_totaal') or this.state | is_number }}"
+        state: "{{ states('sensor.zendure_quooker_apart_uit_zon_totaal') | float(0) if has_value('sensor.zendure_quooker_apart_uit_zon_totaal') else this.state }}"
 
 automation:
   # Drempel op 0 (bv. nieuwe installatie): standaardwaarde 1000 W invullen (zichtbaar in het veld).

@@ -5047,6 +5047,9 @@ views:
               van de P1-meter: de accu blijft het huis voeden en het net levert
               de piek. Zo schakelt de accu niet bij elke piek op en af en levert
               hij daarna niet kort terug. Bij laden uit zon verandert er niets.
+              Het verbruik boven de drempel telt apart, zoals bij de auto en de
+              airco: niet in het verbruiksprofiel, dus de planner laadt er niet
+              voor.
 
 
               Vul hier niet de lader van de auto of de airco in als je het EV- of
@@ -5065,6 +5068,8 @@ views:
                 name: Vermogenssensor Quooker (W/kW/A, meer met komma's)
               - entity: input_number.zendure_quooker_drempel_vermogen
                 name: Drempel W
+              - entity: sensor.zendure_quooker_apart_7_dagen
+                name: Apart geteld (7 dagen)
             visibility:
               - condition: state
                 entity: input_text.zendure_quooker_vermogen_sensoren
