@@ -2207,6 +2207,7 @@ views:
               - Laden: {% if (o.laden | default([])) | length > 0 %}{% for b in o.laden %}{{ b.van }}–{{ b.tot }} ({{ '%.1f' | format(b.kwh) }} kWh, gem. €{{ '%.3f' | format(b.prijs) }}){{ ', ' if not loop.last }}{% endfor %}{% else %}niets{% endif %}
               - Vasthouden: {% if (o.vasthouden | default([])) | length > 0 %}{% for b in o.vasthouden %}{{ b.van }}–{{ b.tot }}{{ ', ' if not loop.last }}{% endfor %}{% else %}niet{% endif %}
               {% if (o.terugleveren | default([])) | length > 0 %}- Terugleveren: {% for b in o.terugleveren %}{{ b.van }}–{{ b.tot }} ({{ '%.1f' | format(b.kwh) }} kWh, €{{ '%.3f' | format(b.prijs) }}){{ ', ' if not loop.last }}{% endfor %}
+              {% endif %}{% if o.kalibratie_100_om %}- Kalibratie: accu op 100% om {{ o.kalibratie_100_om }}
               {% endif %}{% if o.middernacht_pct is not none %}- Om middernacht nog ongeveer **{{ o.middernacht_pct | int }}%**{% if o.leeg_om %}; leeg om {{ o.leeg_om[11:] }}{% endif %}
               {% endif %}{% if o.verschil is not none %}- Kosten tot het einde van de bekende prijzen: €{{ '%.2f' | format(o.kosten) }}, {{ 'oude planner' if nw else 'huidig plan' }} €{{ '%.2f' | format(o.kosten_huidig_plan) }} (**{{ 'scheelt' if o.verschil >= 0 else 'kost' }} €{{ '%.2f' | format(o.verschil | abs) }}**)
               {% endif %}{% endif %}

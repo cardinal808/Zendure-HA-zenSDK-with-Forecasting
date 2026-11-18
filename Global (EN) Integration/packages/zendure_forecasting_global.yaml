@@ -3568,7 +3568,19 @@ template:
       c_opt_steps: 40
       # Costs per charge start (EUR): charging in blocks beats charge-hold-charge at a small price difference
       c_opt_charge_start: 0.02
+      # Costs per hold start (EUR): short pieces of holding between supplying (and the standby with a flash
+      # write that comes with it) only when they yield at least this much
+      c_opt_hold_start: 0.005
+      # Calibration: costs when the battery does not reach 100% within the horizon. From half the threshold
+      # rising to c_opt_cal_soft, at the threshold c_opt_cal_hard (then it practically always charges full)
+      c_opt_cal_soft: 0.3
+      c_opt_cal_hard: 2
       opt_f: "{{ 1 + ([margin_pct, 0] | max) / 100 }}"
+      # Calibration in the new planner: costs when the battery does not reach 100% within the horizon (0 = not needed)
+      opt_cal_penalty: >
+        {%- if not (cal_on and cal_max_ok) or cal_days < cal_wait_from -%}0
+        {%- elif cal_days >= cal_threshold -%}{{ c_opt_cal_hard }}
+        {%- else -%}{{ (c_opt_cal_soft * (cal_days - cal_wait_from + 1) / ([cal_threshold - cal_wait_from, 1] | max)) | round(3) }}{%- endif -%}
       # Export by the new planner: switch on and Gielz's PV Export Disabled off
       opt_x: "{{ planner_new and is_state('input_boolean.forecast_setting_new_planner_export', 'on') and not is_state('input_boolean.zendure_setting_pv_export_disabled', 'on') }}"
       # Feed-in price per slot (without net metering) for the new planner; surplus that does not fit yields this
@@ -3585,43 +3597,51 @@ template:
           {#- With export the charge at the end counts at the cheapest price without losses: otherwise it exports at the
               end of the horizon what turns out to be worth more after the next recalculation -#}
           {%- set endv = ([sl | map(attribute='v') | min, 0] | max) * (1 if opt_x else eff_out) -%}
-          {#- W[i] = costs from the start of slot i per state of charge, [without, with] charging in the previous slot -#}
-          {%- set ns = namespace(V0=[], V1=[], W=[]) -%}
-          {%- for k in range(K) -%}{%- set ns.V0 = ns.V0 + [0 - k * st * endv] -%}{%- endfor -%}
-          {%- set ns.V1 = ns.V0 -%}{%- set ns.W = [[ns.V0, ns.V1]] -%}
-          {#- Backwards: per slot and per state of charge the cheapest action (a charge start costs c_opt_charge_start) -#}
-          {%- for x in sl | reverse -%}
-            {%- set dur = (x.e - x.a) / 3600 -%}
-            {%- set ll = ([x.k - x.d, 0] | max) * opt_f -%}
-            {%- set fx = opt_fx.get(x.s | int | string, 0) if opt_fx is mapping else 0 -%}{%- set fxp = [fx, 0] | max -%}
-            {%- set nv = namespace(V0=[], V1=[]) -%}
-            {%- for k in range(K) -%}
-              {%- set s1 = [k * st + x.o * eff_in, s_max] | min -%}
-              {%- set sp = (x.o - (s1 - k * st) / eff_in) * fxp -%}
-              {%- set q = s1 / st -%}{%- set i0 = [q | int, K - 2] | min -%}{%- set f = q - i0 -%}
-              {%- set c_h = ll * x.v - sp + ns.V0[i0] * (1 - f) + ns.V0[i0 + 1] * f -%}
-              {%- set out = [ll, s1 * eff_out, p_disch_kw * dur] | min -%}
-              {%- set q = (s1 - out / eff_out) / st -%}{%- set i0 = [q | int, K - 2] | min -%}{%- set f = q - i0 -%}
-              {%- set c_m = [c_h, (ll - out) * x.v - sp + ns.V0[i0] * (1 - f) + ns.V0[i0 + 1] * f] | min -%}
-              {%- if opt_x and fx > 0 -%}
-                {%- set xo = [s1 * eff_out, p_disch_kw * dur] | min -%}{%- set xh = [ll, xo] | min -%}
-                {%- set q = (s1 - xo / eff_out) / st -%}{%- set i0 = [q | int, K - 2] | min -%}{%- set f = q - i0 -%}
-                {%- set c_m = [c_m, (ll - xh) * x.v - sp - (xo - xh) * fx + ns.V0[i0] * (1 - f) + ns.V0[i0 + 1] * f] | min -%}
-              {%- endif -%}
-              {%- set add = [p_max_kw * dur * eff_in, s_max - s1] | min -%}
-              {%- if add > 0.001 -%}
-                {%- set q = (s1 + add) / st -%}{%- set i0 = [q | int, K - 2] | min -%}{%- set f = q - i0 -%}
-                {%- set c_l = (ll + add / eff_in) * x.v - sp + ns.V1[i0] * (1 - f) + ns.V1[i0 + 1] * f -%}
-              {%- else -%}{%- set c_l = c_m + 1 -%}{%- endif -%}
-              {%- set nv.V0 = nv.V0 + [[c_m, c_l + c_opt_charge_start] | min] -%}{%- set nv.V1 = nv.V1 + [[c_m, c_l] | min] -%}
+          {#- W[i] = per previous action (o = supply/export, l = charge, h = hold) the costs from slot i per state of charge. With calibration two rounds: first W1 (100% already reached), then W0 (not yet; filling the battery moves over to W1, at the end not-reached costs opt_cal_penalty). -#}
+          {%- set eind = namespace(l=[]) -%}
+          {%- for k in range(K) -%}{%- set eind.l = eind.l + [0 - k * st * endv] -%}{%- endfor -%}
+          {%- set ns = namespace(W1=[], W0=[], N=none, W=[]) -%}
+          {%- for pas in ([1, 0] if opt_cal_penalty | float(0) > 0 else [1]) -%}
+            {%- set e0 = namespace(l=[]) -%}
+            {%- for v in eind.l -%}{%- set e0.l = e0.l + [v + (0 if pas == 1 else opt_cal_penalty | float(0))] -%}{%- endfor -%}
+            {%- set ns.N = {'o': e0.l, 'l': e0.l, 'h': e0.l} -%}{%- set ns.W = [ns.N] -%}
+            {%- for x in sl | reverse -%}
+              {%- set i = sl | length - loop.index -%}
+              {%- set dur = (x.e - x.a) / 3600 -%}
+              {%- set ll = ([x.k - x.d, 0] | max) * opt_f -%}
+              {%- set fx = opt_fx.get(x.s | int | string, 0) if opt_fx is mapping else 0 -%}{%- set fxp = [fx, 0] | max -%}
+              {%- set nv = namespace(o=[], l=[], h=[]) -%}
+              {%- for k in range(K) -%}
+                {%- set s1 = [k * st + x.o * eff_in, s_max] | min -%}
+                {%- set sp = (x.o - (s1 - k * st) / eff_in) * fxp -%}
+                {%- set q = (s1) / st -%}{%- set i0 = [q | int, K - 2] | min -%}{%- set f = q - i0 -%}{%- set nx = (ns.W1[i + 1] if pas == 0 and (s1) >= s_max - 0.001 else ns.N) -%}{%- set vh = nx.h[i0] * (1 - f) + nx.h[i0 + 1] * f -%}
+                {%- set c_h = ll * x.v - sp + vh -%}
+                {%- set out = [ll, s1 * eff_out, p_disch_kw * dur] | min -%}
+                {%- set q = (s1 - out / eff_out) / st -%}{%- set i0 = [q | int, K - 2] | min -%}{%- set f = q - i0 -%}{%- set nx = (ns.W1[i + 1] if pas == 0 and (s1 - out / eff_out) >= s_max - 0.001 else ns.N) -%}{%- set vo = nx.o[i0] * (1 - f) + nx.o[i0 + 1] * f -%}
+                {%- set c_o = (ll - out) * x.v - sp + vo -%}
+                {%- if opt_x and fx > 0 -%}
+                  {%- set xo = [s1 * eff_out, p_disch_kw * dur] | min -%}{%- set xh = [ll, xo] | min -%}
+                  {%- set q = (s1 - xo / eff_out) / st -%}{%- set i0 = [q | int, K - 2] | min -%}{%- set f = q - i0 -%}{%- set nx = (ns.W1[i + 1] if pas == 0 and (s1 - xo / eff_out) >= s_max - 0.001 else ns.N) -%}{%- set vx = nx.o[i0] * (1 - f) + nx.o[i0 + 1] * f -%}
+                  {%- set c_o = [c_o, (ll - xh) * x.v - sp - (xo - xh) * fx + vx] | min -%}
+                {%- endif -%}
+                {%- set add = [p_max_kw * dur * eff_in, s_max - s1] | min -%}
+                {%- if add > 0.001 -%}
+                  {%- set q = (s1 + add) / st -%}{%- set i0 = [q | int, K - 2] | min -%}{%- set f = q - i0 -%}{%- set nx = (ns.W1[i + 1] if pas == 0 and (s1 + add) >= s_max - 0.001 else ns.N) -%}{%- set vl = nx.l[i0] * (1 - f) + nx.l[i0 + 1] * f -%}
+                  {%- set c_l = (ll + add / eff_in) * x.v - sp + vl -%}
+                {%- else -%}{%- set c_l = c_o + c_h + 99 -%}{%- endif -%}
+                {%- set nv.o = nv.o + [[c_h + c_opt_hold_start, c_o, c_l + c_opt_charge_start] | min] -%}
+                {%- set nv.l = nv.l + [[c_h + c_opt_hold_start, c_o, c_l] | min] -%}
+                {%- set nv.h = nv.h + [[c_h, c_o, c_l + c_opt_charge_start] | min] -%}
+              {%- endfor -%}
+              {%- set ns.N = {'o': nv.o, 'l': nv.l, 'h': nv.h} -%}{%- set ns.W = [ns.N] + ns.W -%}
             {%- endfor -%}
-            {%- set ns.V0 = nv.V0 -%}{%- set ns.V1 = nv.V1 -%}{%- set ns.W = [[ns.V0, ns.V1]] + ns.W -%}
+            {%- if pas == 1 -%}{%- set ns.W1 = ns.W -%}{%- else -%}{%- set ns.W0 = ns.W -%}{%- endif -%}
           {%- endfor -%}
           {#- Forwards: the path from now, and for comparison the current plan (actions from the timeline) -#}
           {%- set tl_l = timeline.charge if timeline is mapping else [] -%}
           {%- set tl_v = timeline.hold if timeline is mapping else [] -%}
           {%- set cmp = tl_l | length == sl | length and tl_v | length == sl | length -%}
-          {%- set fw = namespace(s=s_now, sp=s_now, a='', c=0, cp=0, empty=0, mid=-1, net=0, terug=0, blok=[], cur=none, tl_l=[], tl_v=[], tl_a=[], tl_s=[], tl_n=[], tl_t=[]) -%}
+          {%- set fw = namespace(s=s_now, sp=s_now, a='', c=0, cp=0, empty=0, mid=-1, net=0, terug=0, blok=[], cur=none, kal=(0 if opt_cal_penalty | float(0) > 0 else 1), kal_ts=0, tl_l=[], tl_v=[], tl_a=[], tl_s=[], tl_n=[], tl_t=[]) -%}
           {%- for x in sl -%}
             {%- set i = loop.index0 -%}
             {%- set dur = (x.e - x.a) / 3600 -%}
@@ -3631,26 +3651,27 @@ template:
               {%- set s0 = fw.s if who == 'opt' else fw.sp -%}
               {%- set s1 = [s0 + x.o * eff_in, s_max] | min -%}
               {%- if who == 'opt' -%}
-                {#- Action by looking one step ahead from the real state of charge (not rounded) -#}
+                {#- Action by looking one step ahead from the real state of charge (not rounded); previous action and calibration count -#}
                 {%- set fx = opt_fx.get(x.s | int | string, 0) if opt_fx is mapping else 0 -%}{%- set fxp = [fx, 0] | max -%}
                 {%- set sp = (x.o - (s1 - s0) / eff_in) * fxp -%}
-                {%- set vv = ns.W[i + 1] -%}{%- set lv = 1 if fw.a[-1:] == 'L' or (fw.a == '' and is_state('input_boolean.dynamic_charging_running', 'on')) else 0 -%}
-                {%- set q = s1 / st -%}{%- set i0 = [q | int, K - 2] | min -%}{%- set f = q - i0 -%}
-                {%- set kz = namespace(c=ll * x.v - sp + vv[0][i0] * (1 - f) + vv[0][i0 + 1] * f, a='H') -%}
+                {%- set vv = ns.W1[i + 1] if fw.kal == 1 else ns.W0[i + 1] -%}
+                {%- set vorig = {'L': 'l', 'H': 'h'}.get(fw.a[-1:], 'o') if fw.a != '' else ('l' if is_state('input_boolean.dynamic_charging_running', 'on') else ('h' if is_state('binary_sensor.forecast_dip_discharge_blocked', 'on') else 'o')) -%}
+                {%- set q = (s1) / st -%}{%- set i0 = [q | int, K - 2] | min -%}{%- set f = q - i0 -%}{%- set nx = (ns.W1[i + 1] if fw.kal == 0 and (s1) >= s_max - 0.001 else vv) -%}{%- set vh = nx.h[i0] * (1 - f) + nx.h[i0 + 1] * f -%}
+                {%- set kz = namespace(c=ll * x.v - sp + vh + (0 if vorig == 'h' else c_opt_hold_start), a='H') -%}
                 {%- set out = [ll, s1 * eff_out, p_disch_kw * dur] | min -%}
-                {%- set q = (s1 - out / eff_out) / st -%}{%- set i0 = [q | int, K - 2] | min -%}{%- set f = q - i0 -%}
-                {%- set c = (ll - out) * x.v - sp + vv[0][i0] * (1 - f) + vv[0][i0 + 1] * f -%}
+                {%- set q = (s1 - out / eff_out) / st -%}{%- set i0 = [q | int, K - 2] | min -%}{%- set f = q - i0 -%}{%- set nx = (ns.W1[i + 1] if fw.kal == 0 and (s1 - out / eff_out) >= s_max - 0.001 else vv) -%}{%- set vo = nx.o[i0] * (1 - f) + nx.o[i0 + 1] * f -%}
+                {%- set c = (ll - out) * x.v - sp + vo -%}
                 {%- if c < kz.c - 0.00001 -%}{%- set kz.c = c -%}{%- set kz.a = 'N' -%}{%- endif -%}
                 {%- if opt_x and fx > 0 -%}
                   {%- set xo = [s1 * eff_out, p_disch_kw * dur] | min -%}{%- set xh = [ll, xo] | min -%}
-                  {%- set q = (s1 - xo / eff_out) / st -%}{%- set i0 = [q | int, K - 2] | min -%}{%- set f = q - i0 -%}
-                  {%- set c = (ll - xh) * x.v - sp - (xo - xh) * fx + vv[0][i0] * (1 - f) + vv[0][i0 + 1] * f -%}
+                  {%- set q = (s1 - xo / eff_out) / st -%}{%- set i0 = [q | int, K - 2] | min -%}{%- set f = q - i0 -%}{%- set nx = (ns.W1[i + 1] if fw.kal == 0 and (s1 - xo / eff_out) >= s_max - 0.001 else vv) -%}{%- set vx = nx.o[i0] * (1 - f) + nx.o[i0 + 1] * f -%}
+                  {%- set c = (ll - xh) * x.v - sp - (xo - xh) * fx + vx -%}
                   {%- if c < kz.c - 0.00001 -%}{%- set kz.c = c -%}{%- set kz.a = 'X' -%}{%- endif -%}
                 {%- endif -%}
                 {%- set add = [p_max_kw * dur * eff_in, s_max - s1] | min -%}
                 {%- if add > 0.001 -%}
-                  {%- set q = (s1 + add) / st -%}{%- set i0 = [q | int, K - 2] | min -%}{%- set f = q - i0 -%}
-                  {%- set c = (ll + add / eff_in) * x.v - sp + vv[1][i0] * (1 - f) + vv[1][i0 + 1] * f + (0 if lv == 1 else c_opt_charge_start) -%}
+                  {%- set q = (s1 + add) / st -%}{%- set i0 = [q | int, K - 2] | min -%}{%- set f = q - i0 -%}{%- set nx = (ns.W1[i + 1] if fw.kal == 0 and (s1 + add) >= s_max - 0.001 else vv) -%}{%- set vl = nx.l[i0] * (1 - f) + nx.l[i0 + 1] * f -%}
+                  {%- set c = (ll + add / eff_in) * x.v - sp + vl + (0 if vorig == 'l' else c_opt_charge_start) -%}
                   {%- if c < kz.c - 0.00001 -%}{%- set kz.c = c -%}{%- set kz.a = 'L' -%}{%- endif -%}
                 {%- endif -%}
                 {%- set act = kz.a -%}
@@ -3676,6 +3697,7 @@ template:
                 {%- set fw.tl_t = fw.tl_t + [1 if act == 'X' else 0] -%}{%- set fw.tl_l = fw.tl_l + [1 if act == 'L' else 0] -%}{%- set fw.tl_v = fw.tl_v + [1 if act == 'H' and s1 > 0.01 else 0] -%}
                 {%- set fw.tl_a = fw.tl_a + [(acc / dur) | round(2)] -%}{%- set fw.tl_n = fw.tl_n + [((x.k - x.d - x.o + acc) / dur) | round(2)] -%}
                 {%- set fw.tl_s = fw.tl_s + [((soc_min + s2 / cap * 100) if cap > 0 else 0) | round(1)] -%}
+                {%- if fw.kal == 0 and s2 >= s_max - 0.001 -%}{%- set fw.kal = 1 -%}{%- set fw.kal_ts = x.e -%}{%- endif -%}
                 {%- set fw.s = s2 -%}{%- set fw.c = fw.c + c -%}{%- set fw.a = fw.a ~ act -%}
               {%- else -%}{%- set fw.sp = s2 -%}{%- set fw.cp = fw.cp + c -%}{%- endif -%}
             {%- endfor -%}
@@ -3691,6 +3713,7 @@ template:
           {%- set cost = fw.c - fw.s * endv -%}{%- set cost_p = fw.cp - fw.sp * endv -%}
           {{ {'now': {'L': 'Charge', 'H': 'Hold', 'N': 'Supply', 'X': 'Export'}[fw.a[0]], 'actions': fw.a, 't0': sl[0].s | int,
               'charge': nb.l, 'hold': nb.v, 'export': nb.t, 'grid_charge_kwh': fw.net | round(2), 'export_kwh': fw.terug | round(2),
+              'calibration_100_at': ((('tomorrow ' if fw.kal_ts >= end_today_ts else '') ~ fw.kal_ts | timestamp_custom('%H:%M')) if fw.kal_ts > 0 else none) if opt_cal_penalty | float(0) > 0 else none,
               'empty_at': (fw.empty | timestamp_custom('%Y-%m-%d %H:%M')) if fw.empty > 0 else none, 'empty_ts': fw.empty | int,
               'tl': {'charge': fw.tl_l, 'hold': fw.tl_v, 'export': fw.tl_t, 'battery_kw': fw.tl_a, 'soc_pct': fw.tl_s, 'grid_kw': fw.tl_n},
               'midnight_pct': ((soc_min + fw.mid / cap * 100) | round(0)) if fw.mid >= 0 and cap > 0 else none,
@@ -3702,14 +3725,13 @@ template:
       # calibration charging (charge slot of the current planner) always goes first.
       opt_action_now: >
         {%- set a = opt.actions[0] if opt_ok else 'N' -%}
-        {%- if (cal_charge or cal_early) and slot_now -%}L
-        {%- elif a == 'L' -%}{{ 'L' if room > 0.05 else 'H' }}
+        {%- if a == 'L' -%}{{ 'L' if room > 0.05 else 'H' }}
         {%- else -%}{{ a }}{%- endif -%}
       opt_explanation: >
         {%- if not opt_ok -%}New planner: no plan yet (needs the shared battery model, prices and battery data).
         {%- else -%}
           {%- set lb = opt.charge -%}
-          {%- if opt_action_now == 'L' -%}Charging from the grid now{{ ' (calibration: up to 100%)' if (cal_charge or cal_early) and opt.actions[0] != 'L' else '' }}.
+          {%- if opt_action_now == 'L' -%}Charging from the grid now{{ ' (also for calibration: up to 100%)' if opt_cal_penalty | float(0) > 0 else '' }}.
           {%- elif opt_action_now == 'H' -%}Battery is holding now: these quarter hours are cheaper than the quarter hours the charge is kept for.
           {%- elif opt_action_now == 'X' -%}Battery is exporting to the grid now (that yields more now than keeping the charge).
           {%- else -%}Battery is supplying the house now.{%- endif -%}

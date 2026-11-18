@@ -2202,6 +2202,7 @@ views:
               - Charge: {% if (o.charge | default([])) | length > 0 %}{% for b in o.charge %}{{ b.from }}–{{ b.until }} ({{ '%.1f' | format(b.kwh) }} kWh, avg. €{{ '%.3f' | format(b.price) }}){{ ', ' if not loop.last }}{% endfor %}{% else %}nothing{% endif %}
               - Hold: {% if (o.hold | default([])) | length > 0 %}{% for b in o.hold %}{{ b.from }}–{{ b.until }}{{ ', ' if not loop.last }}{% endfor %}{% else %}no{% endif %}
               {% if (o.export | default([])) | length > 0 %}- Export: {% for b in o.export %}{{ b.from }}–{{ b.until }} ({{ '%.1f' | format(b.kwh) }} kWh, €{{ '%.3f' | format(b.price) }}){{ ', ' if not loop.last }}{% endfor %}
+              {% endif %}{% if o.calibration_100_at %}- Calibration: battery at 100% at {{ o.calibration_100_at }}
               {% endif %}{% if o.midnight_pct is not none %}- At midnight still about **{{ o.midnight_pct | int }}%**{% if o.empty_at %}; empty at {{ o.empty_at[11:] }}{% endif %}
               {% endif %}{% if o.difference is not none %}- Costs until the end of the known prices: €{{ '%.2f' | format(o.costs) }}, {{ 'old planner' if nw else 'current plan' }} €{{ '%.2f' | format(o.costs_current_plan) }} (**{{ 'saves' if o.difference >= 0 else 'costs' }} €{{ '%.2f' | format(o.difference | abs) }}**)
               {% endif %}{% endif %}
