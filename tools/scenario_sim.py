@@ -17,6 +17,7 @@ Gebruik (vanuit de root van de repo):
     python3 tools/scenario_sim.py <export.json> --lijst
     python3 tools/scenario_sim.py <export.json> --regels        # regeltests over een raster
     (--model: met de schakelaar Gedeeld accumodel aan)
+    (--opt: de schaduwplanner stuurt aan, actie nu uit opt.acties; zet --model vanzelf aan)
 
 Scenario's staan in SCENARIOS hieronder; eigen scenario's kun je daar toevoegen.
 """
@@ -170,9 +171,15 @@ def gesloten_lus(basis, sc, yaml_path=YAML_NL, uitvoer=False):
         p = sc['prijs'](t.hour)
         last = sc['last'](t.hour) / 4
         actie = 'NOM'
-        if out['state'] == 'Laden' and E >= e_max - 0.001:
+        if OPT:
+            a0 = ((ctx.get('opt') or {}).get('acties') or 'N')[0]
+            st = 'Laden' if a0 == 'L' else 'Wachten'
+            vh = a0 == 'H'
+        else:
+            st, vh = out['state'], out.get('ontladen_vasthouden') is True
+        if st == 'Laden' and E >= e_max - 0.001:
             verspild += 1
-        if out['state'] == 'Laden' and E < e_max - 0.001:
+        if st == 'Laden' and E < e_max - 0.001:
             ac = min(sc['p_max_w'] / 1000 / 4, (e_max - E) / eff)
             E += ac * eff
             net = last + ac
@@ -182,7 +189,7 @@ def gesloten_lus(basis, sc, yaml_path=YAML_NL, uitvoer=False):
             loopt, actie = True, 'laden'
         else:
             loopt = False
-            if out.get('ontladen_vasthouden') is True:
+            if vh:
                 net, actie = last, 'vast'
             else:
                 dc = min(last / eff, E)
@@ -307,11 +314,14 @@ def regeltests(basis, yaml_path=YAML_NL):
 
 
 MODEL = 'off'
+OPT = False
 
 
 def main():
-    global MODEL
+    global MODEL, OPT
     args = sys.argv[1:]
+    if '--opt' in args:
+        OPT = True; MODEL = 'on'; args.remove('--opt')
     if '--model' in args:
         MODEL = 'on'; args.remove('--model')
     if not args:

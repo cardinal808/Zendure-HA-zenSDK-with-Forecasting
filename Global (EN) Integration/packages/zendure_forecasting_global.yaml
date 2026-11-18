@@ -3528,6 +3528,95 @@ template:
       # "Battery empty" for the dashboard: with the shared model from the timeline (with planned
       # charging and holding, like the chart), otherwise t_empty_show_ts
       t_empty_display_ts: "{{ timeline.empty_ts if model_new else t_empty_show_ts }}"
+      # ---- Shadow planner (optimisation per quarter hour, test) -------------------------------
+      # Only runs with the shared battery model on, and does not control anything (yet). Per price slot
+      # from bat_slots it picks the cheapest action over the whole horizon (today + tomorrow, or today's
+      # pattern if tomorrow is still unknown): L = charge from the grid (full power), H = hold (house from
+      # the grid), N = normal (battery powers the house). Solar surplus always goes into the battery while
+      # there is room. Method: dynamic programming over the state of charge in c_opt_steps steps (backwards
+      # the costs per state, then forwards the path from the state of now). What is left in the battery at
+      # the end counts at the cheapest price x discharge efficiency.
+      # Efficiency filter, minimal spread, smart hold, holding between charge slots, the dip hold and the
+      # path check follow from the prices here; the charge margin, calibration charging and export are
+      # not in it yet.
+      c_opt_steps: 40
+      opt: >
+        {%- set sl = (bat_slots | selectattr('e', 'gt', now_ts) | list) if model_new else [] -%}
+        {%- if sl | length == 0 or s_max <= 0 or eff_in <= 0 or eff_out <= 0 -%}{{ {} }}
+        {%- else -%}
+          {%- set n_st = c_opt_steps | int -%}{%- set K = n_st + 1 -%}{%- set st = s_max / n_st -%}
+          {%- set endv = ([sl | map(attribute='v') | min, 0] | max) * eff_out -%}
+          {%- set ns = namespace(V=[], pol=[]) -%}
+          {%- for k in range(K) -%}{%- set ns.V = ns.V + [0 - k * st * endv] -%}{%- endfor -%}
+          {#- Backwards: per slot and per state of charge the cheapest action -#}
+          {%- for x in sl | reverse -%}
+            {%- set dur = (x.e - x.a) / 3600 -%}
+            {%- set ll = [x.k - x.d, 0] | max -%}
+            {%- set nv = namespace(V=[], P='') -%}
+            {%- for k in range(K) -%}
+              {%- set s1 = [k * st + x.o * eff_in, s_max] | min -%}
+              {%- set q = s1 / st -%}{%- set i0 = [q | int, K - 2] | min -%}{%- set f = q - i0 -%}
+              {%- set ch = namespace(c=ll * x.v + ns.V[i0] * (1 - f) + ns.V[i0 + 1] * f, a='H') -%}
+              {%- set out = [ll, s1 * eff_out, p_disch_kw * dur] | min -%}
+              {%- set q = (s1 - out / eff_out) / st -%}{%- set i0 = [q | int, K - 2] | min -%}{%- set f = q - i0 -%}
+              {%- set c = (ll - out) * x.v + ns.V[i0] * (1 - f) + ns.V[i0 + 1] * f -%}
+              {%- if c < ch.c - 0.00001 -%}{%- set ch.c = c -%}{%- set ch.a = 'N' -%}{%- endif -%}
+              {%- set add = [p_max_kw * dur * eff_in, s_max - s1] | min -%}
+              {%- if add > 0.001 -%}
+                {%- set q = (s1 + add) / st -%}{%- set i0 = [q | int, K - 2] | min -%}{%- set f = q - i0 -%}
+                {%- set c = (ll + add / eff_in) * x.v + ns.V[i0] * (1 - f) + ns.V[i0 + 1] * f -%}
+                {%- if c < ch.c - 0.00001 -%}{%- set ch.c = c -%}{%- set ch.a = 'L' -%}{%- endif -%}
+              {%- endif -%}
+              {%- set nv.V = nv.V + [ch.c] -%}{%- set nv.P = nv.P ~ ch.a -%}
+            {%- endfor -%}
+            {%- set ns.V = nv.V -%}{%- set ns.pol = [nv.P] + ns.pol -%}
+          {%- endfor -%}
+          {#- Forwards: the path from now, and for comparison the current plan (actions from the timeline) -#}
+          {%- set tl_l = timeline.charge if timeline is mapping else [] -%}
+          {%- set tl_v = timeline.hold if timeline is mapping else [] -%}
+          {%- set cmp = tl_l | length == sl | length and tl_v | length == sl | length -%}
+          {%- set fw = namespace(s=s_now, sp=s_now, a='', c=0, cp=0, empty=0, mid=-1, net=0, blok=[], cur=none) -%}
+          {%- for x in sl -%}
+            {%- set i = loop.index0 -%}
+            {%- set dur = (x.e - x.a) / 3600 -%}
+            {%- set ll = [x.k - x.d, 0] | max -%}
+            {%- if fw.mid < 0 and x.s >= end_today_ts -%}{%- set fw.mid = fw.s -%}{%- endif -%}
+            {%- for who in ['opt', 'plan'] if who == 'opt' or cmp -%}
+              {%- set s0 = fw.s if who == 'opt' else fw.sp -%}
+              {%- set s1 = [s0 + x.o * eff_in, s_max] | min -%}
+              {%- if who == 'opt' -%}{%- set act = ns.pol[i][[(s0 / st) | round(0) | int, K - 1] | min] -%}
+              {%- else -%}{%- set act = 'L' if tl_l[i] == 1 else ('H' if tl_v[i] == 1 else 'N') -%}{%- endif -%}
+              {%- if act == 'L' -%}{%- set add = [p_max_kw * dur * eff_in, s_max - s1] | min -%}{%- set s2 = s1 + add -%}{%- set c = (ll + add / eff_in) * x.v -%}
+              {%- elif act == 'N' -%}{%- set out = [ll, s1 * eff_out, p_disch_kw * dur] | min -%}{%- set s2 = s1 - out / eff_out -%}{%- set c = (ll - out) * x.v -%}
+              {%- else -%}{%- set s2 = s1 -%}{%- set c = ll * x.v -%}{%- endif -%}
+              {%- if who == 'opt' -%}
+                {%- if fw.empty == 0 and act == 'N' and s2 <= 0.01 and ll > 0 -%}{%- set fw.empty = x.a + (s1 * eff_out / ll) * (x.e - x.a) -%}{%- endif -%}
+                {%- if act == 'L' -%}{%- set fw.net = fw.net + add / eff_in -%}{%- endif -%}
+                {%- if fw.cur is mapping and fw.cur.a == act and fw.cur.e == x.s -%}
+                  {%- set fw.cur = dict(fw.cur, e=x.e, kwh=fw.cur.kwh + ((add / eff_in) if act == 'L' else 0), pk=fw.cur.pk + (x.v * add / eff_in if act == 'L' else 0)) -%}
+                {%- else -%}
+                  {%- if fw.cur is mapping -%}{%- set fw.blok = fw.blok + [fw.cur] -%}{%- endif -%}
+                  {%- set fw.cur = {'a': act, 's': x.a, 'e': x.e, 'kwh': (add / eff_in) if act == 'L' else 0, 'pk': (x.v * add / eff_in) if act == 'L' else 0} -%}
+                {%- endif -%}
+                {%- set fw.s = s2 -%}{%- set fw.c = fw.c + c -%}{%- set fw.a = fw.a ~ act -%}
+              {%- else -%}{%- set fw.sp = s2 -%}{%- set fw.cp = fw.cp + c -%}{%- endif -%}
+            {%- endfor -%}
+          {%- endfor -%}
+          {%- if fw.cur is mapping -%}{%- set fw.blok = fw.blok + [fw.cur] -%}{%- endif -%}
+          {%- set nb = namespace(l=[], v=[]) -%}
+          {%- for b in fw.blok if b.a in ['L', 'H'] and b.e - b.s >= 600 -%}
+            {%- set r = {'from': (('tomorrow ' if b.s >= end_today_ts else '') ~ b.s | timestamp_custom('%H:%M')), 'until': b.e | timestamp_custom('%H:%M')} -%}
+            {%- if b.a == 'L' -%}{%- set nb.l = nb.l + [dict(r, kwh=b.kwh | round(2), price=((b.pk / b.kwh) if b.kwh > 0 else 0) | round(3))] -%}
+            {%- else -%}{%- set nb.v = nb.v + [r] -%}{%- endif -%}
+          {%- endfor -%}
+          {%- set cost = fw.c - fw.s * endv -%}{%- set cost_p = fw.cp - fw.sp * endv -%}
+          {{ {'now': {'L': 'Charge', 'H': 'Hold', 'N': 'Normal'}[fw.a[0]], 'actions': fw.a, 't0': sl[0].s | int,
+              'charge': nb.l, 'hold': nb.v, 'grid_charge_kwh': fw.net | round(2),
+              'empty_at': (fw.empty | timestamp_custom('%Y-%m-%d %H:%M')) if fw.empty > 0 else none,
+              'midnight_pct': ((soc_min + fw.mid / cap * 100) | round(0)) if fw.mid >= 0 and cap > 0 else none,
+              'costs': cost | round(3), 'costs_current_plan': (cost_p | round(3)) if cmp else none,
+              'difference': ((cost_p - cost) | round(3)) if cmp else none} }}
+        {%- endif -%}
     sensor:
       - name: "Zendure Forecast Plan"
         unique_id: zendure_forecast_plan
@@ -3758,6 +3847,8 @@ template:
             {%- endfor -%}
             {{ uit.l }}
           battery_model: "{{ 'shared' if model_new else 'classic' }}"
+          # Shadow planner (test, controls nothing): action now, charge and hold blocks, costs vs the current plan
+          optimal: "{{ dict(opt | items | rejectattr(0, 'eq', 'actions') | list) if opt is mapping and opt | length > 0 else none }}"
           # Calculation time of this run (s), as the last attribute: from the start of the variables to here
           calculation_time_s: "{{ (as_timestamp(now()) - now_ts) | round(3) }}"
 
@@ -3774,6 +3865,8 @@ template:
           # soc_pct (state of charge at the end of the slot), grid_kw (+ import / - export, incl. car),
           # export (1 = battery exports to the grid), ev_kw (planned car charging)
           timeline: "{{ timeline }}"
+          # Shadow planner: action per price slot from t0 (L charge, H hold, N normal)
+          optimal_actions: "{{ {'t0': opt.t0, 'actions': opt.actions} if opt is mapping and opt | length > 0 else none }}"
           usage_per_quarter_workday_kwh: "{{ profile_quarter.workday }}"
           usage_per_quarter_weekend_kwh: "{{ profile_quarter.weekend }}"
           # Same structure as sensor.dynamic_lowest_price_period (raw_today / raw_tomorrow)

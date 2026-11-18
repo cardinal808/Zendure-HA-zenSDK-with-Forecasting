@@ -3527,6 +3527,95 @@ template:
       # "Accu leeg" voor het dashboard: met het gedeelde model uit de tijdlijn (met gepland laden en
       # vasthouden, zoals de grafiek), anders t_leeg_toon_ts
       t_leeg_weergave_ts: "{{ tijdlijn.leeg_ts if model_nieuw else t_leeg_toon_ts }}"
+      # ---- Schaduwplanner (optimalisatie per kwartier, test) ----------------------------------
+      # Rekent alleen mee met het gedeelde accumodel aan, en stuurt (nog) niets aan. Per prijsslot uit
+      # accu_slots kiest hij de goedkoopste actie over de hele horizon (vandaag + morgen, of het patroon
+      # van vandaag als morgen nog onbekend is): L = laden uit het net (vol vermogen), H = vasthouden
+      # (huis uit het net), N = normaal (accu levert het huis). Zon-overschot gaat altijd in de accu
+      # zolang er ruimte is. Methode: dynamisch programmeren over de laadstand in c_opt_stappen stappen
+      # (achterwaarts de kosten per stand, daarna vooruit het pad vanaf de stand van nu). Wat er aan het
+      # eind in de accu zit, telt mee tegen de goedkoopste prijs x rendement ontladen.
+      # Rendementsfilter, minimale spread, slim vasthouden, vasthouden tussen laadslots, de dal-blokkade
+      # en de pad-check volgen hier vanzelf uit de prijzen; de laadmarge, kalibratieladen en terugleveren
+      # zitten er nog niet in.
+      c_opt_stappen: 40
+      opt: >
+        {%- set sl = (accu_slots | selectattr('e', 'gt', nu_ts) | list) if model_nieuw else [] -%}
+        {%- if sl | length == 0 or s_max <= 0 or eff_in <= 0 or eff_out <= 0 -%}{{ {} }}
+        {%- else -%}
+          {%- set n_st = c_opt_stappen | int -%}{%- set K = n_st + 1 -%}{%- set st = s_max / n_st -%}
+          {%- set eindw = ([sl | map(attribute='v') | min, 0] | max) * eff_out -%}
+          {%- set ns = namespace(V=[], pol=[]) -%}
+          {%- for k in range(K) -%}{%- set ns.V = ns.V + [0 - k * st * eindw] -%}{%- endfor -%}
+          {#- Achterwaarts: per slot en per laadstand de goedkoopste actie -#}
+          {%- for x in sl | reverse -%}
+            {%- set dur = (x.e - x.a) / 3600 -%}
+            {%- set ll = [x.k - x.d, 0] | max -%}
+            {%- set nv = namespace(V=[], P='') -%}
+            {%- for k in range(K) -%}
+              {%- set s1 = [k * st + x.o * eff_in, s_max] | min -%}
+              {%- set q = s1 / st -%}{%- set i0 = [q | int, K - 2] | min -%}{%- set f = q - i0 -%}
+              {%- set ch = namespace(c=ll * x.v + ns.V[i0] * (1 - f) + ns.V[i0 + 1] * f, a='H') -%}
+              {%- set uit = [ll, s1 * eff_out, p_ontl_kw * dur] | min -%}
+              {%- set q = (s1 - uit / eff_out) / st -%}{%- set i0 = [q | int, K - 2] | min -%}{%- set f = q - i0 -%}
+              {%- set c = (ll - uit) * x.v + ns.V[i0] * (1 - f) + ns.V[i0 + 1] * f -%}
+              {%- if c < ch.c - 0.00001 -%}{%- set ch.c = c -%}{%- set ch.a = 'N' -%}{%- endif -%}
+              {%- set bij = [p_max_kw * dur * eff_in, s_max - s1] | min -%}
+              {%- if bij > 0.001 -%}
+                {%- set q = (s1 + bij) / st -%}{%- set i0 = [q | int, K - 2] | min -%}{%- set f = q - i0 -%}
+                {%- set c = (ll + bij / eff_in) * x.v + ns.V[i0] * (1 - f) + ns.V[i0 + 1] * f -%}
+                {%- if c < ch.c - 0.00001 -%}{%- set ch.c = c -%}{%- set ch.a = 'L' -%}{%- endif -%}
+              {%- endif -%}
+              {%- set nv.V = nv.V + [ch.c] -%}{%- set nv.P = nv.P ~ ch.a -%}
+            {%- endfor -%}
+            {%- set ns.V = nv.V -%}{%- set ns.pol = [nv.P] + ns.pol -%}
+          {%- endfor -%}
+          {#- Vooruit: het pad vanaf nu, en ter vergelijking het huidige plan (acties uit de tijdlijn) -#}
+          {%- set tl_l = tijdlijn.laden if tijdlijn is mapping else [] -%}
+          {%- set tl_v = tijdlijn.vasthouden if tijdlijn is mapping else [] -%}
+          {%- set vgl = tl_l | length == sl | length and tl_v | length == sl | length -%}
+          {%- set fw = namespace(s=s_nu, sp=s_nu, a='', c=0, cp=0, leeg=0, mid=-1, net=0, blok=[], cur=none) -%}
+          {%- for x in sl -%}
+            {%- set i = loop.index0 -%}
+            {%- set dur = (x.e - x.a) / 3600 -%}
+            {%- set ll = [x.k - x.d, 0] | max -%}
+            {%- if fw.mid < 0 and x.s >= eind_vandaag_ts -%}{%- set fw.mid = fw.s -%}{%- endif -%}
+            {%- for wie in ['opt', 'plan'] if wie == 'opt' or vgl -%}
+              {%- set s0 = fw.s if wie == 'opt' else fw.sp -%}
+              {%- set s1 = [s0 + x.o * eff_in, s_max] | min -%}
+              {%- if wie == 'opt' -%}{%- set act = ns.pol[i][[(s0 / st) | round(0) | int, K - 1] | min] -%}
+              {%- else -%}{%- set act = 'L' if tl_l[i] == 1 else ('H' if tl_v[i] == 1 else 'N') -%}{%- endif -%}
+              {%- if act == 'L' -%}{%- set bij = [p_max_kw * dur * eff_in, s_max - s1] | min -%}{%- set s2 = s1 + bij -%}{%- set c = (ll + bij / eff_in) * x.v -%}
+              {%- elif act == 'N' -%}{%- set uit = [ll, s1 * eff_out, p_ontl_kw * dur] | min -%}{%- set s2 = s1 - uit / eff_out -%}{%- set c = (ll - uit) * x.v -%}
+              {%- else -%}{%- set s2 = s1 -%}{%- set c = ll * x.v -%}{%- endif -%}
+              {%- if wie == 'opt' -%}
+                {%- if fw.leeg == 0 and act == 'N' and s2 <= 0.01 and ll > 0 -%}{%- set fw.leeg = x.a + (s1 * eff_out / ll) * (x.e - x.a) -%}{%- endif -%}
+                {%- if act == 'L' -%}{%- set fw.net = fw.net + bij / eff_in -%}{%- endif -%}
+                {%- if fw.cur is mapping and fw.cur.a == act and fw.cur.e == x.s -%}
+                  {%- set fw.cur = dict(fw.cur, e=x.e, kwh=fw.cur.kwh + ((bij / eff_in) if act == 'L' else 0), pk=fw.cur.pk + (x.v * bij / eff_in if act == 'L' else 0)) -%}
+                {%- else -%}
+                  {%- if fw.cur is mapping -%}{%- set fw.blok = fw.blok + [fw.cur] -%}{%- endif -%}
+                  {%- set fw.cur = {'a': act, 's': x.a, 'e': x.e, 'kwh': (bij / eff_in) if act == 'L' else 0, 'pk': (x.v * bij / eff_in) if act == 'L' else 0} -%}
+                {%- endif -%}
+                {%- set fw.s = s2 -%}{%- set fw.c = fw.c + c -%}{%- set fw.a = fw.a ~ act -%}
+              {%- else -%}{%- set fw.sp = s2 -%}{%- set fw.cp = fw.cp + c -%}{%- endif -%}
+            {%- endfor -%}
+          {%- endfor -%}
+          {%- if fw.cur is mapping -%}{%- set fw.blok = fw.blok + [fw.cur] -%}{%- endif -%}
+          {%- set nb = namespace(l=[], v=[]) -%}
+          {%- for b in fw.blok if b.a in ['L', 'H'] and b.e - b.s >= 600 -%}
+            {%- set r = {'van': (('morgen ' if b.s >= eind_vandaag_ts else '') ~ b.s | timestamp_custom('%H:%M')), 'tot': b.e | timestamp_custom('%H:%M')} -%}
+            {%- if b.a == 'L' -%}{%- set nb.l = nb.l + [dict(r, kwh=b.kwh | round(2), prijs=((b.pk / b.kwh) if b.kwh > 0 else 0) | round(3))] -%}
+            {%- else -%}{%- set nb.v = nb.v + [r] -%}{%- endif -%}
+          {%- endfor -%}
+          {%- set kost = fw.c - fw.s * eindw -%}{%- set kost_p = fw.cp - fw.sp * eindw -%}
+          {{ {'nu': {'L': 'Laden', 'H': 'Vasthouden', 'N': 'Normaal'}[fw.a[0]], 'acties': fw.a, 't0': sl[0].s | int,
+              'laden': nb.l, 'vasthouden': nb.v, 'netladen_kwh': fw.net | round(2),
+              'leeg_om': (fw.leeg | timestamp_custom('%Y-%m-%d %H:%M')) if fw.leeg > 0 else none,
+              'middernacht_pct': ((soc_min + fw.mid / cap * 100) | round(0)) if fw.mid >= 0 and cap > 0 else none,
+              'kosten': kost | round(3), 'kosten_huidig_plan': (kost_p | round(3)) if vgl else none,
+              'verschil': ((kost_p - kost) | round(3)) if vgl else none} }}
+        {%- endif -%}
     sensor:
       - name: "Zendure Forecast Plan"
         unique_id: zendure_forecast_plan
@@ -3757,6 +3846,8 @@ template:
             {%- endfor -%}
             {{ uit.l }}
           accumodel: "{{ 'gedeeld' if model_nieuw else 'klassiek' }}"
+          # Schaduwplanner (test, stuurt niets aan): actie nu, laad- en vasthoudblokken, kosten t.o.v. het huidige plan
+          optimaal: "{{ dict(opt | items | rejectattr(0, 'eq', 'acties') | list) if opt is mapping and opt | length > 0 else none }}"
           # Rekentijd van deze berekening (s), als laatste attribuut: van het begin van de variabelen tot hier
           rekentijd_s: "{{ (as_timestamp(now()) - nu_ts) | round(3) }}"
 
@@ -3773,6 +3864,8 @@ template:
           # soc_pct (laadpercentage aan het eind van het slot), net_kw (+ import / - export, incl. auto),
           # terugleveren (1 = accu levert terug aan het net), ev_kw (gepland laden van de auto)
           tijdlijn: "{{ tijdlijn }}"
+          # Schaduwplanner: actie per prijsslot vanaf t0 (L laden, H vasthouden, N normaal)
+          optimaal_acties: "{{ {'t0': opt.t0, 'acties': opt.acties} if opt is mapping and opt | length > 0 else none }}"
           verbruik_per_kwartier_werkdag_kwh: "{{ profiel_kwartier.werkdag }}"
           verbruik_per_kwartier_weekend_kwh: "{{ profiel_kwartier.weekend }}"
           # Zelfde opbouw als sensor.dynamisch_goedkoopste_periode (raw_today / raw_tomorrow)
