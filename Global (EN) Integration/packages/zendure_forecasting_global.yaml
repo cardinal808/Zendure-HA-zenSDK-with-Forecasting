@@ -1654,6 +1654,7 @@ template:
   #
   #    State:  Charge | Waiting | Not needed | Not favorable |
   #            No prices | No battery data
+  #            With the new planner: Charge | Hold | Supply
   #    The automation only charges when the state is "Charge".
   # -------------------------------------------------------------------
   - trigger:
@@ -3628,7 +3629,7 @@ template:
             {%- else -%}{%- set nb.v = nb.v + [r] -%}{%- endif -%}
           {%- endfor -%}
           {%- set cost = fw.c - fw.s * endv -%}{%- set cost_p = fw.cp - fw.sp * endv -%}
-          {{ {'now': {'L': 'Charge', 'H': 'Hold', 'N': 'Normal'}[fw.a[0]], 'actions': fw.a, 't0': sl[0].s | int,
+          {{ {'now': {'L': 'Charge', 'H': 'Hold', 'N': 'Supply'}[fw.a[0]], 'actions': fw.a, 't0': sl[0].s | int,
               'charge': nb.l, 'hold': nb.v, 'grid_charge_kwh': fw.net | round(2),
               'empty_at': (fw.empty | timestamp_custom('%Y-%m-%d %H:%M')) if fw.empty > 0 else none, 'empty_ts': fw.empty | int,
               'tl': {'charge': fw.tl_l, 'hold': fw.tl_v, 'battery_kw': fw.tl_a, 'soc_pct': fw.tl_s, 'grid_kw': fw.tl_n},
@@ -3666,7 +3667,7 @@ template:
           {% elif cap <= 0 or not has_value('sensor.zendure_total_state_of_charge') %}
             No battery data
           {% elif planner_new and opt_ok %}
-            {{ 'Charge' if opt_action_now == 'L' else ('Waiting' if 'L' in opt.actions else 'Not needed') }}
+            {{ {'L': 'Charge', 'H': 'Hold'}.get(opt_action_now, 'Supply') }}
           {% else %}
             {% set threshold = c_charge_stop_kwh if this.state == 'Charge' else c_charge_start_kwh %}
             {% if grid_total_ac < threshold %}

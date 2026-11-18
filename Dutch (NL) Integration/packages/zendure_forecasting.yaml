@@ -1655,6 +1655,7 @@ template:
   #
   #    State:  Laden | Wachten | Niet nodig | Niet gunstig |
   #            Geen prijzen | Geen batterijdata
+  #            Met de nieuwe planner: Laden | Vasthouden | Leveren
   #    De automation laadt alleen als de state "Laden" is.
   # -------------------------------------------------------------------
   - trigger:
@@ -3627,7 +3628,7 @@ template:
             {%- else -%}{%- set nb.v = nb.v + [r] -%}{%- endif -%}
           {%- endfor -%}
           {%- set kost = fw.c - fw.s * eindw -%}{%- set kost_p = fw.cp - fw.sp * eindw -%}
-          {{ {'nu': {'L': 'Laden', 'H': 'Vasthouden', 'N': 'Normaal'}[fw.a[0]], 'acties': fw.a, 't0': sl[0].s | int,
+          {{ {'nu': {'L': 'Laden', 'H': 'Vasthouden', 'N': 'Leveren'}[fw.a[0]], 'acties': fw.a, 't0': sl[0].s | int,
               'laden': nb.l, 'vasthouden': nb.v, 'netladen_kwh': fw.net | round(2),
               'leeg_om': (fw.leeg | timestamp_custom('%Y-%m-%d %H:%M')) if fw.leeg > 0 else none, 'leeg_ts': fw.leeg | int,
               'tl': {'laden': fw.tl_l, 'vasthouden': fw.tl_v, 'accu_kw': fw.tl_a, 'soc_pct': fw.tl_s, 'net_kw': fw.tl_n},
@@ -3665,7 +3666,7 @@ template:
           {% elif cap <= 0 or not has_value('sensor.zendure_2400_ac_laadpercentage') %}
             Geen batterijdata
           {% elif planner_nieuw and opt_ok %}
-            {{ 'Laden' if opt_actie_nu == 'L' else ('Wachten' if 'L' in opt.acties else 'Niet nodig') }}
+            {{ {'L': 'Laden', 'H': 'Vasthouden'}.get(opt_actie_nu, 'Leveren') }}
           {% else %}
             {% set drempel = c_laden_stop_kwh if this.state == 'Laden' else c_laden_start_kwh %}
             {% if netladen_ac < drempel %}
