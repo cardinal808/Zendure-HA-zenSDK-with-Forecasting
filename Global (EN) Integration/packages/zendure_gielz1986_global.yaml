@@ -1,4 +1,4 @@
-# Zendure zenSDK (Gielz) + Forecasting 2026.11.7 | based on Gielz v20261113
+# Zendure zenSDK (Gielz) + Forecasting 2026.11.8 | based on Gielz v20261113
 # Based on Gielz1986/Zendure-HA-zenSDK (Michiel Hofker). See README.md for license and changes.
 input_select:
   zendure_operation_mode:

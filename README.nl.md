@@ -6,13 +6,17 @@
 
 > **Dit is een fork van [Gielz1986/Zendure-HA-zenSDK](https://github.com/Gielz1986/Zendure-HA-zenSDK)** van Michiel Hofker (Gielz1986). Alle eer voor de integratie, de automation en het dashboard gaat naar het oorspronkelijke project. Deze fork voegt **één extra modus toe: Dynamisch NOM + Forecasting** (Engels: *Dynamic Smart Matching + Forecasting*). Voor al het andere (modussen, wiki, ondersteuning, updates) zie je de oorspronkelijke repository. De originele README staat onder deze sectie.
 
-**Versie:** `2026.11.7` · gebaseerd op Gielz-configuratie `v20261113` · beschikbaar in het Nederlands (NL) en Engels (Global) · [Changelog](CHANGELOG.nl.md)
+**Versie:** `2026.11.8` · gebaseerd op Gielz-configuratie `v20261113` · beschikbaar in het Nederlands (NL) en Engels (Global) · [Changelog](CHANGELOG.nl.md)
 
 Versies volgen `jaar.maand.volgnummer` (het volgnummer begint elke maand bij 1). In Home Assistant zie je de versie in gebruik en de nieuwste versie op GitHub (`sensor.forecasting_versie`, `sensor.forecasting_releasecheck`) op het tabblad Configuratie, en de releasenotes onder Releasenotes.
 
 ### Wat de modus doet
 
 De accu laadt op de goedkoopste momenten, maar **alleen zoveel als nodig is**, rekening houdend met je zonvoorspelling, je verbruik en de prijzen van morgen.
+
+**Nieuwe planner (sinds 2026.11.8 standaard aan).** Eén berekening over alle bekende prijzen (vandaag en morgen) kiest per kwartier de goedkoopste actie: *Laden*, *Vasthouden*, *Leveren* of (optioneel) *Terugleveren*. Rendement, laadmarge, kalibratie, zon-overschot en het aantal laadstarts tellen mee; tekst, Plan Tijdlijn en aansturing komen uit hetzelfde plan. De schakelaar *Nieuwe planner* uit = terugval naar de huidige planner hieronder (blijft nog één versie). Zie de wiki-pagina *Nieuwe planner*.
+
+De huidige planner (terugval):
 
 - Berekent elk kwartier (en bij elke wijziging) een laadplan (`sensor.zendure_forecast_plan`) met status *Laden / Wachten / Niet nodig / Niet gunstig*.
 - **Scenario A** (morgen goedkoper of gelijk, of prijzen nog onbekend): laadt genoeg om te overbruggen tot het goedkope moment van morgen of tot er voldoende zon is, plus een instelbare marge.

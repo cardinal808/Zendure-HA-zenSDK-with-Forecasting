@@ -2,7 +2,9 @@
 
 Versions follow `year.month.sequence`; the sequence restarts at 1 every month. Each version states which Gielz version it is based on. [Nederlands](CHANGELOG.nl.md)
 
-## 2026.11.8 (in development) — based on Gielz v20261113
+## 2026.11.8 — based on Gielz v20261113
+
+**In short:** a new planner (on by default) that makes the cheapest choice per quarter hour over today and tomorrow, with the current planner as fallback; optional export from the battery; a required Recorder package; an optional Quooker package; price backup when Nord Pool fails.
 
 **New required package: Recorder (`zendure_recorder_global.yaml`)**
 - Does not record frequently updating entities of the set: the Gielz automation, powers and indications without a chart, the chart data (> 16 kB), helper sensors (price backup, sensor candidates, notices), the sources of the kWh counters and the logs of the Export package. The sensors keep working; only their history is dropped.
@@ -87,6 +89,13 @@ Versions follow `year.month.sequence`; the sequence restarts at 1 every month. E
 **Tools**
 - `tools/scenario_sim.py` `--model`: with the switch Shared battery model on.
 - `tools/scenario_sim.py`: closed-loop simulation per quarter hour on synthetic scenarios, compared with the optimum (dynamic programming), and `--regels`: rule tests over 54 situations (more usage → never less charging, no loss-making slot, plan stable after a quarter hour).
+
+**Upgrading**
+- Replace **all** files (also the optional packages you use and the automation), add the new required package `zendure_recorder_global.yaml`, **restart** Home Assistant (new helpers) and paste the dashboard again via the Raw configuration editor.
+- **The planner works differently:** after the restart *New planner* is on (once). The state is then *Charge*, *Hold*, *Supply* or *Export*, and the plan card shows the *New planner* block. To go back to the old planner: turn *New planner* off (Settings → Forecasting Configuration (Basic)). That fallback stays for one more version.
+- *Discharge battery at negative prices* and *at solar surplus* no longer do anything with the new planner. If you want export from the battery: turn on *New planner may export* (needs the *Market price sensor* and *PV Export Disabled* off).
+- Your own `recorder: exclude` for `sensor.zendure_forecast_chart` in configuration.yaml can stay or go.
+- Problems or odd choices: turn *New planner* off and send a diagnostics export (the plan of the new planner is in it as `optimal` / `optimal_actions`).
 
 ## 2026.11.7 — based on Gielz v20261113
 

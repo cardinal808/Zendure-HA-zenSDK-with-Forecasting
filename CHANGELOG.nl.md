@@ -2,7 +2,9 @@
 
 Versies volgen `jaar.maand.volgnummer`; het volgnummer begint elke maand bij 1. Elke versie vermeldt op welke Gielz-versie hij is gebaseerd. [English](CHANGELOG.md)
 
-## 2026.11.8 (in ontwikkeling) — gebaseerd op Gielz v20261113
+## 2026.11.8 — gebaseerd op Gielz v20261113
+
+**In het kort:** een nieuwe planner (standaard aan) die per kwartier de goedkoopste keuze maakt over vandaag en morgen, met de huidige planner als terugval; optioneel terugleveren uit de accu; een vereist Recorder-pakket; een optioneel Quooker-pakket; prijzenreserve bij uitval van Nord Pool.
 
 **Nieuw vereist pakket: Recorder (`zendure_recorder.yaml`)**
 - Slaat vaak bijwerkende entiteiten van de set niet op in de recorder: de Gielz-automatisering, vermogens en indicaties zonder grafiek, de grafiekdata (> 16 kB), hulpsensoren (prijzen reserve, sensorkandidaten, meldingen), de bronnen van de kWh-tellers en de logs van het Export-pakket. De sensoren werken gewoon door; alleen hun geschiedenis vervalt.
@@ -88,6 +90,13 @@ Versies volgen `jaar.maand.volgnummer`; het volgnummer begint elke maand bij 1. 
 **Tools**
 - `tools/scenario_sim.py` `--model`: met de schakelaar Gedeeld accumodel aan.
 - `tools/scenario_sim.py`: gesloten-lus-simulatie per kwartier op synthetische scenario's, vergeleken met het optimum (dynamisch programmeren), en `--regels`: regeltests over 54 situaties (meer verbruik → nooit minder laden, geen verliesgevend slot, plan stabiel na een kwartier).
+
+**Upgraden**
+- Vervang **alle** bestanden (ook de optionele pakketten die je gebruikt en de automation), zet het nieuwe vereiste pakket `zendure_recorder.yaml` erbij, **herstart** Home Assistant (nieuwe helpers) en plak het dashboard opnieuw via de Raw configuratie-editor.
+- **De planner werkt anders:** na de herstart staat *Nieuwe planner* aan (eenmalig). De status is dan *Laden*, *Vasthouden*, *Leveren* of *Terugleveren*, en de plankaart toont het blok *Nieuwe planner*. Wil je terug naar de oude planner: zet *Nieuwe planner* uit (Configuratie → Forecasting Configuratie (Basis)). Die terugval blijft nog één versie bestaan.
+- *Accu ontladen bij negatieve prijzen* en *bij zonoverschot* doen met de nieuwe planner niets meer. Wil je terugleveren uit de accu: zet *Nieuwe planner mag terugleveren* aan (vereist de *Marktprijs sensor* en *PV Export Uitgeschakeld* uit).
+- Eigen `recorder: exclude` voor `sensor.zendure_forecast_grafiek` in configuration.yaml mag blijven staan of weg.
+- Problemen of vreemde keuzes: zet *Nieuwe planner* uit en stuur een diagnose-export (het plan van de nieuwe planner zit erin als `optimaal` / `optimaal_acties`).
 
 ## 2026.11.7 — gebaseerd op Gielz v20261113
 

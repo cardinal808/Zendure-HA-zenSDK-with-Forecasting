@@ -7,13 +7,17 @@ Choose your preferred language
 
 > **This is a fork of [Gielz1986/Zendure-HA-zenSDK](https://github.com/Gielz1986/Zendure-HA-zenSDK)** by Michiel Hofker (Gielz1986). All credit for the integration, the automation and the dashboard goes to the original project. This fork adds **one extra mode: Dynamic Smart Matching + Forecasting** (Dutch: *Dynamisch NOM + Forecasting*). For everything else (modes, wiki, support, updates), see the original repository. The original README follows below this section.
 
-**Version:** `2026.11.7` · based on Gielz configuration `v20261113` · available in Dutch (NL) and Global (EN) · [Changelog](CHANGELOG.md)
+**Version:** `2026.11.8` · based on Gielz configuration `v20261113` · available in Dutch (NL) and Global (EN) · [Changelog](CHANGELOG.md)
 
 Versions follow `year.month.sequence` (the sequence restarts at 1 every month). In Home Assistant you see the installed version and the latest version on GitHub (`sensor.forecasting_version`, `sensor.forecasting_release_check`) on the Configuration tab, and the release notes under Releasenotes.
 
 ### What the mode does
 
 The battery charges at the cheapest moments, but **only as much as is actually needed**, taking into account your solar forecast, your usage and tomorrow's prices.
+
+**New planner (on by default since 2026.11.8).** One calculation over all known prices (today and tomorrow) picks the cheapest action per quarter hour: *Charge*, *Hold*, *Supply* or (optionally) *Export*. Efficiency, charge margin, calibration, solar surplus and the number of charge starts all count; text, Plan Timeline and control come from the same plan. Turning the *New planner* switch off = falling back to the current planner below (kept for one more version). See the wiki page *New planner*.
+
+The current planner (fallback):
 
 - Calculates a charging plan every quarter hour (and on every change) (`sensor.zendure_forecast_plan`) with the state *Charge / Waiting / Not needed / Not favorable*.
 - **Scenario A** (tomorrow cheaper or equal, or prices not yet known): charges enough to bridge until tomorrow's cheap moment or until there is enough sun, plus an adjustable margin.
