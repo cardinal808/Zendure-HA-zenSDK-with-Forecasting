@@ -51,6 +51,9 @@ Versions follow `year.month.sequence`; the sequence restarts at 1 every month. E
 **Planner no longer recalculates on every percent**
 - The planner recalculates every quarter hour and on changes in settings or prices, no longer on every percent of state of charge (that was 10–35 times per hour). An extra trigger as soon as the battery is 1% below the max. state of charge, so charging stops in time. Nord Pool only on new prices (`raw_today` / `raw_tomorrow`), no longer on the price change per quarter (that coincided with the quarter-hour pattern); the measured charge power (information only) is no longer a trigger. Together: 4 times per hour, plus on new prices and changes in settings.
 
+**Categorise automations**
+- Button **Categorise automations** in the Diagnostics export block: puts all automations of the set (including Gielz's *Zendure zenSDK (Gielz) Global*) in the category **Zendure zenSDK Forecasting**. A category cannot be set in YAML; the button uses the HA websocket (administrator, button-card). A category of your own is kept.
+
 **Tools**
 - `tools/scenario_sim.py` `--model`: with the switch Shared battery model on.
 - `tools/scenario_sim.py`: closed-loop simulation per quarter hour on synthetic scenarios, compared with the optimum (dynamic programming), and `--regels`: rule tests over 54 situations (more usage → never less charging, no loss-making slot, plan stable after a quarter hour).

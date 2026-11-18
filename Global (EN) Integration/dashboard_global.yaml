@@ -5279,6 +5279,13 @@ views:
               Perform action, and copy the response.
 
 
+              **Categorise automations** puts all automations of the set in the
+              category *Zendure zenSDK Forecasting* (Settings → Automations), including
+              Gielz's automation. A category cannot be set in YAML, hence this button.
+              An automation with a category of your own is left as it is. Needs an
+              administrator account and button-card.
+
+
               Decisions, snapshots and errors are collected from the moment this
               package is loaded.
             text_only: true
@@ -5319,6 +5326,102 @@ views:
                         notification_id: 'zendure_diagnostics_export',
                         title: 'Zendure diagnostics export failed',
                         message: 'Download failed. Use Developer tools > Actions > Zendure Diagnostics Export and copy the response. (' + (e && e.message ? e.message : e) + ')' });
+                    }
+                  })();
+                ]]]
+            styles:
+              card:
+                - height: 56px
+                - padding: 0 16px
+              grid:
+                - grid-template-columns: 40px 1fr
+              name:
+                - justify-self: start
+                - font-size: 14px
+              icon:
+                - width: 24px
+                - color: var(--primary-color)
+            visibility:
+              - condition: state
+                entity: script.zendure_diagnostics_export
+                state_not: unavailable
+          - type: custom:button-card
+            name: Categorise automations
+            icon: mdi:folder-cog
+            layout: icon_name
+            show_state: false
+            tap_action:
+              action: javascript
+              javascript: |
+                [[[
+                  (async () => {
+                    // Put all automations of the set in one category (categories cannot be set in YAML)
+                    const NAAM = 'Zendure zenSDK Forecasting';
+                    const IDS = [
+                      'besparing_standaardwaarden',
+                      'ev_default_values',
+                      'ev_standaardwaarden',
+                      'forecast_betrouwbaarheid_automatisch_standaard',
+                      'forecast_betrouwbaarheid_maand_invullen',
+                      'forecast_calibration_charging_default',
+                      'forecast_clean_input_fields',
+                      'forecast_default_values',
+                      'forecast_invoervelden_opschonen',
+                      'forecast_kalibratieladen_standaard',
+                      'forecast_reliability_auto_fill_default',
+                      'forecast_reliability_month_fill',
+                      'forecast_reset_usage_data',
+                      'forecast_sensoren_invullen',
+                      'forecast_sensors_fill',
+                      'forecast_slim_vasthouden_standaard',
+                      'forecast_smart_hold_default',
+                      'forecast_standaardwaarden',
+                      'forecast_verbruiksgegevens_resetten',
+                      'hvac_default_values',
+                      'hvac_standaardwaarden',
+                      'savings_default_values',
+                      'zendure_ev_charger',
+                      'zendure_ev_lader',
+                      'zendure_ev_sessie',
+                      'zendure_ev_session',
+                      'zendure_negatieve_prijs_export',
+                      'zendure_negatieve_prijs_limiter',
+                      'zendure_negatieve_prijs_secundair',
+                      'zendure_negatieve_prijs_zendure_pv_export_standaard',
+                      'zendure_negative_price_export',
+                      'zendure_negative_price_limiter',
+                      'zendure_negative_price_secondary',
+                      'zendure_negative_price_zendure_pv_export_default',
+                      'zendure_nordpool_fill_market_price_sensor',
+                      'zendure_nordpool_marktprijs_sensor_invullen',
+                      'zendure_quooker_default_values',
+                      'zendure_quooker_standaardwaarden',
+                    ];
+                    const melding = (titel, tekst) => hass.callService('persistent_notification', 'create', {
+                      notification_id: 'zendure_automatiseringen_indelen', title: titel, message: tekst });
+                    try {
+                      const cats = await hass.callWS({ type: 'config/category_registry/list', scope: 'automation' });
+                      let cat = cats.find(c => c.name === NAAM);
+                      if (!cat) cat = await hass.callWS({ type: 'config/category_registry/create', scope: 'automation', name: NAAM, icon: 'mdi:battery-charging' });
+                      const reg = await hass.callWS({ type: 'config/entity_registry/list' });
+                      let n = 0, al = 0, eigen = [];
+                      for (const e of reg) {
+                        if (!e.entity_id.startsWith('automation.')) continue;
+                        const st = hass.states[e.entity_id];
+                        const id = st ? st.attributes.id : null;
+                        const naam = st ? (st.attributes.friendly_name || '') : '';
+                        if (!(IDS.includes(id) || naam.startsWith('Zendure zenSDK (Gielz)'))) continue;
+                        const nu = (e.categories || {}).automation;
+                        if (nu === cat.category_id) { al++; continue; }
+                        if (nu) { eigen.push(naam || e.entity_id); continue; }
+                        await hass.callWS({ type: 'config/entity_registry/update', entity_id: e.entity_id, categories: { automation: cat.category_id } });
+                        n++;
+                      }
+                      melding('Automations categorised',
+                        n + ' automation(s) put in the category ' + NAAM + ', ' + al + ' already in it.' + (eigen.length ? ' With a category of your own, not changed: ' + eigen.join(', ') + '.' : ''));
+                    } catch (err) {
+                      melding('Categorising automations failed',
+                        'Only an administrator can do this. You can also do it yourself: Settings > Automations, select, Category. (' + (err && err.message ? err.message : err) + ')');
                     }
                   })();
                 ]]]
