@@ -266,6 +266,15 @@ def plan(basis, sc, t, soc, yaml_path):
     return ps.run(yaml_path, ex, {}, t.strftime('%Y-%m-%dT%H:%M'))
 
 
+def laadslots(c):
+    """Gekozen laadslots: van de huidige planner, of met --opt uit de acties van de nieuwe planner."""
+    if not OPT:
+        return c['gekozen'], c['gepland_ac']
+    o = c.get('opt') or {}
+    sl = [x for x in c['accu_slots'] if x['e'] > c['nu_ts']]
+    return [x for x, a in zip(sl, o.get('acties', '')) if a == 'L'], o.get('netladen_kwh', 0)
+
+
 def regeltests(basis, yaml_path=YAML_NL):
     fouten = 0
     n = 0
@@ -274,16 +283,17 @@ def regeltests(basis, yaml_path=YAML_NL):
         t = datetime.fromisoformat(sc['start']).replace(tzinfo=TZ)
         out, c = plan(basis, sc, t, sc['soc'], yaml_path)
         eff_rt = c['eff_rt']
-        gekozen = c['gekozen']
+        gekozen, gepland = laadslots(c)
         meld = []
         # A
         sc2 = dict(sc, last=schaal(sc['last'], 1.25))
         _, c2 = plan(basis, sc2, t, sc['soc'], yaml_path)
-        if c2['gepland_ac'] < c['gepland_ac'] - 0.01:
-            meld.append('A meer verbruik: %.2f -> %.2f kWh' % (c['gepland_ac'], c2['gepland_ac']))
+        gepland2 = laadslots(c2)[1]
+        if gepland2 < gepland - 0.01:
+            meld.append('A meer verbruik: %.2f -> %.2f kWh' % (gepland, gepland2))
         # B
         for x in gekozen:
-            later = [y['v'] for y in c['pad_kand'] if y['s'] > x['s']]
+            later = [y['v'] for y in (c['accu_slots'] if OPT else c['pad_kand']) if y['s'] > x['s']]
             if not later or x['v'] / eff_rt >= max(later):
                 meld.append('B verliesgevend slot %s %.3f' % (datetime.fromtimestamp(x['s'], TZ).strftime('%d %H:%M'), x['v']))
         # C: een kwartier uitvoeren zoals de automation en opnieuw plannen
@@ -298,7 +308,7 @@ def regeltests(basis, yaml_path=YAML_NL):
         t1 = t + timedelta(minutes=15)
         _, c3 = plan(basis, sc, t1, sc['soc_min'] + E / sc['cap'] * 100, yaml_path)
         voor = sorted(x['s'] for x in gekozen if x['s'] >= t1.timestamp())
-        na = sorted(x['s'] for x in c3['gekozen'] if x['s'] >= t1.timestamp())
+        na = sorted(x['s'] for x in laadslots(c3)[0] if x['s'] >= t1.timestamp())
         if voor != na:
             weg = [datetime.fromtimestamp(s, TZ).strftime('%H:%M') for s in voor if s not in na]
             bij = [datetime.fromtimestamp(s, TZ).strftime('%H:%M') for s in na if s not in voor]
