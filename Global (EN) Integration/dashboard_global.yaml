@@ -5279,13 +5279,6 @@ views:
               Perform action, and copy the response.
 
 
-              **Categorise automations** puts all automations of the set in the
-              category *Zendure zenSDK Forecasting* (Settings → Automations), including
-              Gielz's automation. A category cannot be set in YAML, hence this button.
-              An automation with a category of your own is left as it is. Needs an
-              administrator account and button-card.
-
-
               Decisions, snapshots and errors are collected from the moment this
               package is loaded.
             text_only: true
@@ -5345,6 +5338,40 @@ views:
               - condition: state
                 entity: script.zendure_diagnostics_export
                 state_not: unavailable
+          - type: entities
+            entities:
+              - entity: sensor.zendure_diagnostics_decisions
+                name: Decisions (last 50)
+              - entity: sensor.zendure_diagnostics_snapshots
+                name: Snapshots (last 24 hours)
+              - entity: sensor.zendure_diagnostics_errors
+                name: Errors (last 20)
+              - entity: sensor.zendure_flash_writes
+                name: Switches to Flash (today)
+            visibility:
+              - condition: state
+                entity: script.zendure_diagnostics_export
+                state_not: unavailable
+          - type: heading
+            icon: ''
+            heading: Automations
+            heading_style: title
+          - type: markdown
+            content: >-
+              <ha-alert alert-type="info">Help text</ha-alert>**Categorise automations**
+              puts all automations of the set in the category *Zendure zenSDK
+              Forecasting* (Settings → Automations), including Gielz's automation. A
+              category cannot be set in YAML, hence this button. An automation with a
+              category of your own is left as it is. If an update adds new automations,
+              just press it again. Needs an administrator account and button-card (the
+              button is there with the Diagnostics export package). Without
+              button-card: Settings → Automations, turn on selection mode, tick them,
+              Category → New category.
+            text_only: true
+            visibility:
+              - condition: state
+                entity: input_boolean.dashboard_setting_show_help
+                state: 'on'
           - type: custom:button-card
             name: Categorise automations
             icon: mdi:folder-cog
@@ -5437,20 +5464,6 @@ views:
               icon:
                 - width: 24px
                 - color: var(--primary-color)
-            visibility:
-              - condition: state
-                entity: script.zendure_diagnostics_export
-                state_not: unavailable
-          - type: entities
-            entities:
-              - entity: sensor.zendure_diagnostics_decisions
-                name: Decisions (last 50)
-              - entity: sensor.zendure_diagnostics_snapshots
-                name: Snapshots (last 24 hours)
-              - entity: sensor.zendure_diagnostics_errors
-                name: Errors (last 20)
-              - entity: sensor.zendure_flash_writes
-                name: Switches to Flash (today)
             visibility:
               - condition: state
                 entity: script.zendure_diagnostics_export

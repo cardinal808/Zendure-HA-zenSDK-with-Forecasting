@@ -5289,13 +5289,6 @@ views:
               Actie uitvoeren, en kopieer het antwoord.
 
 
-              **Automatiseringen indelen** zet alle automatiseringen van de set in de
-              categorie *Zendure zenSDK Forecasting* (Instellingen → Automatiseringen),
-              ook Gielz' automatisering. Een categorie kan niet in YAML, daarom deze
-              knop. Een automatisering met een eigen categorie blijft staan. Nodig: een
-              beheerder-account en button-card.
-
-
               Beslissingen, momentopnames en foutmeldingen worden verzameld vanaf
               het moment dat dit pakket geladen is.
             text_only: true
@@ -5355,6 +5348,40 @@ views:
               - condition: state
                 entity: script.zendure_diagnose_export
                 state_not: unavailable
+          - type: entities
+            entities:
+              - entity: sensor.zendure_diagnose_beslissingen
+                name: Beslissingen (laatste 50)
+              - entity: sensor.zendure_diagnose_momentopnames
+                name: Momentopnames (laatste 24 uur)
+              - entity: sensor.zendure_diagnose_fouten
+                name: Foutmeldingen (laatste 20)
+              - entity: sensor.zendure_flash_schrijfacties
+                name: Omzetten naar Flash (vandaag)
+            visibility:
+              - condition: state
+                entity: script.zendure_diagnose_export
+                state_not: unavailable
+          - type: heading
+            icon: ''
+            heading: Automatiseringen
+            heading_style: title
+          - type: markdown
+            content: >-
+              <ha-alert alert-type="info">Helptekst</ha-alert>**Automatiseringen indelen**
+              zet alle automatiseringen van de set in de categorie *Zendure zenSDK
+              Forecasting* (Instellingen → Automatiseringen), ook Gielz' automatisering.
+              Een categorie kan niet in YAML, daarom deze knop. Een automatisering met een
+              eigen categorie blijft staan. Komen er bij een update nieuwe
+              automatiseringen bij, druk dan nog een keer. Nodig: een beheerder-account
+              en button-card (de knop staat er met het pakket Diagnose-export). Zonder
+              button-card: Instellingen → Automatiseringen, selectiemodus aan,
+              aanvinken, Categorie → Nieuwe categorie.
+            text_only: true
+            visibility:
+              - condition: state
+                entity: input_boolean.help_tonen_op_dashboard
+                state: 'on'
           - type: custom:button-card
             name: Automatiseringen indelen
             icon: mdi:folder-cog
@@ -5447,20 +5474,6 @@ views:
               icon:
                 - width: 24px
                 - color: var(--primary-color)
-            visibility:
-              - condition: state
-                entity: script.zendure_diagnose_export
-                state_not: unavailable
-          - type: entities
-            entities:
-              - entity: sensor.zendure_diagnose_beslissingen
-                name: Beslissingen (laatste 50)
-              - entity: sensor.zendure_diagnose_momentopnames
-                name: Momentopnames (laatste 24 uur)
-              - entity: sensor.zendure_diagnose_fouten
-                name: Foutmeldingen (laatste 20)
-              - entity: sensor.zendure_flash_schrijfacties
-                name: Omzetten naar Flash (vandaag)
             visibility:
               - condition: state
                 entity: script.zendure_diagnose_export
