@@ -198,8 +198,8 @@ input_boolean:
   forecast_setting_shared_battery_model:
     name: Forecast Shared Battery Model
     icon: mdi:battery-sync
-  # New planner (test, off by default): the optimisation per quarter hour controls charging and
-  # holding instead of the current planner. Turns the shared battery model on by itself.
+  # New planner (on by default since 2026.11.8): the optimisation per quarter hour controls charging
+  # and holding. Off = fall back to the current planner. Turns the shared battery model on by itself.
   forecast_setting_new_planner:
     name: Forecast New Planner
     icon: mdi:chart-timeline-variant-shimmer
@@ -211,6 +211,10 @@ input_boolean:
   # Internal: smart hold has been turned on by default once
   forecast_setting_smart_hold_set:
     name: Forecast Smart Hold Set
+    icon: mdi:robot
+  # Internal: the new planner has been turned on once (on by default since 2026.11.8)
+  forecast_setting_new_planner_set:
+    name: Forecast New Planner Set
     icon: mdi:robot
   # Shows the 12 monthly reliability fields on the dashboard
   # Calibration charging: after this many days without 100%, charge full once. On by default
@@ -3732,7 +3736,7 @@ template:
         {%- else -%}
           {%- set lb = opt.charge -%}
           {%- if opt_action_now == 'L' -%}Charging from the grid now{{ ' (also for calibration: up to 100%)' if opt_cal_penalty | float(0) > 0 else '' }}.
-          {%- elif opt_action_now == 'H' -%}Battery is holding now: these quarter hours are cheaper than the quarter hours the charge is kept for.
+          {%- elif opt_action_now == 'H' -%}Battery is holding now: the price now is lower than in the hours the charge is kept for.
           {%- elif opt_action_now == 'X' -%}Battery is exporting to the grid now (that yields more now than keeping the charge).
           {%- else -%}Battery is supplying the house now.{%- endif -%}
           {%- set later = lb | rejectattr('from', 'eq', (now_ts | timestamp_custom('%H:%M'))) | list if opt_action_now == 'L' else lb -%}
@@ -4103,6 +4107,31 @@ template:
 automation:
   # Smart hold is on by default: a new input_boolean starts off in HA, and initial: true would
   # reset it on every restart. So turn it on once; after that the user's choice stays.
+  - id: forecast_new_planner_default
+    alias: Forecast New Planner Default On
+    description: >-
+      Forecasting 2026.11.8 - Turns the new planner on once (after installation or upgrade).
+      After that the choice stays: off = fall back to the current planner.
+    mode: single
+    triggers:
+      - trigger: homeassistant
+        event: start
+      - trigger: state
+        entity_id: input_boolean.forecast_setting_new_planner_set
+        to: 'off'
+    conditions:
+      - condition: state
+        entity_id: input_boolean.forecast_setting_new_planner_set
+        state: 'off'
+    actions:
+      - delay:
+          seconds: 5
+      - action: input_boolean.turn_on
+        target:
+          entity_id:
+            - input_boolean.forecast_setting_new_planner
+            - input_boolean.forecast_setting_new_planner_set
+
   - id: forecast_smart_hold_default
     alias: Forecast Smart Hold Default On
     description: >-

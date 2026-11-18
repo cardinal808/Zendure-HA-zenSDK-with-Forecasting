@@ -2199,9 +2199,9 @@ views:
               {% endif %}{% if a.planner != 'nieuw' %}{% set herplan = (a.morgen_laadmomenten | default([])) | length > 0 %}{% for b in lb if not (herplan and b.dag == 'morgen') %}- Laden {{ b.dag }} {{ b.start }}–{{ b.eind }}: {{ 'nog ' if b.bezig | default(false) else '' }}{{ b.minuten }} minuten, ongeveer {{ '%.1f' | format(b.kwh) }} kWh, gemiddeld €{{ '%.3f' | format(b.prijs) }}
               {% endfor %}{% endif %}
               {% set o = a.optimaal %}{% if o is mapping %}
-              {% set nw = a.planner == 'nieuw' %}### {{ 'Nieuwe planner' if nw else 'Schaduwplanner (test)' }}
+              {% set nw = a.planner == 'nieuw' %}### {{ 'Nieuwe planner' if nw else 'Nieuwe planner (rekent mee)' }}
 
-              {{ 'De optimalisatie per kwartier stuurt laden en vasthouden aan (schakelaar *Nieuwe planner*).' if nw else 'Nieuwe planner die per kwartier de goedkoopste keuze berekent. Hij rekent alleen mee en stuurt nog niets aan.' }}
+              {{ 'De optimalisatie per kwartier stuurt laden en vasthouden aan (schakelaar *Nieuwe planner*).' if nw else 'De schakelaar *Nieuwe planner* staat uit: de huidige planner stuurt. Ter vergelijking rekent de nieuwe planner mee.' }}
 
               - Nu: **{{ o.nu }}**{% if not nw %} (huidig plan: {{ 'Laden' if states('sensor.zendure_forecast_plan') == 'Laden' else ('Vasthouden' if a.ontladen_vasthouden else 'Leveren') }}){% endif %}
               - Laden: {% if (o.laden | default([])) | length > 0 %}{% for b in o.laden %}{{ b.van }}–{{ b.tot }} ({{ '%.1f' | format(b.kwh) }} kWh, gem. €{{ '%.3f' | format(b.prijs) }}){{ ', ' if not loop.last }}{% endfor %}{% else %}niets{% endif %}
@@ -4294,11 +4294,11 @@ views:
               slim vasthouden, de Plan Tijdlijn en *accu leeg* rekenen met hetzelfde
               verloop van de accu (één zonbron, vasthouden zoals de automation). Staat
               standaard uit; zet hem aan om te testen, en weer uit als het plan vreemd doet.
-              **Nieuwe planner stuurt aan (test)**: de optimalisatie per kwartier (zie
-              *Nieuwe planner* bij het plan) bepaalt wanneer de accu laadt, levert of
-              vasthoudt, in plaats van de huidige planner. Zet het gedeelde accumodel
-              vanzelf aan. Laadmarge telt als extra verbruik; kalibratieladen, terugleveren
-              en de airco werken zoals altijd. Uitzetten = terug naar de huidige planner.
+              **Nieuwe planner** (standaard aan sinds 2026.11.8): één berekening per kwartier
+              (zie *Nieuwe planner* bij het plan) bepaalt wanneer de accu laadt, levert of
+              vasthoudt. Zet het gedeelde accumodel vanzelf aan. De laadmarge telt als extra
+              verbruik; kalibratieladen zit in de berekening; de airco werkt zoals altijd.
+              Uitzetten = terugval naar de huidige planner (blijft nog één versie bestaan).
               **Nieuwe planner mag terugleveren (test)**: de nieuwe planner mag de accu ook
               naar het net leveren als dat meer oplevert dan de lading bewaren (bijvoorbeeld
               's ochtends ruimte maken voor de zon, of opgeslagen zon 's avonds terugleveren).
@@ -4575,7 +4575,7 @@ views:
               - entity: input_boolean.forecast_gedeeld_accumodel
                 name: Gedeeld accumodel (nieuw, test)
               - entity: input_boolean.forecast_nieuwe_planner
-                name: Nieuwe planner stuurt aan (test)
+                name: Nieuwe planner (uit = huidige planner)
               - entity: input_boolean.forecast_nieuwe_planner_terugleveren
                 name: Nieuwe planner mag terugleveren (test)
               - entity: input_number.forecast_kalibratie_dagen

@@ -198,8 +198,8 @@ input_boolean:
   forecast_gedeeld_accumodel:
     name: Forecast Gedeeld Accumodel
     icon: mdi:battery-sync
-  # Nieuwe planner (test, standaard uit): de optimalisatie per kwartier stuurt laden en vasthouden
-  # aan in plaats van de huidige planner. Zet het gedeelde accumodel vanzelf aan.
+  # Nieuwe planner (standaard aan sinds 2026.11.8): de optimalisatie per kwartier stuurt laden en
+  # vasthouden aan. Uit = terugval naar de huidige planner. Zet het gedeelde accumodel vanzelf aan.
   forecast_nieuwe_planner:
     name: Forecast Nieuwe Planner
     icon: mdi:chart-timeline-variant-shimmer
@@ -211,6 +211,10 @@ input_boolean:
   # Intern: slim vasthouden is al eens standaard aangezet
   forecast_slim_vasthouden_ingesteld:
     name: Forecast Slim Vasthouden Ingesteld
+    icon: mdi:robot
+  # Intern: de nieuwe planner is eenmalig aangezet (sinds 2026.11.8 standaard aan)
+  forecast_nieuwe_planner_ingesteld:
+    name: Forecast Nieuwe Planner Ingesteld
     icon: mdi:robot
   # Toont de 12 maandvelden van de betrouwbaarheid op het dashboard
   # Kalibratieladen: na zoveel dagen zonder 100% één keer vol laden. Staat standaard aan
@@ -3730,7 +3734,7 @@ template:
         {%- else -%}
           {%- set lb = opt.laden -%}
           {%- if opt_actie_nu == 'L' -%}Nu laden uit het net{{ ' (ook voor de kalibratie: tot 100%)' if opt_kal_straf | float(0) > 0 else '' }}.
-          {%- elif opt_actie_nu == 'H' -%}Accu houdt nu vast: deze kwartieren zijn goedkoper dan de kwartieren waarvoor de lading bewaard wordt.
+          {%- elif opt_actie_nu == 'H' -%}Accu houdt nu vast: de prijs nu is lager dan in de uren waarvoor de lading bewaard wordt.
           {%- elif opt_actie_nu == 'X' -%}Accu levert nu terug aan het net (dat levert nu meer op dan de lading bewaren).
           {%- else -%}Accu levert nu aan het huis.{%- endif -%}
           {%- set later = lb | rejectattr('van', 'eq', (nu_ts | timestamp_custom('%H:%M'))) | list if opt_actie_nu == 'L' else lb -%}
@@ -4102,6 +4106,31 @@ automation:
   # Slim vasthouden staat standaard aan: een nieuwe input_boolean begint in HA uit, en
   # initial: true zou hem bij elke herstart terugzetten. Daarom eenmalig aanzetten; daarna
   # blijft de keuze van de gebruiker staan.
+  - id: forecast_nieuwe_planner_standaard
+    alias: Forecast Nieuwe Planner Standaard Aan
+    description: >-
+      Forecasting 2026.11.8 - Zet de nieuwe planner eenmalig aan (na installatie of upgrade).
+      Daarna blijft de keuze staan: uit = terugval naar de huidige planner.
+    mode: single
+    triggers:
+      - trigger: homeassistant
+        event: start
+      - trigger: state
+        entity_id: input_boolean.forecast_nieuwe_planner_ingesteld
+        to: 'off'
+    conditions:
+      - condition: state
+        entity_id: input_boolean.forecast_nieuwe_planner_ingesteld
+        state: 'off'
+    actions:
+      - delay:
+          seconds: 5
+      - action: input_boolean.turn_on
+        target:
+          entity_id:
+            - input_boolean.forecast_nieuwe_planner
+            - input_boolean.forecast_nieuwe_planner_ingesteld
+
   - id: forecast_slim_vasthouden_standaard
     alias: Forecast Slim Vasthouden Standaard Aan
     description: >-

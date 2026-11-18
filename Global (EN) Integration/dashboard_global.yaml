@@ -2194,9 +2194,9 @@ views:
               {% endif %}{% if a.planner != 'new' %}{% set replan = (a.tomorrow_charge_moments | default([])) | length > 0 %}{% for b in lb if not (replan and b.day == 'tomorrow') %}- Charge {{ b.day }} {{ b.start }}–{{ b.end }}: {{ b.minutes }} minutes{{ ' left' if b.running | default(false) else '' }}, about {{ '%.1f' | format(b.kwh) }} kWh, average €{{ '%.3f' | format(b.price) }}
               {% endfor %}{% endif %}
               {% set o = a.optimal %}{% if o is mapping %}
-              {% set nw = a.planner == 'new' %}### {{ 'New planner' if nw else 'Shadow planner (test)' }}
+              {% set nw = a.planner == 'new' %}### {{ 'New planner' if nw else 'New planner (calculating along)' }}
 
-              {{ 'The optimisation per quarter hour controls charging and holding (switch *New planner*).' if nw else 'New planner that works out the cheapest choice per quarter hour. It only calculates along and does not control anything yet.' }}
+              {{ 'The optimisation per quarter hour controls charging and holding (switch *New planner*).' if nw else 'The *New planner* switch is off: the current planner is in control. For comparison the new planner calculates along.' }}
 
               - Now: **{{ o.now }}**{% if not nw %} (current plan: {{ 'Charge' if states('sensor.zendure_forecast_plan') == 'Charge' else ('Hold' if a.hold_discharge else 'Supply') }}){% endif %}
               - Charge: {% if (o.charge | default([])) | length > 0 %}{% for b in o.charge %}{{ b.from }}–{{ b.until }} ({{ '%.1f' | format(b.kwh) }} kWh, avg. €{{ '%.3f' | format(b.price) }}){{ ', ' if not loop.last }}{% endfor %}{% else %}nothing{% endif %}
@@ -4288,11 +4288,12 @@ views:
               shortfall, smart hold, the Plan Timeline and *battery empty* use the same
               battery trajectory (one solar source, holding like the automation). Off by
               default; turn it on to test, and off again if the plan behaves oddly.
-              **New planner in control (test)**: the optimisation per quarter hour (see
-              *New planner* with the plan) decides when the battery charges, supplies or
-              holds, instead of the current planner. Turns the shared battery model on by
-              itself. The charge margin counts as extra usage; calibration charging, export
-              and the AC work as always. Turn off = back to the current planner.
+              **New planner** (on by default since 2026.11.8): one calculation per quarter
+              hour (see *New planner* with the plan) decides when the battery charges,
+              supplies or holds. Turns the shared battery model on by itself. The charge
+              margin counts as extra usage; calibration charging is in the calculation; the
+              AC works as always. Turn off = fall back to the current planner (kept for one
+              more version).
               **New planner may export (test)**: the new planner may also send the battery
               to the grid when that yields more than keeping the charge (for example making
               room for the sun in the morning, or exporting stored solar in the evening). It
@@ -4569,7 +4570,7 @@ views:
               - entity: input_boolean.forecast_setting_shared_battery_model
                 name: Shared battery model (new, test)
               - entity: input_boolean.forecast_setting_new_planner
-                name: New planner in control (test)
+                name: New planner (off = current planner)
               - entity: input_boolean.forecast_setting_new_planner_export
                 name: New planner may export (test)
               - entity: input_number.forecast_setting_calibration_days
