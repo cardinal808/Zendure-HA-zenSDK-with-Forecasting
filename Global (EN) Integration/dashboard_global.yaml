@@ -4270,6 +4270,10 @@ views:
               expensive quarter hours (no extra loss; on by default).
               Apart from that the battery always holds between two charge slots when
               supplying now and charging back later with loss costs more than buying now.
+              **Shared battery model (new, test)**: the path check, the start of the
+              shortfall, smart hold, the Plan Timeline and *battery empty* use the same
+              battery trajectory (one solar source, holding like the automation). Off by
+              default; turn it on to test, and off again if the plan behaves oddly.
               **Reliability per month**: a separate solar forecast correction per
               month (0 = the general value); after a month ends the set fills in the measured value for
               next year. **Calibration after days**: the Zendure calibrates at 100%.
@@ -4536,6 +4540,8 @@ views:
                 name: Hold discharge in cheap dip (save the battery)
               - entity: input_boolean.forecast_setting_smart_hold
                 name: Smart hold (keep the charge for the most expensive quarter hours)
+              - entity: input_boolean.forecast_setting_shared_battery_model
+                name: Shared battery model (new, test)
               - entity: input_number.forecast_setting_calibration_days
                 name: Calibration after days
               - entity: input_boolean.forecast_setting_calibration_charging

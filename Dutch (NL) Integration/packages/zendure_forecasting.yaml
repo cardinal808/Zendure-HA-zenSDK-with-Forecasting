@@ -193,6 +193,11 @@ input_boolean:
   forecast_slim_vasthouden:
     name: Forecast Slim Vasthouden
     icon: mdi:battery-clock
+  # Gedeeld accumodel (nieuw, standaard uit): pad-check, begin van het tekort, slim vasthouden,
+  # "accu leeg" en de Plan Tijdlijn rekenen met hetzelfde verloop van de accu (zie de planner)
+  forecast_gedeeld_accumodel:
+    name: Forecast Gedeeld Accumodel
+    icon: mdi:battery-sync
   # Intern: slim vasthouden is al eens standaard aangezet
   forecast_slim_vasthouden_ingesteld:
     name: Forecast Slim Vasthouden Ingesteld
@@ -1649,7 +1654,11 @@ template:
   # -------------------------------------------------------------------
   - trigger:
       # Elk kwartier, net na de prijswissel (en na het verbruiksprofiel op :05). Daarnaast direct bij
-      # wijzigingen in instellingen, prijzen of het laadpercentage (stopt laden op tijd als de accu vol is).
+      # wijzigingen in instellingen of prijzen, en zodra de accu (bijna) op het max. laadpercentage zit
+      # (stopt laden op tijd). Niet meer bij elke procent: binnen een kwartier verandert het plan niet.
+      - platform: template
+        value_template: >
+          {{ states('sensor.zendure_2400_ac_laadpercentage') | float(0) >= states('sensor.zendure_2400_ac_maximale_laadpercentage') | float(100) - 1 }}
       - platform: time_pattern
         minutes: "/15"
         seconds: 10
@@ -1677,6 +1686,7 @@ template:
           - input_number.forecast_betrouwbaarheid_dec
           - input_boolean.forecast_dal_ontladen_blokkeren
           - input_boolean.forecast_slim_vasthouden
+          - input_boolean.forecast_gedeeld_accumodel
           - input_boolean.zonoverschot_ontladen
           - input_boolean.forecast_kalibratieladen
           - input_number.forecast_kalibratie_dagen
@@ -1686,7 +1696,6 @@ template:
           - input_number.zendure_2400_ac_max_oplaadvermogen
           - input_boolean.dynamisch_15_minuten
           - sensor.dynamisch_nordpool
-          - sensor.zendure_2400_ac_laadpercentage
           - sensor.zendure_2400_ac_minimale_laadpercentage
           - sensor.zendure_2400_ac_maximale_laadpercentage
     variables:
@@ -2450,6 +2459,63 @@ template:
           {%- set ts = zon_detail | map(attribute='s') | list -%}
           {{ (zon_detail + (zon_detail_morgen | rejectattr('s', 'in', ts) | list)) | sort(attribute='s') }}
         {%- else -%}{{ zon_detail }}{%- endif -%}
+      # ---- Gedeeld accumodel (schakelaar Gedeeld accumodel, standaard uit) ----
+      # Uit: elke berekening hieronder rekent zelf het verloop van de accu (zoals tot 2026.11.8).
+      # Aan: één lijst accu_slots met per toekomstig prijsslot het verbruik, de zon en het dal; het
+      # begin van het tekort, de pad-check (ruimte per kwartier), de dure kwartieren, slim vasthouden,
+      # de Plan Tijdlijn en "accu leeg" lezen daaruit. Eén zonbron (detail van vandaag en morgen),
+      # en de pad-check houdt vast tussen laadslots zoals de automation.
+      model_nieuw: "{{ is_state('input_boolean.forecast_gedeeld_accumodel', 'on') }}"
+      as_zon: >
+        {%- set ts = zon_detail | map(attribute='s') | list -%}
+        {{ (zon_detail + (zon_detail_morgen | rejectattr('s', 'in', ts) | list)) | sort(attribute='s') }}
+      # Per toekomstig prijsslot (kWh AC vanaf nu): k = verbruik, d = direct verbruikte zon,
+      # o = zon-overschot, dal = de accu levert hier niet (dal-blokkade). Zonder detailvoorspelling
+      # overdag: de zon dekt het verbruik tot zonsondergang (zoals t_leeg_verder_ts).
+      accu_slots: >
+        {%- set ns = namespace(l=[]) -%}
+        {%- if model_nieuw -%}
+          {%- set zon_zonder_detail = zon_detail | length == 0 and is_state('sun.sun', 'above_horizon') -%}
+          {%- for x in (kand + morg) | sort(attribute='s') -%}
+            {%- if x.e > nu_ts -%}
+              {%- set a = [x.s, nu_ts] | max -%}{%- set b = x.e -%}
+              {%- set nk = namespace(k=0) -%}{%- for i in range(((a - kwart_s0) // 900) | int, ((b - kwart_s0 - 0.001) // 900) | int + 1) -%}{%- set qa = kwart_s0 + i * 900 -%}{%- set ov = [qa + 900, b] | min - [qa, a] | max -%}{%- if ov > 0 -%}{%- set nk.k = nk.k + (kwart_kw[[i, 0] | max] if i < kwart_kw | length else l_uur) * ov / 3600 -%}{%- endif -%}{%- endfor -%}
+              {%- set nz = namespace(d=0, o=0) -%}
+              {%- for p in as_zon -%}
+                {%- set pa = [p.s, a] | max -%}{%- set pb = [p.s + c_detail_periode_s, b] | min -%}
+                {%- if pb > pa -%}
+                  {%- set nz.d = nz.d + ([p.pv, p.kw] | min) * (pb - pa) / 3600 -%}
+                  {%- set nz.o = nz.o + ([p.pv - p.kw, 0] | max) * (pb - pa) / 3600 -%}
+                {%- endif -%}
+              {%- endfor -%}
+              {%- if zon_zonder_detail and a < zon_ondergang_ts -%}{%- set nz.d = nk.k -%}{%- endif -%}
+              {%- set is_morgen = x.s >= eind_vandaag_ts -%}
+              {%- set dal = dal_blokkade_plan and ((x.v <= dal_drempel_morgen and x.v < p_morg_gem) if is_morgen else (x.v <= dal_drempel and x.v < p_dag_gem)) -%}
+              {%- set ns.l = ns.l + [{'s': x.s, 'e': x.e, 'a': a, 'v': x.v, 'k': nk.k | round(4), 'd': ([nz.d, nk.k] | min) | round(4), 'o': nz.o | round(4), 'dal': dal}] -%}
+            {%- endif -%}
+          {%- endfor -%}
+        {%- endif -%}
+        {{ ns.l }}
+      # Begin van het tekort met het gedeelde model: zoals t_leeg_verder_ts, maar altijd met zon
+      # (ook zonder doorkijken; t_leeg_plan_ts rekende zonder zon)
+      as_leeg_ts: >
+        {%- set emax = ([s_max - marge_dc, 0] | max) * eff_out -%}
+        {%- set ns = namespace(e=([s_nu - marge_dc, 0] | max) * eff_out, t=0, ev=ev_zon_vandaag_kwh) -%}
+        {%- if zon_detail | length == 0 and is_state('sun.sun', 'above_horizon') -%}{%- set ns.e = [ns.e + zon_dc * eff_out, emax] | min -%}{%- endif -%}
+        {%- for x in accu_slots -%}
+          {%- if ns.t == 0 and x.a < t_pad_horizon_ts and (morgen_bekend or x.s < eind_vandaag_ts) -%}
+            {%- set b = [x.e, t_pad_horizon_ts] | min -%}
+            {%- set f = (b - x.a) / (x.e - x.a) if x.e > x.a else 0 -%}
+            {%- set naar_ev = [x.o * f, ns.ev] | min -%}{%- set ns.ev = ns.ev - naar_ev -%}
+            {%- set ns.e = [ns.e + (x.o * f - naar_ev) * eff_in * eff_out, emax] | min -%}
+            {%- set nodig = ([x.k - x.d, 0] | max) * f -%}
+            {%- if not x.dal -%}
+              {%- if nodig >= ns.e and nodig > 0 -%}{%- set ns.t = x.a + ns.e / nodig * (b - x.a) -%}
+              {%- else -%}{%- set ns.e = ns.e - nodig -%}{%- endif -%}
+            {%- endif -%}
+          {%- endif -%}
+        {%- endfor -%}
+        {{ ns.t if ns.t > 0 else t_pad_horizon_ts }}
       # Accu leeg bij doorkijken: de zon van vandaag telt mee (direct verbruik en overschot naar
       # de accu), anders begint het gat 's middags al terwijl de zon het huis nog draait. Zonder
       # detailvoorspelling: zon dekt het verbruik tot zonsondergang en het verwachte overschot
@@ -2488,7 +2554,7 @@ template:
         {{ ns.t if ns.t > 0 else t_pad_horizon_ts }}
 
       t_gap_eind_ts: "{{ t_pad_horizon_ts }}"
-      t_gap_start_ts: "{{ [t_leeg_verder_ts if (pad_verder or pad_dag) else t_leeg_plan_ts, nu_ts] | max }}"
+      t_gap_start_ts: "{{ [as_leeg_ts if model_nieuw else (t_leeg_verder_ts if (pad_verder or pad_dag) else t_leeg_plan_ts), nu_ts] | max }}"
       gap_uren: "{{ ([t_gap_eind_ts - t_gap_start_ts, 0] | max / 3600) | round(2) }}"
       gap_last: >
         {%- set ns = namespace(k=0) -%}
@@ -2501,7 +2567,15 @@ template:
       # (zon alleen bekend met detailvoorspelling)
       gap_kwartieren: >
         {%- set ns = namespace(l=[]) -%}
-        {%- for x in pad_kand -%}
+        {%- if model_nieuw -%}
+          {%- for x in accu_slots -%}
+            {%- set a = [x.a, t_gap_start_ts] | max -%}{%- set b = [x.e, t_gap_eind_ts] | min -%}
+            {%- if b > a and x.e > x.a and (morgen_bekend or x.s < eind_vandaag_ts) -%}
+              {%- set ns.l = ns.l + [{'s': x.s, 'v': x.v, 'kwh': (([x.k - x.d, 0] | max) * (b - a) / (x.e - x.a)) | round(4)}] -%}
+            {%- endif -%}
+          {%- endfor -%}
+        {%- endif -%}
+        {%- for x in (pad_kand if not model_nieuw else []) -%}
           {%- set a = [x.s, t_gap_start_ts] | max -%}
           {%- set b = [x.e, t_gap_eind_ts] | min -%}
           {%- if b > a -%}
@@ -2583,9 +2657,24 @@ template:
       # hieronder mag per slot alleen vullen tot de ruimte op dát moment: laden in de middag voor
       # de avondpiek en 's nachts voor de ochtendpiek kan dan samen, ook als de accu nu bijna vol is.
       pad_slots: "{{ pad_kand | selectattr('e', 'gt', nu_ts) | sort(attribute='s') | list }}"
+      # Gedeeld model: uit accu_slots, en de accu houdt vast tussen laadslots (een later laadslot van
+      # de energiebalans, samen minstens c_vasthouden_laden_min_kwh, is na verlies duurder dan dit slot),
+      # zoals de automation. Zonder dat vasthouden rekende de pad-check met te veel ruimte.
       pad_basis: >
         {%- set ns = namespace(e=s_nu, l=[]) -%}
-        {%- for x in pad_slots -%}
+        {%- if model_nieuw -%}
+          {%- set ps = pad_slots | map(attribute='s') | list -%}
+          {%- for x in accu_slots -%}
+            {%- if x.s in ps -%}
+              {%- set ns.l = ns.l + [ns.e | round(4)] -%}
+              {%- set ns.e = [ns.e + x.o * eff_in, s_max] | min -%}
+              {%- set later = gekozen_basis | selectattr('s', 'gt', x.s) | list -%}
+              {%- set tussen = (later | length) * e_slot >= c_vasthouden_laden_min_kwh and eff_rt > 0 and x.v < (later | map(attribute='v') | max) / eff_rt - c_vasthouden_min_verschil -%}
+              {%- if not (x.dal or tussen) and eff_out > 0 -%}{%- set ns.e = [ns.e - ([x.k - x.d, 0] | max) / eff_out, 0] | max -%}{%- endif -%}
+            {%- endif -%}
+          {%- endfor -%}
+        {%- endif -%}
+        {%- for x in (pad_slots if not model_nieuw else []) -%}
           {%- set ns.l = ns.l + [ns.e | round(4)] -%}
           {%- set a = [x.s, nu_ts] | max -%}{%- set b = x.e -%}
           {%- set nk = namespace(k=0) -%}{%- for i in range(((a - kwart_s0) // 900) | int, ((b - kwart_s0 - 0.001) // 900) | int + 1) -%}{%- set qa = kwart_s0 + i * 900 -%}{%- set ov = [qa + 900, b] | min - [qa, a] | max -%}{%- if ov > 0 -%}{%- set nk.k = nk.k + (kwart_kw[[i, 0] | max] if i < kwart_kw | length else l_uur) * ov / 3600 -%}{%- endif -%}{%- endfor -%}
@@ -3083,9 +3172,19 @@ template:
         {%- set later = gekozen | selectattr('s', 'gt', nu_ts) | selectattr('s', 'lt', t_gap_eind_ts) | sort(attribute='s') | list -%}
         {%- set later_ac = [later | length * e_slot, gepland_ac] | min -%}
         {{ (later | first).s if later | length > 0 and later_ac >= c_vasthouden_laden_min_kwh else t_gap_eind_ts }}
+      # Gedeeld model: uit accu_slots, zonder de dal-kwartieren (daar levert de accu niet)
       vh_kwartieren: >
         {%- set ns = namespace(l=[]) -%}
-        {%- for x in pad_kand -%}
+        {%- if model_nieuw -%}
+          {%- for x in accu_slots -%}
+            {%- set b = [x.e, vh_eind_ts] | min -%}
+            {%- if b > x.a and x.e > x.a and not x.dal and (morgen_bekend or x.s < eind_vandaag_ts) -%}
+              {%- set k = ([x.k - x.d, 0] | max) * (b - x.a) / (x.e - x.a) -%}
+              {%- if k > 0 -%}{%- set ns.l = ns.l + [{'s': x.s, 'v': x.v, 'kwh': k | round(4)}] -%}{%- endif -%}
+            {%- endif -%}
+          {%- endfor -%}
+        {%- endif -%}
+        {%- for x in (pad_kand if not model_nieuw else []) -%}
           {%- set a = [x.s, nu_ts] | max -%}{%- set b = [x.e, vh_eind_ts] | min -%}
           {%- if b > a -%}
             {%- set nz = namespace(k=0) -%}
@@ -3104,8 +3203,11 @@ template:
       vh_gepland_ac: >
         {{ ([(gekozen | selectattr('e', 'gt', nu_ts) | selectattr('s', 'lt', vh_eind_ts) | list | length) * e_slot, gepland_ac] | min) | round(3) }}
       vh_laden_gepland: "{{ vh_gepland_ac >= c_vasthouden_laden_min_kwh }}"
+      # Gedeeld model: zon-overschot vóór het einde telt mee in wat de accu kan leveren
+      vh_zon_dc: >
+        {{ (([(accu_slots | selectattr('s', 'lt', vh_eind_ts) | map(attribute='o') | sum) * eff_in, room] | min) | round(3)) if model_nieuw else 0 }}
       vh_grens: >
-        {%- set ns = namespace(e=(s_nu + [vh_gepland_ac * eff_in, room] | min) * eff_out, p=none) -%}
+        {%- set ns = namespace(e=([s_nu + [vh_gepland_ac * eff_in, room] | min + vh_zon_dc, s_max] | min) * eff_out, p=none) -%}
         {%- set totaal = vh_kwartieren | map(attribute='kwh') | sum -%}
         {%- if ns.e > 0 and totaal > ns.e -%}
           {%- for q in vh_kwartieren | sort(attribute='v', reverse=true) -%}
@@ -3339,7 +3441,7 @@ template:
       tl_laad_s: "{{ (gekozen | map(attribute='s') | list) + morgen_laadslots }}"
       p_ontl_kw: "{{ [states('input_number.zendure_2400_ac_max_ontlaadvermogen') | float(2400), 100] | max / 1000 }}"
       tijdlijn: >
-        {%- set ns = namespace(soc=s_nu, t=[], p=[], bek=[], laad=[], pv=[], last=[], accu=[], soc_l=[], net=[], terug=[], ev=[], vh=[]) -%}
+        {%- set ns = namespace(soc=s_nu, t=[], p=[], bek=[], laad=[], pv=[], last=[], accu=[], soc_l=[], net=[], terug=[], ev=[], vh=[], leeg=(nu_ts if s_nu <= 0.01 else 0)) -%}
         {%- set laad_l = tl_slots | selectattr('s', 'in', tl_laad_s) | list -%}
         {%- set bekend_tot = eind_vandaag_ts + (dag_lengte if morgen_bekend else 0) -%}
         {#- Terugleveren uit de accu (zonoverschot en vóór negatieve prijzen) en gepland EV-laden ('s nachts) -#}
@@ -3356,6 +3458,12 @@ template:
               {%- if ov > 0 -%}{%- set nz.k = nz.k + q.pv * ov / 3600 -%}{%- endif -%}
             {%- endfor -%}
             {%- set pv = nz.k -%}
+            {#- Gedeeld model: verbruik en zon uit accu_slots -#}
+            {%- if model_nieuw -%}
+              {%- set y = accu_slots | selectattr('s', 'eq', x.s) | first -%}
+              {%- if y is defined and y is mapping -%}{%- set last = y.k -%}{%- set pv = y.d + y.o -%}{%- endif -%}
+            {%- endif -%}
+            {%- set soc0 = ns.soc -%}
             {%- set ruimte_ac = ([s_max - ns.soc, 0] | max) / eff_in -%}
             {%- set laden = x.s in tl_laad_s -%}
             {%- set nt = namespace(k=0, ev=0) -%}
@@ -3392,6 +3500,7 @@ template:
             {%- endif -%}
             {%- set ns.soc = ns.soc + (accu * eff_in if accu > 0 else accu / eff_out) -%}
             {%- set ns.soc = [[ns.soc, 0] | max, s_max] | min -%}
+            {%- if ns.leeg == 0 and accu < 0 and soc0 > 0.01 and ns.soc <= 0.01 -%}{%- set ns.leeg = a + (soc0 * eff_out / (0 - accu)) * (x.e - a) -%}{%- endif -%}
             {%- set ns.t = ns.t + [x.s | int] -%}
             {%- set ns.p = ns.p + [x.v | round(4)] -%}
             {%- set ns.bek = ns.bek + [1 if x.s < bekend_tot else 0] -%}
@@ -3407,7 +3516,11 @@ template:
           {%- endif -%}
         {%- endfor -%}
         {{ {'t': ns.t, 'prijs': ns.p, 'bekend': ns.bek, 'laden': ns.laad, 'zon_kw': ns.pv, 'verbruik_kw': ns.last,
-            'accu_kw': ns.accu, 'soc_pct': ns.soc_l, 'net_kw': ns.net, 'soc_nu_pct': soc, 'terugleveren': ns.terug, 'ev_kw': ns.ev, 'vasthouden': ns.vh} }}
+            'accu_kw': ns.accu, 'soc_pct': ns.soc_l, 'net_kw': ns.net, 'soc_nu_pct': soc, 'terugleveren': ns.terug, 'ev_kw': ns.ev, 'vasthouden': ns.vh,
+            'leeg_ts': (ns.leeg if ns.leeg > 0 else ((ns.t | last if ns.t | length > 0 else nu_ts) + 900 + (ns.soc * eff_out / l_uur * 3600 if l_uur > 0 else 172800))) | round(0)} }}
+      # "Accu leeg" voor het dashboard: met het gedeelde model uit de tijdlijn (met gepland laden en
+      # vasthouden, zoals de grafiek), anders t_leeg_toon_ts
+      t_leeg_weergave_ts: "{{ tijdlijn.leeg_ts if model_nieuw else t_leeg_toon_ts }}"
     sensor:
       - name: "Zendure Forecast Plan"
         unique_id: zendure_forecast_plan
@@ -3487,8 +3600,8 @@ template:
             {%- elif gekozen | length == 0 -%}
               {%- if leeg -%}De accu is leeg. Het huis neemt nu direct stroom uit het net{% if gap_kwartieren | length > 0 %}, tot {{ tijd(t_gap_eind_ts) }} voor maximaal €{{ '%.3f' | format(gap_kwartieren | map(attribute='v') | max) }}{% endif %}. Er is daarvoor geen laadmoment meer dat na {{ ((1 - eff_rt) * 100) | round(0) | int }}% laad- en ontlaadverlies goedkoper is dan direct inkopen.
               {%- elif slim_vasthouden and not vo_ontladen_nu -%}De accu ({{ '%.1f' | format(s_nu) }} kWh) houdt het niet vol tot {{ tijd(t_gap_eind_ts) }} en er is geen laadmoment meer. Daarom wordt hij bewaard voor de duurste kwartieren (€{{ '%.3f' | format(vh_grens) }} en hoger); tot dan koopt het huis direct in tegen €{{ '%.3f' | format(prijs_nu) }}. Bijladen uit het net loont nu niet.
-              {%- elif dal_blokkade_plan and not vo_actief -%}De accu ({{ '%.1f' | format(s_nu) }} kWh) wordt in goedkope dalen gespaard, want direct inkopen is daar goedkoper; hij levert alleen in duurdere kwartieren en is naar verwachting rond {{ tijd(t_leeg_toon_ts) }} leeg. Bijladen uit het net loont nu niet: geen enkel slot is na verlies goedkoper dan de inkoop die het zou vervangen.
-              {%- else -%}De accu ({{ '%.1f' | format(s_nu) }} kWh) levert tot ongeveer {{ tijd(t_leeg_toon_ts) }}. Bijladen uit het net loont nu niet: geen enkel slot is na verlies goedkoper dan de inkoop die het zou vervangen.
+              {%- elif dal_blokkade_plan and not vo_actief -%}De accu ({{ '%.1f' | format(s_nu) }} kWh) wordt in goedkope dalen gespaard, want direct inkopen is daar goedkoper; hij levert alleen in duurdere kwartieren en is naar verwachting rond {{ tijd(t_leeg_weergave_ts) }} leeg. Bijladen uit het net loont nu niet: geen enkel slot is na verlies goedkoper dan de inkoop die het zou vervangen.
+              {%- else -%}De accu ({{ '%.1f' | format(s_nu) }} kWh) levert tot ongeveer {{ tijd(t_leeg_weergave_ts) }}. Bijladen uit het net loont nu niet: geen enkel slot is na verlies goedkoper dan de inkoop die het zou vervangen.
               {%- endif -%}
               {%- if not morgen_bekend %} Rond 14:00 komen de prijzen van morgen, dan wordt opnieuw gepland.
               {%- else -%}{{ morgen_zin }}
@@ -3514,7 +3627,7 @@ template:
               {%- if vo_sim.e > vo_doel_dc + 0.05 %} Ook dan is er naar verwachting nog geen ruimte voor alles; de rest vangt de omvormerbegrenzing op.{% endif -%}
             {%- endif -%}
           # --- Pad-check (haalt de accu het moment dat er weer energie bijkomt?) ---
-          padcheck_accu_leeg_om: "{{ (t_leeg_toon_ts | timestamp_custom('%Y-%m-%d %H:%M', true)) if t_leeg_toon_ts < nu_ts + 172800 else none }}"
+          padcheck_accu_leeg_om: "{{ (t_leeg_weergave_ts | timestamp_custom('%Y-%m-%d %H:%M', true)) if t_leeg_weergave_ts < nu_ts + 172800 else none }}"
           padcheck_zon_dekt_vanaf: "{{ t_zon_dek_ts | timestamp_custom('%Y-%m-%d %H:%M', true) }}"
           padcheck_zon_bron: "{{ zon_dek_bron }}"
           # Begin van het tekort (accu leeg zonder bijladen) voor de regel "Planning". padcheck_accu_leeg_om
@@ -3637,6 +3750,9 @@ template:
               {%- set uit.l = uit.l + [{'start': b.s | timestamp_custom('%H:%M', true), 'eind': b.e | timestamp_custom('%H:%M', true), 'minuten': ((b.e - b.s) / 60) | round(0) | int, 'kwh': b.kwh | round(2), 'prijs': (b.som / b.n) | round(3)}] -%}
             {%- endfor -%}
             {{ uit.l }}
+          accumodel: "{{ 'gedeeld' if model_nieuw else 'klassiek' }}"
+          # Rekentijd van deze berekening (s), als laatste attribuut: van het begin van de variabelen tot hier
+          rekentijd_s: "{{ (as_timestamp(now()) - nu_ts) | round(3) }}"
 
       # Grafiekdata staat in een apart sensor-object: samen zijn de attributen groter dan
       # de 16 kB-limiet van de recorder, en zo blijft de geschiedenis van het plan zelf bewaard.

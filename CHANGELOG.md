@@ -38,7 +38,21 @@ Versions follow `year.month.sequence`; the sequence restarts at 1 every month. E
 - **Plan Timeline holds like the automation:** in cheap dips, between charge slots (later charge slot more expensive after loss), with smart hold today below the threshold price and tomorrow below its own threshold (`tl_threshold_tomorrow`: tomorrow's expected charge exactly covers the most expensive quarters). Before, the timeline discharged in the cheaper afternoon hours and was empty before the evening peak, while the battery actually holds (prompted by QempZoR). New series `hold` in the timeline.
 - **Adjusting when usage deviates:** the usage profile keeps the last 6 measured hours with what the profile expected (attribute `recent_hours`). When usage deviates, the planner uses a factor for the coming 6 hours (measured ÷ expected, limited to 0.7–1.5, damped by the number of hours, fading to 1). Attribute `usage_adjustment`; line on the plan card at a deviation of at least 5%.
 
+**Shared battery model (new, test, off by default)**
+- New switch **Shared battery model (new, test)** (`input_boolean.forecast_setting_shared_battery_model`) in Forecasting Configuration (Basic). Off = everything as before (verified: identical). On: one list `bat_slots` with per future price slot the usage, direct solar, solar surplus and dip, with one solar source (detail of today and tomorrow). From it read:
+  - the **start of the shortfall** (`bm_empty_ts`; without looking ahead it used no solar);
+  - the **path check** (`path_base`): now holds between charge slots like the automation, so it does not count with too much room;
+  - the **expensive quarter hours** in the shortfall;
+  - **smart hold**: skips dip quarters and counts the solar surplus before the end (`sh_solar_dc`), so the battery does not save in the morning while the sun fills it later anyway;
+  - the **Plan Timeline**;
+  - **"battery empty"** on the dashboard, now from the timeline (with planned charging and holding, like the chart).
+- Attributes `battery_model` (`classic` / `shared`) and `calculation_time_s` (planner calculation time); both also in `meta` of the diagnostics export.
+
+**Planner no longer recalculates on every percent**
+- The planner recalculates every quarter hour and on changes in settings or prices, no longer on every percent of state of charge (that was 10–35 times per hour). An extra trigger as soon as the battery is 1% below the max. state of charge, so charging stops in time.
+
 **Tools**
+- `tools/scenario_sim.py` `--model`: with the switch Shared battery model on.
 - `tools/scenario_sim.py`: closed-loop simulation per quarter hour on synthetic scenarios, compared with the optimum (dynamic programming), and `--regels`: rule tests over 54 situations (more usage → never less charging, no loss-making slot, plan stable after a quarter hour).
 
 ## 2026.11.7 — based on Gielz v20261113

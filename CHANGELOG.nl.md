@@ -38,7 +38,22 @@ Versies volgen `jaar.maand.volgnummer`; het volgnummer begint elke maand bij 1. 
 - **Plan Tijdlijn houdt vast zoals de automation:** in goedkope dalen, tussen laadslots (later laadslot na verlies duurder), bij slim vasthouden vandaag onder de grensprijs en morgen onder een eigen grensprijs (`tl_grens_morgen`: de verwachte lading van morgen dekt precies de duurste kwartieren). Eerder ontlaadde de tijdlijn in de goedkopere middaguren en was hij vóór de avondpiek leeg, terwijl de accu in werkelijkheid vasthoudt (aanleiding: QempZoR). Nieuwe reeks `vasthouden` in de tijdlijn.
 - **Bijsturen als het verbruik afwijkt:** het verbruiksprofiel bewaart de laatste 6 gemeten uren met wat het profiel ervoor verwachtte (attribuut `recente_uren`). Wijkt het verbruik af, dan rekent de planner de komende 6 uur met een factor (gemeten ÷ verwacht, begrensd op 0,7–1,5, gedempt naar het aantal uren, aflopend naar 1). Attribuut `verbruik_bijsturing`; regel op de plankaart bij minstens 5% afwijking.
 
+**Gedeeld accumodel (nieuw, test, standaard uit)**
+- Nieuwe schakelaar **Gedeeld accumodel (nieuw, test)** (`input_boolean.forecast_gedeeld_accumodel`) in Forecasting Configuratie (Basis). Uit = alles zoals het was (nagerekend: identiek). Aan: één lijst `accu_slots` met per toekomstig prijsslot verbruik, directe zon, zon-overschot en dal, met één zonbron (detail van vandaag en morgen). Daaruit lezen:
+  - het **begin van het tekort** (`as_leeg_ts`; rekende zonder doorkijken zonder zon);
+  - de **pad-check** (`pad_basis`): houdt nu vast tussen laadslots zoals de automation, zodat hij niet met te veel ruimte rekent;
+  - de **dure kwartieren** in het tekort;
+  - **slim vasthouden**: slaat dal-kwartieren over en telt het zon-overschot vóór het einde mee (`vh_zon_dc`), zodat de accu 's ochtends niet spaart terwijl de zon hem later toch vult;
+  - de **Plan Tijdlijn**;
+  - **"accu leeg"** op het dashboard, nu uit de tijdlijn (met gepland laden en vasthouden, zoals de grafiek).
+- Attributen `accumodel` (`klassiek` / `gedeeld`) en `rekentijd_s` (rekentijd van de planner); beide ook in `meta` van de diagnose-export.
+- Inventaris van de oude berekeningen: zie de projectmap (`INVENTARIS-accumodel.md`).
+
+**Planner rekent niet meer bij elke procent**
+- De planner herberekent elk kwartier en bij wijzigingen in instellingen of prijzen, niet meer bij elke procent laadpercentage (dat was 10–35 keer per uur). Een extra trigger zodra de accu op 1% onder het max. laadpercentage zit, zodat het laden op tijd stopt.
+
 **Tools**
+- `tools/scenario_sim.py` `--model`: met de schakelaar Gedeeld accumodel aan.
 - `tools/scenario_sim.py`: gesloten-lus-simulatie per kwartier op synthetische scenario's, vergeleken met het optimum (dynamisch programmeren), en `--regels`: regeltests over 54 situaties (meer verbruik → nooit minder laden, geen verliesgevend slot, plan stabiel na een kwartier).
 
 ## 2026.11.7 — gebaseerd op Gielz v20261113

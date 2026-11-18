@@ -4276,6 +4276,10 @@ views:
               duurste kwartieren (kost geen extra verlies; staat standaard aan).
               Los daarvan houdt de accu altijd vast tussen twee laadslots als nu
               leveren en later met verlies bijladen duurder is dan nu inkopen.
+              **Gedeeld accumodel (nieuw, test)**: de pad-check, het begin van het tekort,
+              slim vasthouden, de Plan Tijdlijn en *accu leeg* rekenen met hetzelfde
+              verloop van de accu (één zonbron, vasthouden zoals de automation). Staat
+              standaard uit; zet hem aan om te testen, en weer uit als het plan vreemd doet.
               **Betrouwbaarheid per maand**: per maand een eigen correctie van de
               zonvoorspelling (0 = de algemene waarde); na afloop van een maand vult de set de gemeten waarde
               in voor volgend jaar. **Kalibratie na dagen**: de Zendure kalibreert bij
@@ -4542,6 +4546,8 @@ views:
                 name: Niet ontladen in goedkoop dal (accu sparen)
               - entity: input_boolean.forecast_slim_vasthouden
                 name: Slim vasthouden (lading bewaren voor de duurste kwartieren)
+              - entity: input_boolean.forecast_gedeeld_accumodel
+                name: Gedeeld accumodel (nieuw, test)
               - entity: input_number.forecast_kalibratie_dagen
                 name: Kalibratie na dagen
               - entity: input_boolean.forecast_kalibratieladen

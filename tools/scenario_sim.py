@@ -16,6 +16,7 @@ Gebruik (vanuit de root van de repo):
     python3 tools/scenario_sim.py <export.json> [scenario ...]      # zonder scenario: alle
     python3 tools/scenario_sim.py <export.json> --lijst
     python3 tools/scenario_sim.py <export.json> --regels        # regeltests over een raster
+    (--model: met de schakelaar Gedeeld accumodel aan)
 
 Scenario's staan in SCENARIOS hieronder; eigen scenario's kun je daar toevoegen.
 """
@@ -125,6 +126,7 @@ def bouw_export(basis, sc, t, soc, vorig_plan, laden_loopt):
     zet('input_boolean.dynamisch_laden_loopt', 'on' if laden_loopt else 'off')
     zet('input_boolean.zonoverschot_ontladen', 'off')
     zet('input_boolean.negatieve_prijs_vooraf_ontladen', 'off')
+    zet('input_boolean.forecast_gedeeld_accumodel', MODEL)
     # Geen zon
     for k in list(det) + list((e.get('extern') or {})):
         if 'solcast' in k or 'helios' in k or 'forecast_solar' in k or k.startswith('sensor.energy_'):
@@ -304,8 +306,14 @@ def regeltests(basis, yaml_path=YAML_NL):
     print('%d van %d situaties met een afwijking' % (fouten, n))
 
 
+MODEL = 'off'
+
+
 def main():
+    global MODEL
     args = sys.argv[1:]
+    if '--model' in args:
+        MODEL = 'on'; args.remove('--model')
     if not args:
         print(__doc__)
         sys.exit(1)

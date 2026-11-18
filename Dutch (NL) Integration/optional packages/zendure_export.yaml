@@ -308,6 +308,8 @@ script:
                    'home_assistant': state_attr('update.home_assistant_core_update', 'installed_version'),
                    'tijdzone': now().tzname(),
                    'meldingen': state_attr('sensor.forecast_meldingen', 'meldingen') or [],
+                   'accumodel': state_attr('sensor.zendure_forecast_plan', 'accumodel'),
+                   'planner_rekentijd_s': state_attr('sensor.zendure_forecast_plan', 'rekentijd_s'),
                    'ontbrekende_helpers': bestaat_niet.h,
                    'ingevuld_maar_bestaat_niet': bestaat_niet.e
                  },
