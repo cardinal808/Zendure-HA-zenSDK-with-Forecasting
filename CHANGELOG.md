@@ -49,7 +49,7 @@ Versions follow `year.month.sequence`; the sequence restarts at 1 every month. E
 - Attributes `battery_model` (`classic` / `shared`) and `calculation_time_s` (planner calculation time); both also in `meta` of the diagnostics export.
 
 **Planner no longer recalculates on every percent**
-- The planner recalculates every quarter hour and on changes in settings or prices, no longer on every percent of state of charge (that was 10–35 times per hour). An extra trigger as soon as the battery is 1% below the max. state of charge, so charging stops in time.
+- The planner recalculates every quarter hour and on changes in settings or prices, no longer on every percent of state of charge (that was 10–35 times per hour). An extra trigger as soon as the battery is 1% below the max. state of charge, so charging stops in time. Nord Pool only on new prices (`raw_today` / `raw_tomorrow`), no longer on the price change per quarter (that coincided with the quarter-hour pattern); the measured charge power (information only) is no longer a trigger. Together: 4 times per hour, plus on new prices and changes in settings.
 
 **Tools**
 - `tools/scenario_sim.py` `--model`: with the switch Shared battery model on.

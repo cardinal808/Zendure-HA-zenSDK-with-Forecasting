@@ -1655,6 +1655,14 @@ template:
       # Every quarter hour, just after the price change (and after the usage profile at :05). Also right
       # away on changes in settings or prices, and as soon as the battery is (almost) at the max. state of
       # charge (stops charging in time). No longer on every percent: the plan does not change within a quarter.
+      # Nord Pool only on new prices (raw_today / raw_tomorrow), not on the price change per quarter:
+      # the quarter-hour pattern below picks that up 10 s later anyway.
+      - platform: state
+        entity_id: sensor.dynamic_nordpool
+        attribute: raw_today
+      - platform: state
+        entity_id: sensor.dynamic_nordpool
+        attribute: raw_tomorrow
       - platform: template
         value_template: >
           {{ states('sensor.zendure_total_state_of_charge') | float(0) >= states('sensor.zendure_maximum_state_of_charge') | float(100) - 1 }}
@@ -1687,14 +1695,12 @@ template:
           - input_boolean.forecast_setting_smart_hold
           - input_boolean.forecast_setting_shared_battery_model
           - input_boolean.solar_surplus_discharge
-          - sensor.forecast_measured_charge_power
           - input_boolean.forecast_setting_calibration_charging
           - input_number.forecast_setting_calibration_days
           - sensor.zendure_last_calibration_days
           - input_number.dynamic_setting_minimal_spread
           - input_number.zendure_setting_max_charge_power
           - input_boolean.dynamic_setting_15_minute_interval
-          - sensor.dynamic_nordpool
           - sensor.zendure_minimum_state_of_charge
           - sensor.zendure_maximum_state_of_charge
     variables:

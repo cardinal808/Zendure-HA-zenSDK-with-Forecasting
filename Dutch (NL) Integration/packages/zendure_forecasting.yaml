@@ -1656,6 +1656,14 @@ template:
       # Elk kwartier, net na de prijswissel (en na het verbruiksprofiel op :05). Daarnaast direct bij
       # wijzigingen in instellingen of prijzen, en zodra de accu (bijna) op het max. laadpercentage zit
       # (stopt laden op tijd). Niet meer bij elke procent: binnen een kwartier verandert het plan niet.
+      # Nord Pool alleen bij nieuwe prijzen (raw_today / raw_tomorrow), niet bij de prijswissel per
+      # kwartier: die vangt het kwartierritme hieronder 10 s later al op.
+      - platform: state
+        entity_id: sensor.dynamisch_nordpool
+        attribute: raw_today
+      - platform: state
+        entity_id: sensor.dynamisch_nordpool
+        attribute: raw_tomorrow
       - platform: template
         value_template: >
           {{ states('sensor.zendure_2400_ac_laadpercentage') | float(0) >= states('sensor.zendure_2400_ac_maximale_laadpercentage') | float(100) - 1 }}
@@ -1691,11 +1699,9 @@ template:
           - input_boolean.forecast_kalibratieladen
           - input_number.forecast_kalibratie_dagen
           - sensor.zendure_2400_ac_laatste_kalibratie_dagen
-          - sensor.forecast_gemeten_laadvermogen
           - input_number.dynamisch_minimale_spread
           - input_number.zendure_2400_ac_max_oplaadvermogen
           - input_boolean.dynamisch_15_minuten
-          - sensor.dynamisch_nordpool
           - sensor.zendure_2400_ac_minimale_laadpercentage
           - sensor.zendure_2400_ac_maximale_laadpercentage
     variables:

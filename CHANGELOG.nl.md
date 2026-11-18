@@ -50,7 +50,7 @@ Versies volgen `jaar.maand.volgnummer`; het volgnummer begint elke maand bij 1. 
 - Inventaris van de oude berekeningen: zie de projectmap (`INVENTARIS-accumodel.md`).
 
 **Planner rekent niet meer bij elke procent**
-- De planner herberekent elk kwartier en bij wijzigingen in instellingen of prijzen, niet meer bij elke procent laadpercentage (dat was 10–35 keer per uur). Een extra trigger zodra de accu op 1% onder het max. laadpercentage zit, zodat het laden op tijd stopt.
+- De planner herberekent elk kwartier en bij wijzigingen in instellingen of prijzen, niet meer bij elke procent laadpercentage (dat was 10–35 keer per uur). Een extra trigger zodra de accu op 1% onder het max. laadpercentage zit, zodat het laden op tijd stopt. Nord Pool alleen bij nieuwe prijzen (`raw_today` / `raw_tomorrow`), niet meer bij de prijswissel per kwartier (die viel samen met het kwartierritme); het gemeten laadvermogen (alleen informatief) is geen trigger meer. Samen: 4 keer per uur, plus bij nieuwe prijzen en wijzigingen in instellingen.
 
 **Tools**
 - `tools/scenario_sim.py` `--model`: met de schakelaar Gedeeld accumodel aan.
