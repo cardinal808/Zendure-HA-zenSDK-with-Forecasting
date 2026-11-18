@@ -2199,11 +2199,11 @@ views:
               {% endif %}{% if a.planner != 'nieuw' %}{% set herplan = (a.morgen_laadmomenten | default([])) | length > 0 %}{% for b in lb if not (herplan and b.dag == 'morgen') %}- Laden {{ b.dag }} {{ b.start }}–{{ b.eind }}: {{ 'nog ' if b.bezig | default(false) else '' }}{{ b.minuten }} minuten, ongeveer {{ '%.1f' | format(b.kwh) }} kWh, gemiddeld €{{ '%.3f' | format(b.prijs) }}
               {% endfor %}{% endif %}
               {% set o = a.optimaal %}{% if o is mapping %}
-              {% set nw = a.planner == 'nieuw' %}### {{ 'Nieuwe planner' if nw else 'Nieuwe planner (rekent mee)' }}
+              {% set nw = a.planner == 'nieuw' %}### {{ 'Planning' if nw else 'Nieuwe planner (rekent mee)' }}
 
-              {{ 'De optimalisatie per kwartier stuurt laden en vasthouden aan (schakelaar *Nieuwe planner*).' if nw else 'De schakelaar *Nieuwe planner* staat uit: de huidige planner stuurt. Ter vergelijking rekent de nieuwe planner mee.' }}
+              {% if not nw %}De schakelaar *Nieuwe planner* staat uit: de huidige planner stuurt. Ter vergelijking rekent de nieuwe planner mee.
 
-              - Nu: **{{ o.nu }}**{% if not nw %} (huidig plan: {{ 'Laden' if states('sensor.zendure_forecast_plan') == 'Laden' else ('Vasthouden' if a.ontladen_vasthouden else 'Leveren') }}){% endif %}
+              {% endif %}- Nu: **{{ o.nu }}**{% if not nw %} (huidig plan: {{ 'Laden' if states('sensor.zendure_forecast_plan') == 'Laden' else ('Vasthouden' if a.ontladen_vasthouden else 'Leveren') }}){% endif %}
               - Laden: {% if (o.laden | default([])) | length > 0 %}{% for b in o.laden %}{{ b.van }}–{{ b.tot }} ({{ '%.1f' | format(b.kwh) }} kWh, gem. €{{ '%.3f' | format(b.prijs) }}){{ ', ' if not loop.last }}{% endfor %}{% else %}niets{% endif %}
               - Vasthouden: {% if (o.vasthouden | default([])) | length > 0 %}{% for b in o.vasthouden %}{{ b.van }}–{{ b.tot }}{{ ', ' if not loop.last }}{% endfor %}{% else %}niet{% endif %}
               {% if (o.terugleveren | default([])) | length > 0 %}- Terugleveren: {% for b in o.terugleveren %}{{ b.van }}–{{ b.tot }} ({{ '%.1f' | format(b.kwh) }} kWh, €{{ '%.3f' | format(b.prijs) }}){{ ', ' if not loop.last }}{% endfor %}

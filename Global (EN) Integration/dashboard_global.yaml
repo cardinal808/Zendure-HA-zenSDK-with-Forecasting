@@ -2194,11 +2194,11 @@ views:
               {% endif %}{% if a.planner != 'new' %}{% set replan = (a.tomorrow_charge_moments | default([])) | length > 0 %}{% for b in lb if not (replan and b.day == 'tomorrow') %}- Charge {{ b.day }} {{ b.start }}–{{ b.end }}: {{ b.minutes }} minutes{{ ' left' if b.running | default(false) else '' }}, about {{ '%.1f' | format(b.kwh) }} kWh, average €{{ '%.3f' | format(b.price) }}
               {% endfor %}{% endif %}
               {% set o = a.optimal %}{% if o is mapping %}
-              {% set nw = a.planner == 'new' %}### {{ 'New planner' if nw else 'New planner (calculating along)' }}
+              {% set nw = a.planner == 'new' %}### {{ 'Planning' if nw else 'New planner (calculating along)' }}
 
-              {{ 'The optimisation per quarter hour controls charging and holding (switch *New planner*).' if nw else 'The *New planner* switch is off: the current planner is in control. For comparison the new planner calculates along.' }}
+              {% if not nw %}The *New planner* switch is off: the current planner is in control. For comparison the new planner calculates along.
 
-              - Now: **{{ o.now }}**{% if not nw %} (current plan: {{ 'Charge' if states('sensor.zendure_forecast_plan') == 'Charge' else ('Hold' if a.hold_discharge else 'Supply') }}){% endif %}
+              {% endif %}- Now: **{{ o.now }}**{% if not nw %} (current plan: {{ 'Charge' if states('sensor.zendure_forecast_plan') == 'Charge' else ('Hold' if a.hold_discharge else 'Supply') }}){% endif %}
               - Charge: {% if (o.charge | default([])) | length > 0 %}{% for b in o.charge %}{{ b.from }}–{{ b.until }} ({{ '%.1f' | format(b.kwh) }} kWh, avg. €{{ '%.3f' | format(b.price) }}){{ ', ' if not loop.last }}{% endfor %}{% else %}nothing{% endif %}
               - Hold: {% if (o.hold | default([])) | length > 0 %}{% for b in o.hold %}{{ b.from }}–{{ b.until }}{{ ', ' if not loop.last }}{% endfor %}{% else %}no{% endif %}
               {% if (o.export | default([])) | length > 0 %}- Export: {% for b in o.export %}{{ b.from }}–{{ b.until }} ({{ '%.1f' | format(b.kwh) }} kWh, €{{ '%.3f' | format(b.price) }}){{ ', ' if not loop.last }}{% endfor %}
