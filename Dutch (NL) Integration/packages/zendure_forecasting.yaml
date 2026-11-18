@@ -3545,7 +3545,9 @@ template:
       # van vandaag als morgen nog onbekend is): L = laden uit het net (vol vermogen), H = vasthouden
       # (huis uit het net), N = normaal (accu levert het huis). Zon-overschot gaat altijd in de accu
       # zolang er ruimte is. Methode: dynamisch programmeren over de laadstand in c_opt_stappen stappen
-      # (achterwaarts de kosten per stand, daarna vooruit het pad vanaf de stand van nu). Wat er aan het
+      # (achterwaarts de kosten per stand, met en zonder laden in het vorige slot; daarna vooruit vanaf de
+      # echte laadstand van nu, per slot de goedkoopste actie met één stap vooruitkijken, zonder afronding).
+      # Een laadstart kost c_opt_laadstart, zodat laden in blokken wint bij een klein prijsverschil. Wat er aan het
       # eind in de accu zit, telt mee tegen de goedkoopste prijs x rendement ontladen.
       # Rendementsfilter, minimale spread, slim vasthouden, vasthouden tussen laadslots, de dal-blokkade
       # en de pad-check volgen hier vanzelf uit de prijzen; de laadmarge, kalibratieladen en terugleveren
@@ -3553,6 +3555,8 @@ template:
       # (niet in de kosten). Met de schakelaar Nieuwe planner stuurt dit plan laden en vasthouden aan;
       # kalibratieladen loopt dan via de kalibratieslots van de huidige planner.
       c_opt_stappen: 40
+      # Kosten per laadstart (EUR): laden in blokken wint van laden-vasthouden-laden bij een klein prijsverschil
+      c_opt_laadstart: 0.02
       opt_f: "{{ 1 + ([marge_pct, 0] | max) / 100 }}"
       opt: >
         {%- set sl = (accu_slots | selectattr('e', 'gt', nu_ts) | list) if model_nieuw else [] -%}
@@ -3560,30 +3564,30 @@ template:
         {%- else -%}
           {%- set n_st = c_opt_stappen | int -%}{%- set K = n_st + 1 -%}{%- set st = s_max / n_st -%}
           {%- set eindw = ([sl | map(attribute='v') | min, 0] | max) * eff_out -%}
-          {%- set ns = namespace(V=[], pol=[]) -%}
-          {%- for k in range(K) -%}{%- set ns.V = ns.V + [0 - k * st * eindw] -%}{%- endfor -%}
-          {#- Achterwaarts: per slot en per laadstand de goedkoopste actie -#}
+          {#- W[i] = kosten vanaf het begin van slot i per laadstand, [zonder, met] laden in het vorige slot -#}
+          {%- set ns = namespace(V0=[], V1=[], W=[]) -%}
+          {%- for k in range(K) -%}{%- set ns.V0 = ns.V0 + [0 - k * st * eindw] -%}{%- endfor -%}
+          {%- set ns.V1 = ns.V0 -%}{%- set ns.W = [[ns.V0, ns.V1]] -%}
+          {#- Achterwaarts: per slot en per laadstand de goedkoopste actie (laadstart kost c_opt_laadstart) -#}
           {%- for x in sl | reverse -%}
             {%- set dur = (x.e - x.a) / 3600 -%}
             {%- set ll = ([x.k - x.d, 0] | max) * opt_f -%}
-            {%- set nv = namespace(V=[], P='') -%}
+            {%- set nv = namespace(V0=[], V1=[]) -%}
             {%- for k in range(K) -%}
               {%- set s1 = [k * st + x.o * eff_in, s_max] | min -%}
               {%- set q = s1 / st -%}{%- set i0 = [q | int, K - 2] | min -%}{%- set f = q - i0 -%}
-              {%- set ch = namespace(c=ll * x.v + ns.V[i0] * (1 - f) + ns.V[i0 + 1] * f, a='H') -%}
+              {%- set c_h = ll * x.v + ns.V0[i0] * (1 - f) + ns.V0[i0 + 1] * f -%}
               {%- set uit = [ll, s1 * eff_out, p_ontl_kw * dur] | min -%}
               {%- set q = (s1 - uit / eff_out) / st -%}{%- set i0 = [q | int, K - 2] | min -%}{%- set f = q - i0 -%}
-              {%- set c = (ll - uit) * x.v + ns.V[i0] * (1 - f) + ns.V[i0 + 1] * f -%}
-              {%- if c < ch.c - 0.00001 -%}{%- set ch.c = c -%}{%- set ch.a = 'N' -%}{%- endif -%}
+              {%- set c_m = [c_h, (ll - uit) * x.v + ns.V0[i0] * (1 - f) + ns.V0[i0 + 1] * f] | min -%}
               {%- set bij = [p_max_kw * dur * eff_in, s_max - s1] | min -%}
               {%- if bij > 0.001 -%}
                 {%- set q = (s1 + bij) / st -%}{%- set i0 = [q | int, K - 2] | min -%}{%- set f = q - i0 -%}
-                {%- set c = (ll + bij / eff_in) * x.v + ns.V[i0] * (1 - f) + ns.V[i0 + 1] * f -%}
-                {%- if c < ch.c - 0.00001 -%}{%- set ch.c = c -%}{%- set ch.a = 'L' -%}{%- endif -%}
-              {%- endif -%}
-              {%- set nv.V = nv.V + [ch.c] -%}{%- set nv.P = nv.P ~ ch.a -%}
+                {%- set c_l = (ll + bij / eff_in) * x.v + ns.V1[i0] * (1 - f) + ns.V1[i0 + 1] * f -%}
+              {%- else -%}{%- set c_l = c_m + 1 -%}{%- endif -%}
+              {%- set nv.V0 = nv.V0 + [[c_m, c_l + c_opt_laadstart] | min] -%}{%- set nv.V1 = nv.V1 + [[c_m, c_l] | min] -%}
             {%- endfor -%}
-            {%- set ns.V = nv.V -%}{%- set ns.pol = [nv.P] + ns.pol -%}
+            {%- set ns.V0 = nv.V0 -%}{%- set ns.V1 = nv.V1 -%}{%- set ns.W = [[ns.V0, ns.V1]] + ns.W -%}
           {%- endfor -%}
           {#- Vooruit: het pad vanaf nu, en ter vergelijking het huidige plan (acties uit de tijdlijn) -#}
           {%- set tl_l = tijdlijn.laden if tijdlijn is mapping else [] -%}
@@ -3598,7 +3602,22 @@ template:
             {%- for wie in ['opt', 'plan'] if wie == 'opt' or vgl -%}
               {%- set s0 = fw.s if wie == 'opt' else fw.sp -%}
               {%- set s1 = [s0 + x.o * eff_in, s_max] | min -%}
-              {%- if wie == 'opt' -%}{%- set act = ns.pol[i][[(s0 / st) | round(0) | int, K - 1] | min] -%}
+              {%- if wie == 'opt' -%}
+                {#- Actie met één stap vooruitkijken vanaf de echte laadstand (niet afgerond) -#}
+                {%- set vv = ns.W[i + 1] -%}{%- set lv = 1 if fw.a[-1:] == 'L' or (fw.a == '' and is_state('input_boolean.dynamisch_laden_loopt', 'on')) else 0 -%}
+                {%- set q = s1 / st -%}{%- set i0 = [q | int, K - 2] | min -%}{%- set f = q - i0 -%}
+                {%- set kz = namespace(c=ll * x.v + vv[0][i0] * (1 - f) + vv[0][i0 + 1] * f, a='H') -%}
+                {%- set uit = [ll, s1 * eff_out, p_ontl_kw * dur] | min -%}
+                {%- set q = (s1 - uit / eff_out) / st -%}{%- set i0 = [q | int, K - 2] | min -%}{%- set f = q - i0 -%}
+                {%- set c = (ll - uit) * x.v + vv[0][i0] * (1 - f) + vv[0][i0 + 1] * f -%}
+                {%- if c < kz.c - 0.00001 -%}{%- set kz.c = c -%}{%- set kz.a = 'N' -%}{%- endif -%}
+                {%- set bij = [p_max_kw * dur * eff_in, s_max - s1] | min -%}
+                {%- if bij > 0.001 -%}
+                  {%- set q = (s1 + bij) / st -%}{%- set i0 = [q | int, K - 2] | min -%}{%- set f = q - i0 -%}
+                  {%- set c = (ll + bij / eff_in) * x.v + vv[1][i0] * (1 - f) + vv[1][i0 + 1] * f + (0 if lv == 1 else c_opt_laadstart) -%}
+                  {%- if c < kz.c - 0.00001 -%}{%- set kz.c = c -%}{%- set kz.a = 'L' -%}{%- endif -%}
+                {%- endif -%}
+                {%- set act = kz.a -%}
               {%- else -%}{%- set act = 'L' if tl_l[i] == 1 else ('H' if tl_v[i] == 1 else 'N') -%}{%- endif -%}
               {%- if act == 'L' -%}{%- set bij = [p_max_kw * dur * eff_in, s_max - s1] | min -%}{%- set s2 = s1 + bij -%}{%- set c = (ll + bij / eff_in) * x.v -%}
               {%- elif act == 'N' -%}{%- set uit = [ll, s1 * eff_out, p_ontl_kw * dur] | min -%}{%- set s2 = s1 - uit / eff_out -%}{%- set c = (ll - uit) * x.v -%}
