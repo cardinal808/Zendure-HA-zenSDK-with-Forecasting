@@ -4277,23 +4277,16 @@ views:
               counters of your grid meter are detected automatically (SlimmeLezer,
               HomeWizard, DSMR integration); you then see which sensor it uses. With another meter, e.g. a
               Shelly Pro 3EM, enter the grid import and export counter (several
-              sensors separated by a comma, e.g. tariff 1 and 2). **Hold discharge in
-              cheap dip**: the battery does not supply in cheap dips when grid
-              charging is still needed. **Smart hold**: if the battery won't last until
-              the sun or the next charge moment, it keeps its charge for the most
-              expensive quarter hours (no extra loss; on by default).
-              Apart from that the battery always holds between two charge slots when
-              supplying now and charging back later with loss costs more than buying now.
-              **Shared battery model (new, test)**: the path check, the start of the
-              shortfall, smart hold, the Plan Timeline and *battery empty* use the same
-              battery trajectory (one solar source, holding like the automation). Off by
-              default; turn it on to test, and off again if the plan behaves oddly.
-              **New planner** (on by default since 2026.11.8): one calculation per quarter
-              hour (see *New planner* with the plan) decides when the battery charges,
-              supplies or holds. Turns the shared battery model on by itself. The charge
-              margin counts as extra usage; calibration charging is in the calculation; the
-              AC works as always. Turn off = fall back to the current planner (kept for one
-              more version).
+              sensors separated by a comma, e.g. tariff 1 and 2). **New planner** (on by default since 2026.11.8): one calculation per quarter
+              hour (see *Planning* with the plan) decides when the battery charges,
+              supplies or holds. It finds cheap dips and the most expensive quarter hours by
+              itself. The charge margin counts as extra usage; calibration charging is in the
+              calculation; the AC works as always. Turn off = fall back to the old planner
+              (kept for one more version); the old planner's switches then appear as well:
+              **Hold discharge in cheap dip** (the battery does not supply in cheap dips when
+              grid charging is still needed) and **Smart hold** (if the battery won't last
+              until the sun or the next charge moment, it keeps its charge for the most
+              expensive quarter hours).
               **New planner may export (test)**: the new planner may also send the battery
               to the grid when that yields more than keeping the charge (for example making
               room for the sun in the morning, or exporting stored solar in the evening). It
@@ -4563,12 +4556,20 @@ views:
                 row:
                   entity: input_number.forecast_setting_solar_reliability_dec
                   name: December %
-              - entity: input_boolean.forecast_setting_hold_discharge_in_dip
-                name: Hold discharge in cheap dip (save the battery)
-              - entity: input_boolean.forecast_setting_smart_hold
-                name: Smart hold (keep the charge for the most expensive quarter hours)
-              - entity: input_boolean.forecast_setting_shared_battery_model
-                name: Shared battery model (new, test)
+              - type: conditional
+                conditions:
+                  - entity: input_boolean.forecast_setting_new_planner
+                    state: 'off'
+                row:
+                  entity: input_boolean.forecast_setting_hold_discharge_in_dip
+                  name: Hold discharge in cheap dip (old planner)
+              - type: conditional
+                conditions:
+                  - entity: input_boolean.forecast_setting_new_planner
+                    state: 'off'
+                row:
+                  entity: input_boolean.forecast_setting_smart_hold
+                  name: Smart hold (old planner)
               - entity: input_boolean.forecast_setting_new_planner
                 name: New planner (off = current planner)
               - entity: input_boolean.forecast_setting_new_planner_export

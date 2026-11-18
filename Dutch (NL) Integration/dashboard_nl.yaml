@@ -4283,22 +4283,16 @@ views:
               percentage van de batterijcapaciteit. De kWh-tellers van je netmeter worden automatisch herkend
               (SlimmeLezer, HomeWizard, DSMR-integratie); je ziet dan welke sensor hij gebruikt. Heb je een andere meter, bv.
               een Shelly Pro 3EM, vul dan de net import- en exportteller in (meerdere
-              sensoren met een komma, bv. tarief 1 en 2). **Niet ontladen in goedkoop
-              dal**: de accu levert niet in goedkope dalen als er nog uit het net
-              bijgeladen moet worden. **Slim vasthouden**: haalt de accu het niet tot
-              de zon of het volgende laadmoment, dan bewaart hij zijn lading voor de
-              duurste kwartieren (kost geen extra verlies; staat standaard aan).
-              Los daarvan houdt de accu altijd vast tussen twee laadslots als nu
-              leveren en later met verlies bijladen duurder is dan nu inkopen.
-              **Gedeeld accumodel (nieuw, test)**: de pad-check, het begin van het tekort,
-              slim vasthouden, de Plan Tijdlijn en *accu leeg* rekenen met hetzelfde
-              verloop van de accu (één zonbron, vasthouden zoals de automation). Staat
-              standaard uit; zet hem aan om te testen, en weer uit als het plan vreemd doet.
-              **Nieuwe planner** (standaard aan sinds 2026.11.8): één berekening per kwartier
-              (zie *Nieuwe planner* bij het plan) bepaalt wanneer de accu laadt, levert of
-              vasthoudt. Zet het gedeelde accumodel vanzelf aan. De laadmarge telt als extra
-              verbruik; kalibratieladen zit in de berekening; de airco werkt zoals altijd.
-              Uitzetten = terugval naar de huidige planner (blijft nog één versie bestaan).
+              sensoren met een komma, bv. tarief 1 en 2). **Nieuwe planner** (standaard aan sinds 2026.11.8): één berekening per kwartier
+              (zie *Planning* bij het plan) bepaalt wanneer de accu laadt, levert of
+              vasthoudt. Goedkope dalen en de duurste kwartieren vindt hij zelf. De laadmarge
+              telt als extra verbruik; kalibratieladen zit in de berekening; de airco werkt
+              zoals altijd. Uitzetten = terugval naar de oude planner (blijft nog één versie
+              bestaan); dan verschijnen ook de schakelaars van de oude planner:
+              **Niet ontladen in goedkoop dal** (de accu levert niet in goedkope dalen als er
+              nog uit het net bijgeladen moet worden) en **Slim vasthouden** (haalt de accu het
+              niet tot de zon of het volgende laadmoment, dan bewaart hij zijn lading voor de
+              duurste kwartieren).
               **Nieuwe planner mag terugleveren (test)**: de nieuwe planner mag de accu ook
               naar het net leveren als dat meer oplevert dan de lading bewaren (bijvoorbeeld
               's ochtends ruimte maken voor de zon, of opgeslagen zon 's avonds terugleveren).
@@ -4568,12 +4562,20 @@ views:
                 row:
                   entity: input_number.forecast_betrouwbaarheid_dec
                   name: December %
-              - entity: input_boolean.forecast_dal_ontladen_blokkeren
-                name: Niet ontladen in goedkoop dal (accu sparen)
-              - entity: input_boolean.forecast_slim_vasthouden
-                name: Slim vasthouden (lading bewaren voor de duurste kwartieren)
-              - entity: input_boolean.forecast_gedeeld_accumodel
-                name: Gedeeld accumodel (nieuw, test)
+              - type: conditional
+                conditions:
+                  - entity: input_boolean.forecast_nieuwe_planner
+                    state: 'off'
+                row:
+                  entity: input_boolean.forecast_dal_ontladen_blokkeren
+                  name: Niet ontladen in goedkoop dal (oude planner)
+              - type: conditional
+                conditions:
+                  - entity: input_boolean.forecast_nieuwe_planner
+                    state: 'off'
+                row:
+                  entity: input_boolean.forecast_slim_vasthouden
+                  name: Slim vasthouden (oude planner)
               - entity: input_boolean.forecast_nieuwe_planner
                 name: Nieuwe planner (uit = huidige planner)
               - entity: input_boolean.forecast_nieuwe_planner_terugleveren
