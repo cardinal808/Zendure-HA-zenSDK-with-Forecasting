@@ -4,6 +4,11 @@ Versies volgen `jaar.maand.volgnummer`; het volgnummer begint elke maand bij 1. 
 
 ## 2026.11.8 (in ontwikkeling) — gebaseerd op Gielz v20261113
 
+**Nieuw vereist pakket: Recorder (`zendure_recorder.yaml`)**
+- Slaat vaak bijwerkende entiteiten van de set niet op in de recorder: de Gielz-automatisering, vermogens en indicaties zonder grafiek, de grafiekdata (> 16 kB), hulpsensoren (prijzen reserve, sensorkandidaten, meldingen), de bronnen van de kWh-tellers en de logs van het Export-pakket. De sensoren werken gewoon door; alleen hun geschiedenis vervalt.
+- Bewust niet uitgesloten: wat in een grafiek staat (Zendure vermogen aansturing, de drie PV-vermogens) en de bronnen van gemiddelden, tellers en statistieken.
+- Werkt naast een eigen `recorder:` in configuration.yaml (Home Assistant voegt de lijsten samen); zet in het pakket geen losse sleutels zoals `purge_keep_days`.
+
 **Nieuw optioneel pakket: Quooker (`zendure_quooker.yaml`)**
 - Korte, hoge pieken van bv. een Quooker (naverwarmen, ook 's nachts om de paar uur ~2,2 kW), waterkoker of inductieplaat komen uit het net in plaats van uit de accu. Zonder dit pakket volgt de accu in de NOM-modussen elke piek: op- en afschakelen, vaak omschakelen van het relais en na de piek kort terugleveren door de regelvertraging.
 - Vul bij **Vermogenssensoren** één of meer sensoren in, gescheiden door komma's (W, kW of A; A × 230 V). Boven de **drempel** (standaard 1000 W) is `sensor.zendure_quooker_ontlaad_correctie` het opgetelde vermogen; de NOM-ontlaadblokken trekken dat af van de P1-meter, net als bij de auto en de airco. Bij laden uit zon verandert er niets: de piek gaat dan van het laadvermogen af.

@@ -1,0 +1,58 @@
+# Zendure zenSDK (Gielz) + Forecasting 2026.11.8 | based on Gielz v20261113
+# Based on Gielz1986/Zendure-HA-zenSDK (Michiel Hofker). See README.md for license and changes.
+# REQUIRED PACKAGE - part of the base of this set (next to zendure_gielz1986_global.yaml).
+# =====================================================================
+# Zendure Recorder - keeps the database small
+#
+# Does not store frequently updating entities of the set in the recorder. The sensors themselves
+# keep working (also after a restart); only their history is not kept.
+#
+# Works next to your own recorder: block in configuration.yaml: Home Assistant merges the lists.
+# Do not put single keys such as purge_keep_days or db_url here; they give an error when they are
+# also in configuration.yaml. Restart Home Assistant after adding it.
+#
+# Deliberately NOT excluded:
+#   - sensor.zendure_power                                (charts on the dashboard)
+#   - sensor.zendure_power_pv_total / _pv_to_home / _pv_to_battery
+#                                                         (Solar panels chart)
+#   - sensor.zendure_import_efficiency / _export_efficiency (source of the 24-hour averages)
+#   - sensor.zendure_charging_mode                        (source of the relay switching counters)
+#   - sensor.forecast_grid_charge_power                   (source of Measured Charge Power)
+#   - sensor.forecast_counter_*                           (source of the 7-day statistics)
+#   - sensor.zendure_forecast_plan                        (history of decisions)
+# =====================================================================
+
+recorder:
+  exclude:
+    entities:
+      # Gielz automation: a record on every run, traces are kept separately
+      - automation.zendure_zensdk_gielz_global
+      # Gielz: powers and indications without a chart on the dashboard
+      - sensor.zendure_power_export
+      - sensor.zendure_power_export_dc
+      - sensor.zendure_power_import
+      - sensor.zendure_power_import_dc
+      - sensor.zendure_power_to_home
+      - sensor.zendure_power_from_home
+      - sensor.zendure_power_offgrid_outlet_1
+      - sensor.zendure_set_discharge_power
+      - sensor.zendure_set_charge_power
+      - sensor.zendure_battery_voltage
+      - sensor.zendure_indication_remaining_discharge_time
+      - sensor.zendure_indication_remaining_charge_time
+      # Forecasting: chart data > 16 kB, read live
+      - sensor.zendure_forecast_chart
+      # Forecasting: helper sensors that are only read live
+      - sensor.forecast_price_backup
+      - sensor.forecast_sensor_candidates
+      - sensor.forecast_notices
+      # Forecasting: sources of the kWh counters (the integration needs no history)
+      - sensor.forecast_zendure_charge_power
+      - sensor.forecast_zendure_discharge_power
+      - sensor.forecast_zendure_charge_from_solar_power
+      - sensor.forecast_grid_import_power
+      - sensor.forecast_grid_export_power
+      - sensor.forecast_grid_export_from_solar_power
+    entity_globs:
+      # Optional Export package: logs are in the attributes
+      - sensor.zendure_diagnostics_*

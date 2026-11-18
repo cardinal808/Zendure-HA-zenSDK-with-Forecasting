@@ -4,6 +4,11 @@ Versions follow `year.month.sequence`; the sequence restarts at 1 every month. E
 
 ## 2026.11.8 (in development) — based on Gielz v20261113
 
+**New required package: Recorder (`zendure_recorder_global.yaml`)**
+- Does not record frequently updating entities of the set: the Gielz automation, powers and indications without a chart, the chart data (> 16 kB), helper sensors (price backup, sensor candidates, notices), the sources of the kWh counters and the logs of the Export package. The sensors keep working; only their history is dropped.
+- Deliberately not excluded: what is shown in a chart (Zendure power, the three PV powers) and the sources of averages, counters and statistics.
+- Works next to your own `recorder:` in configuration.yaml (Home Assistant merges the lists); do not put single keys such as `purge_keep_days` in the package.
+
 **New optional package: Quooker (`zendure_quooker_global.yaml`)**
 - Short, high peaks from e.g. a boiling-water tap such as a Quooker (reheating, also at night every few hours ~2.2 kW), kettle or induction hob come from the grid instead of the battery. Without this package the battery follows every peak in the Smart Matching modes: ramping up and down, frequent relay switching and, because of the control delay, a brief export after the peak.
 - Enter one or more **power sensors**, separated by commas (W, kW or A; A × 230 V). Above the **threshold** (default 1000 W) `sensor.zendure_quooker_discharge_correction` is the summed power; the Smart Matching discharge blocks subtract it from the grid meter, just like the car and the air conditioner. Charging from solar is unchanged: the peak then comes off the charging power.

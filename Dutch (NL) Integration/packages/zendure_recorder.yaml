@@ -1,0 +1,58 @@
+# Zendure zenSDK (Gielz) + Forecasting 2026.11.8 | gebaseerd op Gielz v20261113
+# Gebaseerd op Gielz1986/Zendure-HA-zenSDK (Michiel Hofker). Zie README.md voor licentie en wijzigingen.
+# VEREIST PAKKET - hoort bij de basis van deze set (naast zendure_gielz1986_nl.yaml).
+# =====================================================================
+# Zendure Recorder - houdt de database klein
+#
+# Slaat vaak bijwerkende entiteiten van de set niet op in de recorder. De sensoren zelf werken
+# gewoon door (ook na een herstart); alleen hun geschiedenis wordt niet bewaard.
+#
+# Werkt naast een eigen recorder:-blok in configuration.yaml: Home Assistant voegt de lijsten
+# samen. Zet hier geen losse sleutels zoals purge_keep_days of db_url; die geven een fout als ze
+# ook in configuration.yaml staan. Herstart Home Assistant na het plaatsen.
+#
+# Bewust NIET uitgesloten:
+#   - sensor.zendure_2400_ac_vermogen_aansturing          (grafieken op het dashboard)
+#   - sensor.zendure_2400_ac_vermogen_pv_totaal / _pv_naar_huis / _pv_naar_batterij
+#                                                         (grafiek Zonnepanelen)
+#   - sensor.zendure_2400_ac_efficientie_import / _export (bron van de 24-uurs gemiddelden)
+#   - sensor.zendure_2400_ac_modus                        (bron van de relaisschakelingen-tellers)
+#   - sensor.forecast_netladen_vermogen                   (bron van Gemeten Laadvermogen)
+#   - sensor.forecast_teller_*                            (bron van de 7-dagen-statistieken)
+#   - sensor.zendure_forecast_plan                        (historie van beslissingen)
+# =====================================================================
+
+recorder:
+  exclude:
+    entities:
+      # Gielz-automatisering: elke run een record, traces staan apart
+      - automation.zendure_zensdk_gielz
+      # Gielz: vermogens en indicaties zonder grafiek op het dashboard
+      - sensor.zendure_2400_ac_vermogen_export
+      - sensor.zendure_2400_ac_vermogen_export_dc
+      - sensor.zendure_2400_ac_vermogen_import
+      - sensor.zendure_2400_ac_vermogen_import_dc
+      - sensor.zendure_2400_ac_vermogen_naar_huis
+      - sensor.zendure_2400_ac_vermogen_van_huis
+      - sensor.zendure_2400_ac_vermogen_offgrid_stopcontact_1
+      - sensor.zendure_2400_ac_ingesteld_ontlaadvermogen
+      - sensor.zendure_2400_ac_ingesteld_oplaadvermogen
+      - sensor.zendure_2400_ac_batterijspanning
+      - sensor.zendure_2400_ac_resterende_ontlaad_tijd
+      - sensor.zendure_2400_ac_resterende_oplaad_tijd
+      # Forecasting: grafiekdata > 16 kB, wordt live gelezen
+      - sensor.zendure_forecast_grafiek
+      # Forecasting: hulpsensoren die alleen live gelezen worden
+      - sensor.forecast_prijzen_reserve
+      - sensor.forecast_sensor_kandidaten
+      - sensor.forecast_meldingen
+      # Forecasting: bronnen van de kWh-tellers (de integratie heeft geen historie nodig)
+      - sensor.forecast_zendure_laden_vermogen
+      - sensor.forecast_zendure_ontladen_vermogen
+      - sensor.forecast_zendure_laden_uit_zon_vermogen
+      - sensor.forecast_p1_import_vermogen
+      - sensor.forecast_p1_export_vermogen
+      - sensor.forecast_p1_export_uit_zon_vermogen
+    entity_globs:
+      # Optioneel pakket Export: logs staan in de attributen
+      - sensor.zendure_diagnose_*
