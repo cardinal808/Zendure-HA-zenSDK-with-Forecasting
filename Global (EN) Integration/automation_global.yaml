@@ -2005,7 +2005,7 @@ actions:
           - action: logbook.log
             data:
               message: >-
-                ☀️Dynamic Smart Matching + Forecasting export started ({{ state_attr('binary_sensor.forecast_solar_surplus_export', 'reason') }}) — {% if state_attr('sensor.zendure_forecast_plan', 'pre_discharge_export_now') %}{{ state_attr('sensor.zendure_forecast_plan', 'pre_discharge_export_kwh') }} kWh planned before the negative prices{% else %}{{ state_attr('sensor.zendure_forecast_plan', 'solar_surplus_export_kwh') }} kWh planned before the sun{% endif %}
+                ☀️Dynamic Smart Matching + Forecasting export started ({{ state_attr('binary_sensor.forecast_solar_surplus_export', 'reason') }}) — {% if state_attr('sensor.zendure_forecast_plan', 'planner') == 'new' %}{{ (state_attr('sensor.zendure_forecast_plan', 'optimal') or {}).get('export_kwh', 0) }} kWh planned until the end of the known prices{% elif state_attr('sensor.zendure_forecast_plan', 'pre_discharge_export_now') %}{{ state_attr('sensor.zendure_forecast_plan', 'pre_discharge_export_kwh') }} kWh planned before the negative prices{% else %}{{ state_attr('sensor.zendure_forecast_plan', 'solar_surplus_export_kwh') }} kWh planned before the sun{% endif %}
               entity_id: input_select.zendure_operation_mode
               name: " "
           - wait_for_trigger:

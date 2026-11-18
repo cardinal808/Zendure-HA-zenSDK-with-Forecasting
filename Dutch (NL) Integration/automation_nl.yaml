@@ -2029,7 +2029,7 @@ actions:
           - action: logbook.log
             data:
               message: >-
-                ☀️Dynamisch NOM + Forecasting terugleveren gestart ({{ state_attr('binary_sensor.forecast_zonoverschot_terugleveren', 'reden') }}) — {% if state_attr('sensor.zendure_forecast_plan', 'vooraf_terugleveren_nu') %}{{ state_attr('sensor.zendure_forecast_plan', 'vooraf_terugleveren_kwh') }} kWh gepland vóór de negatieve prijzen{% else %}{{ state_attr('sensor.zendure_forecast_plan', 'zonoverschot_kwh') }} kWh gepland vóór de zon{% endif %}
+                ☀️Dynamisch NOM + Forecasting terugleveren gestart ({{ state_attr('binary_sensor.forecast_zonoverschot_terugleveren', 'reden') }}) — {% if state_attr('sensor.zendure_forecast_plan', 'planner') == 'nieuw' %}{{ (state_attr('sensor.zendure_forecast_plan', 'optimaal') or {}).get('terugleveren_kwh', 0) }} kWh gepland tot het einde van de bekende prijzen{% elif state_attr('sensor.zendure_forecast_plan', 'vooraf_terugleveren_nu') %}{{ state_attr('sensor.zendure_forecast_plan', 'vooraf_terugleveren_kwh') }} kWh gepland vóór de negatieve prijzen{% else %}{{ state_attr('sensor.zendure_forecast_plan', 'zonoverschot_kwh') }} kWh gepland vóór de zon{% endif %}
               entity_id: input_select.zendure_2400_ac_modus_selecteren
               name: " "
           - wait_for_trigger:

@@ -203,6 +203,11 @@ input_boolean:
   forecast_setting_new_planner:
     name: Forecast New Planner
     icon: mdi:chart-timeline-variant-shimmer
+  # New planner may export from the battery (test, off by default). Only works when Gielz's PV Export
+  # Disabled is off (otherwise the Zendure is not allowed to export).
+  forecast_setting_new_planner_export:
+    name: Forecast New Planner Export
+    icon: mdi:transmission-tower-export
   # Internal: smart hold has been turned on by default once
   forecast_setting_smart_hold_set:
     name: Forecast Smart Hold Set
@@ -825,7 +830,7 @@ template:
              or state_attr('sensor.zendure_forecast_plan', 'pre_discharge_export_now') == true }}
         attributes:
           reason: >
-            {{ 'negative prices' if state_attr('sensor.zendure_forecast_plan', 'pre_discharge_export_now') == true else 'solar surplus' }}
+            {{ 'new planner' if state_attr('sensor.zendure_forecast_plan', 'planner') == 'new' else ('negative prices' if state_attr('sensor.zendure_forecast_plan', 'pre_discharge_export_now') == true else 'solar surplus') }}
   - binary_sensor:
       - name: "Forecast Grid Import Counter Automatic"
         unique_id: forecast_grid_import_counter_automatic
@@ -1701,6 +1706,7 @@ template:
           - input_boolean.forecast_setting_smart_hold
           - input_boolean.forecast_setting_shared_battery_model
           - input_boolean.forecast_setting_new_planner
+          - input_boolean.forecast_setting_new_planner_export
           - input_boolean.solar_surplus_discharge
           - input_boolean.forecast_setting_calibration_charging
           - input_number.forecast_setting_calibration_days
@@ -3043,7 +3049,8 @@ template:
       sx_feedin: >
         {%- set ns = namespace(l=[]) -%}
         {#- Until the end of the sun (solar surplus) or the start of the negative window (pre-discharge) -#}
-        {%- set fp_end = [sx_solar.e if sx_solar is mapping else 0, pd_window.s if pd_on and pd_window is mapping else 0] | max -%}
+        {#- With the new planner: the whole horizon (it weighs export per quarter hour) -#}
+        {%- set fp_end = [sx_solar.e if sx_solar is mapping else 0, pd_window.s if pd_on and pd_window is mapping else 0, (path_cand | map(attribute='e') | max) if planner_new and path_cand | length > 0 else 0] | max -%}
         {%- if fp_end > now_ts -%}
           {%- set markup = states('input_number.savings_setting_dynamic_feedin_markup') | float(0) -%}
           {%- set bonus = states('input_number.savings_setting_dynamic_feedin_bonus') | float(0) / 100 -%}
@@ -3076,7 +3083,9 @@ template:
             {%- set day = sr <= 0 or ss <= 0 or (((x.s + x.e) / 2 - sr) % 86400) < (ss - sr) -%}
             {%- set bon = (bonus * ([bare + markup, 0] | max)) if day else 0 -%}
             {%- set f = mp + bon + markup + (tax_nm if nm else 0) -%}
-            {%- set ns.l = ns.l + [{'s': x.s, 'e': x.e, 'f': f | round(4)}] -%}
+            {#- fx: without net metering (market price excl. VAT + markup + bonus). The new planner values export
+                with this: safe for whoever exports more than they import over the year, and the real price from 2027. -#}
+            {%- set ns.l = ns.l + [{'s': x.s, 'e': x.e, 'f': f | round(4), 'fx': (bare + bon + markup) | round(4), 'mk': mq.n > 0}] -%}
           {%- endfor -%}
         {%- endif -%}
         {{ ns.l }}
@@ -3560,12 +3569,22 @@ template:
       # Costs per charge start (EUR): charging in blocks beats charge-hold-charge at a small price difference
       c_opt_charge_start: 0.02
       opt_f: "{{ 1 + ([margin_pct, 0] | max) / 100 }}"
+      # Export by the new planner: switch on and Gielz's PV Export Disabled off
+      opt_x: "{{ planner_new and is_state('input_boolean.forecast_setting_new_planner_export', 'on') and not is_state('input_boolean.zendure_setting_pv_export_disabled', 'on') }}"
+      # Feed-in price per slot (without net metering) for the new planner; surplus that does not fit yields this
+      opt_fx: >
+        {%- set ns = namespace(d={}) -%}
+        {#- Only with a real market price (market price sensor): without it sx_feedin falls back to the all-in price -#}
+        {%- if planner_new -%}{%- for x in sx_feedin if x.mk -%}{%- set ns.d = dict(ns.d, **{(x.s | int | string): x.fx}) -%}{%- endfor -%}{%- endif -%}
+        {{ ns.d }}
       opt: >
         {%- set sl = (bat_slots | selectattr('e', 'gt', now_ts) | list) if model_new else [] -%}
         {%- if sl | length == 0 or s_max <= 0 or eff_in <= 0 or eff_out <= 0 -%}{{ {} }}
         {%- else -%}
           {%- set n_st = c_opt_steps | int -%}{%- set K = n_st + 1 -%}{%- set st = s_max / n_st -%}
-          {%- set endv = ([sl | map(attribute='v') | min, 0] | max) * eff_out -%}
+          {#- With export the charge at the end counts at the cheapest price without losses: otherwise it exports at the
+              end of the horizon what turns out to be worth more after the next recalculation -#}
+          {%- set endv = ([sl | map(attribute='v') | min, 0] | max) * (1 if opt_x else eff_out) -%}
           {#- W[i] = costs from the start of slot i per state of charge, [without, with] charging in the previous slot -#}
           {%- set ns = namespace(V0=[], V1=[], W=[]) -%}
           {%- for k in range(K) -%}{%- set ns.V0 = ns.V0 + [0 - k * st * endv] -%}{%- endfor -%}
@@ -3574,18 +3593,25 @@ template:
           {%- for x in sl | reverse -%}
             {%- set dur = (x.e - x.a) / 3600 -%}
             {%- set ll = ([x.k - x.d, 0] | max) * opt_f -%}
+            {%- set fx = opt_fx.get(x.s | int | string, 0) if opt_fx is mapping else 0 -%}{%- set fxp = [fx, 0] | max -%}
             {%- set nv = namespace(V0=[], V1=[]) -%}
             {%- for k in range(K) -%}
               {%- set s1 = [k * st + x.o * eff_in, s_max] | min -%}
+              {%- set sp = (x.o - (s1 - k * st) / eff_in) * fxp -%}
               {%- set q = s1 / st -%}{%- set i0 = [q | int, K - 2] | min -%}{%- set f = q - i0 -%}
-              {%- set c_h = ll * x.v + ns.V0[i0] * (1 - f) + ns.V0[i0 + 1] * f -%}
+              {%- set c_h = ll * x.v - sp + ns.V0[i0] * (1 - f) + ns.V0[i0 + 1] * f -%}
               {%- set out = [ll, s1 * eff_out, p_disch_kw * dur] | min -%}
               {%- set q = (s1 - out / eff_out) / st -%}{%- set i0 = [q | int, K - 2] | min -%}{%- set f = q - i0 -%}
-              {%- set c_m = [c_h, (ll - out) * x.v + ns.V0[i0] * (1 - f) + ns.V0[i0 + 1] * f] | min -%}
+              {%- set c_m = [c_h, (ll - out) * x.v - sp + ns.V0[i0] * (1 - f) + ns.V0[i0 + 1] * f] | min -%}
+              {%- if opt_x and fx > 0 -%}
+                {%- set xo = [s1 * eff_out, p_disch_kw * dur] | min -%}{%- set xh = [ll, xo] | min -%}
+                {%- set q = (s1 - xo / eff_out) / st -%}{%- set i0 = [q | int, K - 2] | min -%}{%- set f = q - i0 -%}
+                {%- set c_m = [c_m, (ll - xh) * x.v - sp - (xo - xh) * fx + ns.V0[i0] * (1 - f) + ns.V0[i0 + 1] * f] | min -%}
+              {%- endif -%}
               {%- set add = [p_max_kw * dur * eff_in, s_max - s1] | min -%}
               {%- if add > 0.001 -%}
                 {%- set q = (s1 + add) / st -%}{%- set i0 = [q | int, K - 2] | min -%}{%- set f = q - i0 -%}
-                {%- set c_l = (ll + add / eff_in) * x.v + ns.V1[i0] * (1 - f) + ns.V1[i0 + 1] * f -%}
+                {%- set c_l = (ll + add / eff_in) * x.v - sp + ns.V1[i0] * (1 - f) + ns.V1[i0 + 1] * f -%}
               {%- else -%}{%- set c_l = c_m + 1 -%}{%- endif -%}
               {%- set nv.V0 = nv.V0 + [[c_m, c_l + c_opt_charge_start] | min] -%}{%- set nv.V1 = nv.V1 + [[c_m, c_l] | min] -%}
             {%- endfor -%}
@@ -3595,7 +3621,7 @@ template:
           {%- set tl_l = timeline.charge if timeline is mapping else [] -%}
           {%- set tl_v = timeline.hold if timeline is mapping else [] -%}
           {%- set cmp = tl_l | length == sl | length and tl_v | length == sl | length -%}
-          {%- set fw = namespace(s=s_now, sp=s_now, a='', c=0, cp=0, empty=0, mid=-1, net=0, blok=[], cur=none, tl_l=[], tl_v=[], tl_a=[], tl_s=[], tl_n=[]) -%}
+          {%- set fw = namespace(s=s_now, sp=s_now, a='', c=0, cp=0, empty=0, mid=-1, net=0, terug=0, blok=[], cur=none, tl_l=[], tl_v=[], tl_a=[], tl_s=[], tl_n=[], tl_t=[]) -%}
           {%- for x in sl -%}
             {%- set i = loop.index0 -%}
             {%- set dur = (x.e - x.a) / 3600 -%}
@@ -3606,35 +3632,48 @@ template:
               {%- set s1 = [s0 + x.o * eff_in, s_max] | min -%}
               {%- if who == 'opt' -%}
                 {#- Action by looking one step ahead from the real state of charge (not rounded) -#}
+                {%- set fx = opt_fx.get(x.s | int | string, 0) if opt_fx is mapping else 0 -%}{%- set fxp = [fx, 0] | max -%}
+                {%- set sp = (x.o - (s1 - s0) / eff_in) * fxp -%}
                 {%- set vv = ns.W[i + 1] -%}{%- set lv = 1 if fw.a[-1:] == 'L' or (fw.a == '' and is_state('input_boolean.dynamic_charging_running', 'on')) else 0 -%}
                 {%- set q = s1 / st -%}{%- set i0 = [q | int, K - 2] | min -%}{%- set f = q - i0 -%}
-                {%- set kz = namespace(c=ll * x.v + vv[0][i0] * (1 - f) + vv[0][i0 + 1] * f, a='H') -%}
+                {%- set kz = namespace(c=ll * x.v - sp + vv[0][i0] * (1 - f) + vv[0][i0 + 1] * f, a='H') -%}
                 {%- set out = [ll, s1 * eff_out, p_disch_kw * dur] | min -%}
                 {%- set q = (s1 - out / eff_out) / st -%}{%- set i0 = [q | int, K - 2] | min -%}{%- set f = q - i0 -%}
-                {%- set c = (ll - out) * x.v + vv[0][i0] * (1 - f) + vv[0][i0 + 1] * f -%}
+                {%- set c = (ll - out) * x.v - sp + vv[0][i0] * (1 - f) + vv[0][i0 + 1] * f -%}
                 {%- if c < kz.c - 0.00001 -%}{%- set kz.c = c -%}{%- set kz.a = 'N' -%}{%- endif -%}
+                {%- if opt_x and fx > 0 -%}
+                  {%- set xo = [s1 * eff_out, p_disch_kw * dur] | min -%}{%- set xh = [ll, xo] | min -%}
+                  {%- set q = (s1 - xo / eff_out) / st -%}{%- set i0 = [q | int, K - 2] | min -%}{%- set f = q - i0 -%}
+                  {%- set c = (ll - xh) * x.v - sp - (xo - xh) * fx + vv[0][i0] * (1 - f) + vv[0][i0 + 1] * f -%}
+                  {%- if c < kz.c - 0.00001 -%}{%- set kz.c = c -%}{%- set kz.a = 'X' -%}{%- endif -%}
+                {%- endif -%}
                 {%- set add = [p_max_kw * dur * eff_in, s_max - s1] | min -%}
                 {%- if add > 0.001 -%}
                   {%- set q = (s1 + add) / st -%}{%- set i0 = [q | int, K - 2] | min -%}{%- set f = q - i0 -%}
-                  {%- set c = (ll + add / eff_in) * x.v + vv[1][i0] * (1 - f) + vv[1][i0 + 1] * f + (0 if lv == 1 else c_opt_charge_start) -%}
+                  {%- set c = (ll + add / eff_in) * x.v - sp + vv[1][i0] * (1 - f) + vv[1][i0 + 1] * f + (0 if lv == 1 else c_opt_charge_start) -%}
                   {%- if c < kz.c - 0.00001 -%}{%- set kz.c = c -%}{%- set kz.a = 'L' -%}{%- endif -%}
                 {%- endif -%}
                 {%- set act = kz.a -%}
               {%- else -%}{%- set act = 'L' if tl_l[i] == 1 else ('H' if tl_v[i] == 1 else 'N') -%}{%- endif -%}
               {%- if act == 'L' -%}{%- set add = [p_max_kw * dur * eff_in, s_max - s1] | min -%}{%- set s2 = s1 + add -%}{%- set c = (ll + add / eff_in) * x.v -%}
               {%- elif act == 'N' -%}{%- set out = [ll, s1 * eff_out, p_disch_kw * dur] | min -%}{%- set s2 = s1 - out / eff_out -%}{%- set c = (ll - out) * x.v -%}
+              {%- elif act == 'X' -%}{%- set xo = [s1 * eff_out, p_disch_kw * dur] | min -%}{%- set xh = [ll, xo] | min -%}{%- set s2 = s1 - xo / eff_out -%}{%- set c = (ll - xh) * x.v - (xo - xh) * fx -%}
               {%- else -%}{%- set s2 = s1 -%}{%- set c = ll * x.v -%}{%- endif -%}
+              {%- set c = c - (x.o - (s1 - s0) / eff_in) * ([opt_fx.get(x.s | int | string, 0) if opt_fx is mapping else 0, 0] | max) -%}
               {%- if who == 'opt' -%}
                 {%- if fw.empty == 0 and act == 'N' and s2 <= 0.01 and ll > 0 -%}{%- set fw.empty = x.a + (s1 * eff_out / ll) * (x.e - x.a) -%}{%- endif -%}
                 {%- if act == 'L' -%}{%- set fw.net = fw.net + add / eff_in -%}{%- endif -%}
+                {%- if act == 'X' -%}{%- set fw.terug = fw.terug + xo - xh -%}{%- endif -%}
                 {%- if fw.cur is mapping and fw.cur.a == act and fw.cur.e == x.s -%}
-                  {%- set fw.cur = dict(fw.cur, e=x.e, kwh=fw.cur.kwh + ((add / eff_in) if act == 'L' else 0), pk=fw.cur.pk + (x.v * add / eff_in if act == 'L' else 0)) -%}
+                  {%- set kw_ = (add / eff_in) if act == 'L' else ((xo - xh) if act == 'X' else 0) -%}
+                  {%- set fw.cur = dict(fw.cur, e=x.e, kwh=fw.cur.kwh + kw_, pk=fw.cur.pk + kw_ * (x.v if act == 'L' else fx)) -%}
                 {%- else -%}
                   {%- if fw.cur is mapping -%}{%- set fw.blok = fw.blok + [fw.cur] -%}{%- endif -%}
-                  {%- set fw.cur = {'a': act, 's': x.a, 'e': x.e, 'kwh': (add / eff_in) if act == 'L' else 0, 'pk': (x.v * add / eff_in) if act == 'L' else 0} -%}
+                  {%- set kw_ = (add / eff_in) if act == 'L' else ((xo - xh) if act == 'X' else 0) -%}
+                  {%- set fw.cur = {'a': act, 's': x.a, 'e': x.e, 'kwh': kw_, 'pk': kw_ * (x.v if act == 'L' else fx)} -%}
                 {%- endif -%}
                 {%- set acc = ((s2 - s0) / eff_in) if s2 >= s0 else ((s2 - s0) * eff_out) -%}
-                {%- set fw.tl_l = fw.tl_l + [1 if act == 'L' else 0] -%}{%- set fw.tl_v = fw.tl_v + [1 if act == 'H' and s1 > 0.01 else 0] -%}
+                {%- set fw.tl_t = fw.tl_t + [1 if act == 'X' else 0] -%}{%- set fw.tl_l = fw.tl_l + [1 if act == 'L' else 0] -%}{%- set fw.tl_v = fw.tl_v + [1 if act == 'H' and s1 > 0.01 else 0] -%}
                 {%- set fw.tl_a = fw.tl_a + [(acc / dur) | round(2)] -%}{%- set fw.tl_n = fw.tl_n + [((x.k - x.d - x.o + acc) / dur) | round(2)] -%}
                 {%- set fw.tl_s = fw.tl_s + [((soc_min + s2 / cap * 100) if cap > 0 else 0) | round(1)] -%}
                 {%- set fw.s = s2 -%}{%- set fw.c = fw.c + c -%}{%- set fw.a = fw.a ~ act -%}
@@ -3642,17 +3681,18 @@ template:
             {%- endfor -%}
           {%- endfor -%}
           {%- if fw.cur is mapping -%}{%- set fw.blok = fw.blok + [fw.cur] -%}{%- endif -%}
-          {%- set nb = namespace(l=[], v=[]) -%}
-          {%- for b in fw.blok if b.a in ['L', 'H'] and b.e - b.s >= 600 -%}
+          {%- set nb = namespace(l=[], v=[], t=[]) -%}
+          {%- for b in fw.blok if b.a in ['L', 'H', 'X'] and b.e - b.s >= 600 -%}
             {%- set r = {'from': (('tomorrow ' if b.s >= end_today_ts else '') ~ b.s | timestamp_custom('%H:%M')), 'until': b.e | timestamp_custom('%H:%M')} -%}
             {%- if b.a == 'L' -%}{%- set nb.l = nb.l + [dict(r, kwh=b.kwh | round(2), price=((b.pk / b.kwh) if b.kwh > 0 else 0) | round(3))] -%}
+            {%- elif b.a == 'X' -%}{%- set nb.t = nb.t + [dict(r, kwh=b.kwh | round(2), price=((b.pk / b.kwh) if b.kwh > 0 else 0) | round(3))] -%}
             {%- else -%}{%- set nb.v = nb.v + [r] -%}{%- endif -%}
           {%- endfor -%}
           {%- set cost = fw.c - fw.s * endv -%}{%- set cost_p = fw.cp - fw.sp * endv -%}
-          {{ {'now': {'L': 'Charge', 'H': 'Hold', 'N': 'Supply'}[fw.a[0]], 'actions': fw.a, 't0': sl[0].s | int,
-              'charge': nb.l, 'hold': nb.v, 'grid_charge_kwh': fw.net | round(2),
+          {{ {'now': {'L': 'Charge', 'H': 'Hold', 'N': 'Supply', 'X': 'Export'}[fw.a[0]], 'actions': fw.a, 't0': sl[0].s | int,
+              'charge': nb.l, 'hold': nb.v, 'export': nb.t, 'grid_charge_kwh': fw.net | round(2), 'export_kwh': fw.terug | round(2),
               'empty_at': (fw.empty | timestamp_custom('%Y-%m-%d %H:%M')) if fw.empty > 0 else none, 'empty_ts': fw.empty | int,
-              'tl': {'charge': fw.tl_l, 'hold': fw.tl_v, 'battery_kw': fw.tl_a, 'soc_pct': fw.tl_s, 'grid_kw': fw.tl_n},
+              'tl': {'charge': fw.tl_l, 'hold': fw.tl_v, 'export': fw.tl_t, 'battery_kw': fw.tl_a, 'soc_pct': fw.tl_s, 'grid_kw': fw.tl_n},
               'midnight_pct': ((soc_min + fw.mid / cap * 100) | round(0)) if fw.mid >= 0 and cap > 0 else none,
               'costs': cost | round(3), 'costs_current_plan': (cost_p | round(3)) if cmp else none,
               'difference': ((cost_p - cost) | round(3)) if cmp else none} }}
@@ -3671,10 +3711,12 @@ template:
           {%- set lb = opt.charge -%}
           {%- if opt_action_now == 'L' -%}Charging from the grid now{{ ' (calibration: up to 100%)' if (cal_charge or cal_early) and opt.actions[0] != 'L' else '' }}.
           {%- elif opt_action_now == 'H' -%}Battery is holding now: these quarter hours are cheaper than the quarter hours the charge is kept for.
+          {%- elif opt_action_now == 'X' -%}Battery is exporting to the grid now (that yields more now than keeping the charge).
           {%- else -%}Battery is supplying the house now.{%- endif -%}
           {%- set later = lb | rejectattr('from', 'eq', (now_ts | timestamp_custom('%H:%M'))) | list if opt_action_now == 'L' else lb -%}
           {%- if later | length > 0 %} Next charge moment: {{ later[0].from }}-{{ later[0].until }} (about {{ '%.1f' | format(later[0].kwh) }} kWh, average €{{ '%.3f' | format(later[0].price) }}){% if lb | length > 1 %}; {{ '%.1f' | format(opt.grid_charge_kwh) }} kWh in {{ lb | length }} blocks in total{% endif %}.
           {%- elif lb | length == 0 %} No grid charging needed until the end of the known prices.{%- endif -%}
+          {%- set tb = opt.export | default([]) -%}{%- if tb | length > 0 and opt_action_now != 'X' %} Export: {{ tb[0].from }}-{{ tb[0].until }} (about {{ '%.1f' | format(tb[0].kwh) }} kWh, €{{ '%.3f' | format(tb[0].price) }}){% if tb | length > 1 %}; {{ '%.1f' | format(opt.export_kwh) }} kWh in total{% endif %}.{%- endif -%}
           {%- if opt.midnight_pct is not none %} At midnight still about {{ opt.midnight_pct | int }}%.{%- endif -%}
         {%- endif -%}
     sensor:
@@ -3687,7 +3729,7 @@ template:
           {% elif cap <= 0 or not has_value('sensor.zendure_total_state_of_charge') %}
             No battery data
           {% elif planner_new and opt_ok %}
-            {{ {'L': 'Charge', 'H': 'Hold'}.get(opt_action_now, 'Supply') }}
+            {{ {'L': 'Charge', 'H': 'Hold', 'X': 'Export'}.get(opt_action_now, 'Supply') }}
           {% else %}
             {% set threshold = c_charge_stop_kwh if this.state == 'Charge' else c_charge_start_kwh %}
             {% if grid_total_ac < threshold %}
@@ -3831,12 +3873,12 @@ template:
           pre_discharge_expected_kwh: "{{ pd_sim.e if pd_window is mapping else none }}"
           pre_discharge_price_limit: "{{ pd_threshold }}"
           pre_discharge_grid_dropped: "{{ pd_grid_dropped }}"
-          pre_discharge_export_now: "{{ pd_export_now }}"
+          pre_discharge_export_now: "{{ false if planner_new and opt_ok else pd_export_now }}"
           pre_discharge_export_kwh: "{{ (pd_export_slots | map(attribute='kwh') | sum) | round(2) }}"
           pre_discharge_export_slots: "{{ pd_export_slots }}"
           pre_discharge_export_price: "{{ ((pd_export_slots | map(attribute='f') | sum) / (pd_export_slots | length)) | round(4) if pd_export_slots | length > 0 else none }}"
           solar_surplus_on: "{{ sx_on }}"
-          solar_surplus_now: "{{ sx_now }}"
+          solar_surplus_now: "{{ (opt_action_now == 'X') if planner_new and opt_ok else sx_now }}"
           solar_surplus_export_kwh: "{{ (sx_slots | map(attribute='kwh') | sum) | round(2) }}"
           solar_surplus_slots: "{{ sx_slots }}"
           solar_surplus_export_price: "{{ ((sx_slots | map(attribute='f') | sum) / (sx_slots | length)) | round(4) if sx_slots | length > 0 else none }}"
