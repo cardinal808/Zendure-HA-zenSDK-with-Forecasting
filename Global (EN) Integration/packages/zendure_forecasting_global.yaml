@@ -2478,7 +2478,8 @@ template:
         {{ (solar_detail + (solar_detail_tomorrow | rejectattr('s', 'in', ts) | list)) | sort(attribute='s') }}
       # Per future price slot (kWh AC from now): k = usage, d = solar used directly, o = solar
       # surplus, dip = the battery does not supply here (dip hold). Without a detailed forecast during
-      # the day: the sun covers usage until sunset (like t_empty_ahead_ts).
+      # the day: the solar still expected today (solar_rest) spread evenly until sunset (before: the
+      # sun covers all usage until sunset, even when hardly any sun is coming).
       bat_slots: >
         {%- set ns = namespace(l=[]) -%}
         {%- if model_new -%}
@@ -2495,7 +2496,10 @@ template:
                   {%- set nz.o = nz.o + ([p.pv - p.kw, 0] | max) * (pb - pa) / 3600 -%}
                 {%- endif -%}
               {%- endfor -%}
-              {%- if solar_no_detail and a < sunset_ts -%}{%- set nz.d = nk.k -%}{%- endif -%}
+              {%- if solar_no_detail and a < sunset_ts and sunset_ts > now_ts -%}
+                {%- set pv = solar_rest * ([b, sunset_ts] | min - a) / (sunset_ts - now_ts) -%}
+                {%- set nz.d = [pv, nk.k] | min -%}{%- set nz.o = [pv - nk.k, 0] | max -%}
+              {%- endif -%}
               {%- set is_tomorrow = x.s >= end_today_ts -%}
               {%- set dip = dip_hold_plan and ((x.v <= dip_threshold_tomorrow and x.v < p_tmrw_avg) if is_tomorrow else (x.v <= dip_threshold and x.v < p_day_avg)) -%}
               {%- set ns.l = ns.l + [{'s': x.s, 'e': x.e, 'a': a, 'v': x.v, 'k': nk.k | round(4), 'd': ([nz.d, nk.k] | min) | round(4), 'o': nz.o | round(4), 'dip': dip}] -%}

@@ -49,6 +49,7 @@ Versies volgen `jaar.maand.volgnummer`; het volgnummer begint elke maand bij 1. 
 - Plan-attribuut `optimaal` (actie nu, laad- en vasthoudblokken, laadstand om middernacht, kosten t.o.v. het huidige plan, op dezelfde manier doorgerekend); grafiekdata `optimaal_acties` (actie per prijsslot). In de plankaart een blok *Schaduwplanner (test)*.
 - Plankaart: de regel *Planning* zegt nu dat het om de situatie gaat waarin de accu vanaf nu gewoon levert en niet bijlaadt (was *zonder bijladen is de accu … leeg*, las als een voorspelling).
 - `tools/scenario_sim.py --opt`: gesloten lus waarin de schaduwplanner aanstuurt.
+- Gedeeld accumodel zonder detailvoorspelling overdag: de zon die vandaag nog verwacht wordt, gelijk verdeeld tot zonsondergang (was: de zon dekt het hele verbruik tot zonsondergang, ook als er bijna geen zon komt). Met Solcast of Helios verandert er niets.
 
 **Gedeeld accumodel (nieuw, test, standaard uit)**
 - Nieuwe schakelaar **Gedeeld accumodel (nieuw, test)** (`input_boolean.forecast_gedeeld_accumodel`) in Forecasting Configuratie (Basis). Uit = alles zoals het was (nagerekend: identiek). Aan: één lijst `accu_slots` met per toekomstig prijsslot verbruik, directe zon, zon-overschot en dal, met één zonbron (detail van vandaag en morgen). Daaruit lezen:

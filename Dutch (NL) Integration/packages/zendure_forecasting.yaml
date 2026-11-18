@@ -2477,7 +2477,8 @@ template:
         {{ (zon_detail + (zon_detail_morgen | rejectattr('s', 'in', ts) | list)) | sort(attribute='s') }}
       # Per toekomstig prijsslot (kWh AC vanaf nu): k = verbruik, d = direct verbruikte zon,
       # o = zon-overschot, dal = de accu levert hier niet (dal-blokkade). Zonder detailvoorspelling
-      # overdag: de zon dekt het verbruik tot zonsondergang (zoals t_leeg_verder_ts).
+      # overdag: de zon die vandaag nog verwacht wordt (zon_rest) gelijk verdeeld tot zonsondergang
+      # (eerder: de zon dekt het hele verbruik tot zonsondergang, ook als er bijna geen zon komt).
       accu_slots: >
         {%- set ns = namespace(l=[]) -%}
         {%- if model_nieuw -%}
@@ -2494,7 +2495,10 @@ template:
                   {%- set nz.o = nz.o + ([p.pv - p.kw, 0] | max) * (pb - pa) / 3600 -%}
                 {%- endif -%}
               {%- endfor -%}
-              {%- if zon_zonder_detail and a < zon_ondergang_ts -%}{%- set nz.d = nk.k -%}{%- endif -%}
+              {%- if zon_zonder_detail and a < zon_ondergang_ts and zon_ondergang_ts > nu_ts -%}
+                {%- set pv = zon_rest * ([b, zon_ondergang_ts] | min - a) / (zon_ondergang_ts - nu_ts) -%}
+                {%- set nz.d = [pv, nk.k] | min -%}{%- set nz.o = [pv - nk.k, 0] | max -%}
+              {%- endif -%}
               {%- set is_morgen = x.s >= eind_vandaag_ts -%}
               {%- set dal = dal_blokkade_plan and ((x.v <= dal_drempel_morgen and x.v < p_morg_gem) if is_morgen else (x.v <= dal_drempel and x.v < p_dag_gem)) -%}
               {%- set ns.l = ns.l + [{'s': x.s, 'e': x.e, 'a': a, 'v': x.v, 'k': nk.k | round(4), 'd': ([nz.d, nk.k] | min) | round(4), 'o': nz.o | round(4), 'dal': dal}] -%}

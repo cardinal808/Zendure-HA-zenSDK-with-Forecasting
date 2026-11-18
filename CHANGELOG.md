@@ -49,6 +49,7 @@ Versions follow `year.month.sequence`; the sequence restarts at 1 every month. E
 - Plan attribute `optimal` (action now, charge and hold blocks, state of charge at midnight, costs vs the current plan, calculated the same way); chart data `optimal_actions` (action per price slot). A *Shadow planner (test)* block in the plan card.
 - Plan card: the *Planning* line now says it is about the situation in which the battery just supplies from now on and does not top up (was *without topping up, the battery is empty …*, which read like a forecast).
 - `tools/scenario_sim.py --opt`: closed loop with the shadow planner in control.
+- Shared battery model without a detailed forecast during the day: the solar still expected today, spread evenly until sunset (was: the sun covers all usage until sunset, even when hardly any sun is coming). Nothing changes with Solcast or Helios.
 
 **Shared battery model (new, test, off by default)**
 - New switch **Shared battery model (new, test)** (`input_boolean.forecast_setting_shared_battery_model`) in Forecasting Configuration (Basic). Off = everything as before (verified: identical). On: one list `bat_slots` with per future price slot the usage, direct solar, solar surplus and dip, with one solar source (detail of today and tomorrow). From it read:
