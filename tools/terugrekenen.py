@@ -1,4 +1,4 @@
-# Gebruik: python3 tools/terugrekenen.py <jeroen.nl-prijzen.csv> <HA-history zon-teller.csv> <van> <tot> <accu kWh> <2026|2027> <varianten, bv. A,P,C,AE,AX>
+# Gebruik: [ZONFOUT=0.3] [BETR=0.85] python3 tools/terugrekenen.py <jeroen.nl-prijzen.csv> <HA-history zon-teller.csv> <van> <tot> <accu kWh> <2026|2027> <varianten, bv. A,P,C,AE,AX>
 """Terugrekenen met zon (SolarEdge-teller) en terugleverprijs. Varianten:
   A  = nieuwe planner zoals nu (patroon van vandaag vóór 13:00, zon-overschot zonder waarde in de afweging)
   P  = A met perfecte prijskennis
@@ -41,6 +41,15 @@ for (ta, va), (tb, vb) in zip(rows, rows[1:]):
             ov = (min(tb, h + dt.timedelta(hours=1)) - max(ta, h)).total_seconds()
             pv_h[h] += d * ov / tot
 def pv(t): return pv_h.get(t.replace(minute=0), 0) / 4
+import os, random
+NOISE = float(os.environ.get('ZONFOUT', '0')); RELIAB = float(os.environ.get('BETR', '1'))
+_fac = {}
+def fac(t):
+    d = t.astimezone(Z).date()
+    if d not in _fac:
+        r = random.Random(d.toordinal()); _fac[d] = max(0.0, r.gauss(1.0, NOISE)) if NOISE > 0 else 1.0
+    return _fac[d]
+def pvf(t): return pv(t) * fac(t) * RELIAB
 def load(t):
     tl = t.astimezone(Z); return (WE if tl.weekday() >= 5 else WD)[tl.hour] / 4
 grid = np.linspace(0, CAP, K)
@@ -70,7 +79,7 @@ def plan(ts, ps, fs, s0, charging, mode):
     acts = ['H', 'N', 'L'] + (['X'] if mode == 'AX' else [])
     V0 = -grid * endv; V1 = V0.copy(); W = [None] * (n + 1); W[n] = (V0, V1)
     for i in range(n - 1, -1, -1):
-        ll = load(ts[i]) * MARGE; pq = pv(ts[i]); fdec = fs[i] if mode in ('AE', 'AX') else 0
+        ll = load(ts[i]) * MARGE; pq = pvf(ts[i]); fdec = fs[i] if mode in ('AE', 'AX') else 0
         best0 = np.full(K, np.inf); best1 = np.full(K, np.inf)
         for a in acts:
             s2, _, c = step(grid, a, ll, pq, ps[i], fs[i], fdec, False)
@@ -81,7 +90,7 @@ def plan(ts, ps, fs, s0, charging, mode):
             else:
                 c0 = c + ip(s2, V0); best0 = np.minimum(best0, c0); best1 = np.minimum(best1, c0)
         V0, V1 = best0, best1; W[i] = (V0, V1)
-    v0, v1 = W[1]; ll = load(ts[0]) * MARGE; pq = pv(ts[0]); fdec = fs[0] if mode in ('AE', 'AX') else 0
+    v0, v1 = W[1]; ll = load(ts[0]) * MARGE; pq = pvf(ts[0]); fdec = fs[0] if mode in ('AE', 'AX') else 0
     best = (None, np.inf)
     for a in acts:
         s2, _, c = step(np.array([s0]), a, ll, pq, ps[0], fs[0], fdec, charging)
