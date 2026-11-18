@@ -198,6 +198,11 @@ input_boolean:
   forecast_setting_shared_battery_model:
     name: Forecast Shared Battery Model
     icon: mdi:battery-sync
+  # New planner (test, off by default): the optimisation per quarter hour controls charging and
+  # holding instead of the current planner. Turns the shared battery model on by itself.
+  forecast_setting_new_planner:
+    name: Forecast New Planner
+    icon: mdi:chart-timeline-variant-shimmer
   # Internal: smart hold has been turned on by default once
   forecast_setting_smart_hold_set:
     name: Forecast Smart Hold Set
@@ -1694,6 +1699,7 @@ template:
           - input_boolean.forecast_setting_hold_discharge_in_dip
           - input_boolean.forecast_setting_smart_hold
           - input_boolean.forecast_setting_shared_battery_model
+          - input_boolean.forecast_setting_new_planner
           - input_boolean.solar_surplus_discharge
           - input_boolean.forecast_setting_calibration_charging
           - input_number.forecast_setting_calibration_days
@@ -2472,7 +2478,8 @@ template:
       # start of the shortfall, the path check (room per quarter), the expensive quarters, smart hold,
       # the Plan Timeline and "battery empty" read from it. One solar source (detail of today and
       # tomorrow), and the path check holds between charge slots like the automation.
-      model_new: "{{ is_state('input_boolean.forecast_setting_shared_battery_model', 'on') }}"
+      planner_new: "{{ is_state('input_boolean.forecast_setting_new_planner', 'on') }}"
+      model_new: "{{ is_state('input_boolean.forecast_setting_shared_battery_model', 'on') or planner_new }}"
       bm_solar: >
         {%- set ts = solar_detail | map(attribute='s') | list -%}
         {{ (solar_detail + (solar_detail_tomorrow | rejectattr('s', 'in', ts) | list)) | sort(attribute='s') }}
@@ -3542,8 +3549,11 @@ template:
       # the end counts at the cheapest price x discharge efficiency.
       # Efficiency filter, minimal spread, smart hold, holding between charge slots, the dip hold and the
       # path check follow from the prices here; the charge margin, calibration charging and export are
-      # not in it yet.
+      # not in it yet. The charge margin counts as that percentage more usage in the decision (not in
+      # the costs). With the New planner switch this plan controls charging and holding; calibration
+      # charging then runs via the calibration slots of the current planner.
       c_opt_steps: 40
+      opt_f: "{{ 1 + ([margin_pct, 0] | max) / 100 }}"
       opt: >
         {%- set sl = (bat_slots | selectattr('e', 'gt', now_ts) | list) if model_new else [] -%}
         {%- if sl | length == 0 or s_max <= 0 or eff_in <= 0 or eff_out <= 0 -%}{{ {} }}
@@ -3555,7 +3565,7 @@ template:
           {#- Backwards: per slot and per state of charge the cheapest action -#}
           {%- for x in sl | reverse -%}
             {%- set dur = (x.e - x.a) / 3600 -%}
-            {%- set ll = [x.k - x.d, 0] | max -%}
+            {%- set ll = ([x.k - x.d, 0] | max) * opt_f -%}
             {%- set nv = namespace(V=[], P='') -%}
             {%- for k in range(K) -%}
               {%- set s1 = [k * st + x.o * eff_in, s_max] | min -%}
@@ -3579,7 +3589,7 @@ template:
           {%- set tl_l = timeline.charge if timeline is mapping else [] -%}
           {%- set tl_v = timeline.hold if timeline is mapping else [] -%}
           {%- set cmp = tl_l | length == sl | length and tl_v | length == sl | length -%}
-          {%- set fw = namespace(s=s_now, sp=s_now, a='', c=0, cp=0, empty=0, mid=-1, net=0, blok=[], cur=none) -%}
+          {%- set fw = namespace(s=s_now, sp=s_now, a='', c=0, cp=0, empty=0, mid=-1, net=0, blok=[], cur=none, tl_l=[], tl_v=[], tl_a=[], tl_s=[], tl_n=[]) -%}
           {%- for x in sl -%}
             {%- set i = loop.index0 -%}
             {%- set dur = (x.e - x.a) / 3600 -%}
@@ -3602,6 +3612,10 @@ template:
                   {%- if fw.cur is mapping -%}{%- set fw.blok = fw.blok + [fw.cur] -%}{%- endif -%}
                   {%- set fw.cur = {'a': act, 's': x.a, 'e': x.e, 'kwh': (add / eff_in) if act == 'L' else 0, 'pk': (x.v * add / eff_in) if act == 'L' else 0} -%}
                 {%- endif -%}
+                {%- set acc = ((s2 - s0) / eff_in) if s2 >= s0 else ((s2 - s0) * eff_out) -%}
+                {%- set fw.tl_l = fw.tl_l + [1 if act == 'L' else 0] -%}{%- set fw.tl_v = fw.tl_v + [1 if act == 'H' and s1 > 0.01 else 0] -%}
+                {%- set fw.tl_a = fw.tl_a + [(acc / dur) | round(2)] -%}{%- set fw.tl_n = fw.tl_n + [((x.k - x.d - x.o + acc) / dur) | round(2)] -%}
+                {%- set fw.tl_s = fw.tl_s + [((soc_min + s2 / cap * 100) if cap > 0 else 0) | round(1)] -%}
                 {%- set fw.s = s2 -%}{%- set fw.c = fw.c + c -%}{%- set fw.a = fw.a ~ act -%}
               {%- else -%}{%- set fw.sp = s2 -%}{%- set fw.cp = fw.cp + c -%}{%- endif -%}
             {%- endfor -%}
@@ -3616,10 +3630,31 @@ template:
           {%- set cost = fw.c - fw.s * endv -%}{%- set cost_p = fw.cp - fw.sp * endv -%}
           {{ {'now': {'L': 'Charge', 'H': 'Hold', 'N': 'Normal'}[fw.a[0]], 'actions': fw.a, 't0': sl[0].s | int,
               'charge': nb.l, 'hold': nb.v, 'grid_charge_kwh': fw.net | round(2),
-              'empty_at': (fw.empty | timestamp_custom('%Y-%m-%d %H:%M')) if fw.empty > 0 else none,
+              'empty_at': (fw.empty | timestamp_custom('%Y-%m-%d %H:%M')) if fw.empty > 0 else none, 'empty_ts': fw.empty | int,
+              'tl': {'charge': fw.tl_l, 'hold': fw.tl_v, 'battery_kw': fw.tl_a, 'soc_pct': fw.tl_s, 'grid_kw': fw.tl_n},
               'midnight_pct': ((soc_min + fw.mid / cap * 100) | round(0)) if fw.mid >= 0 and cap > 0 else none,
               'costs': cost | round(3), 'costs_current_plan': (cost_p | round(3)) if cmp else none,
               'difference': ((cost_p - cost) | round(3)) if cmp else none} }}
+        {%- endif -%}
+      opt_ok: "{{ opt is mapping and opt | length > 0 }}"
+      # Action now (new planner): L charge, H hold, N normal. Charging only with room in the battery;
+      # calibration charging (charge slot of the current planner) always goes first.
+      opt_action_now: >
+        {%- set a = opt.actions[0] if opt_ok else 'N' -%}
+        {%- if (cal_charge or cal_early) and slot_now -%}L
+        {%- elif a == 'L' -%}{{ 'L' if room > 0.05 else 'H' }}
+        {%- else -%}{{ a }}{%- endif -%}
+      opt_explanation: >
+        {%- if not opt_ok -%}New planner: no plan yet (needs the shared battery model, prices and battery data).
+        {%- else -%}
+          {%- set lb = opt.charge -%}
+          {%- if opt_action_now == 'L' -%}Charging from the grid now{{ ' (calibration: up to 100%)' if (cal_charge or cal_early) and opt.actions[0] != 'L' else '' }}.
+          {%- elif opt_action_now == 'H' -%}Battery is holding now: these quarter hours are cheaper than the quarter hours the charge is kept for.
+          {%- else -%}Battery is supplying the house now.{%- endif -%}
+          {%- set later = lb | rejectattr('from', 'eq', (now_ts | timestamp_custom('%H:%M'))) | list if opt_action_now == 'L' else lb -%}
+          {%- if later | length > 0 %} Next charge moment: {{ later[0].from }}-{{ later[0].until }} (about {{ '%.1f' | format(later[0].kwh) }} kWh, average €{{ '%.3f' | format(later[0].price) }}){% if lb | length > 1 %}; {{ '%.1f' | format(opt.grid_charge_kwh) }} kWh in {{ lb | length }} blocks in total{% endif %}.
+          {%- elif lb | length == 0 %} No grid charging needed until the end of the known prices.{%- endif -%}
+          {%- if opt.midnight_pct is not none %} At midnight still about {{ opt.midnight_pct | int }}%.{%- endif -%}
         {%- endif -%}
     sensor:
       - name: "Zendure Forecast Plan"
@@ -3630,6 +3665,8 @@ template:
             No prices
           {% elif cap <= 0 or not has_value('sensor.zendure_total_state_of_charge') %}
             No battery data
+          {% elif planner_new and opt_ok %}
+            {{ 'Charge' if opt_action_now == 'L' else ('Waiting' if 'L' in opt.actions else 'Not needed') }}
           {% else %}
             {% set threshold = c_charge_stop_kwh if this.state == 'Charge' else c_charge_start_kwh %}
             {% if grid_total_ac < threshold %}
@@ -3651,7 +3688,7 @@ template:
           tomorrow_prices_known: "{{ tomorrow_known }}"
           grid_charge_today_kwh: "{{ grid_total_ac }}"
           grid_charge_energy_balance_kwh: "{{ grid_ac }}"
-          planned_grid_charge_kwh: "{{ planned_ac }}"
+          planned_grid_charge_kwh: "{{ opt.grid_charge_kwh if planner_new and opt_ok else planned_ac }}"
           usage_adjustment: "{{ usage_factor }}"
           target_stored_kwh: "{{ target_dc }}"
           battery_now_kwh: "{{ s_now }}"
@@ -3688,6 +3725,7 @@ template:
             {{ ns.l }}
           # --- Plain-language explanation of the plan (for the dashboard) ---
           plan_explanation: >
+            {%- if planner_new -%}{{ opt_explanation }}{%- else -%}
             {%- macro at(ts) -%}{{ ('tomorrow ' if (ts | timestamp_custom('%Y-%m-%d', true)) != (now_ts | timestamp_custom('%Y-%m-%d', true)) else '') ~ (ts | timestamp_custom('%H:%M', true)) }}{%- endmacro -%}
             {%- macro hm(ts) -%}{{ ts | timestamp_custom('%H:%M', true) }}{%- endmacro -%}
             {%- macro block(b) -%}{{ at(b.s) }}-{{ hm(b.e) }} ({{ ((b.e - b.s) / 60) | round(0) | int }} min, about {{ '%.1f' | format(b.kwh) }} kWh, average €{{ '%.3f' | format(b.sum / b.n) }}){%- endmacro -%}
@@ -3726,6 +3764,7 @@ template:
               {%- else %}.{% endif -%}
               {%- if pd_sim.e > pd_target_dc + 0.05 %} Even then there is probably not room for everything; the inverter limit catches the rest.{% endif -%}
             {%- endif -%}
+            {%- endif -%}
           # --- Path check (does the battery last until energy comes in again?) ---
           pathcheck_battery_empty_at: "{{ (t_empty_display_ts | timestamp_custom('%Y-%m-%d %H:%M', true)) if t_empty_display_ts < now_ts + 172800 else none }}"
           pathcheck_solar_covers_from: "{{ t_cover_ts | timestamp_custom('%Y-%m-%d %H:%M', true) }}"
@@ -3755,7 +3794,7 @@ template:
           price_source: "{{ price_src }}"
           dip_threshold: "{{ dip_threshold }}"
           in_dip: "{{ in_dip }}"
-          hold_discharge: "{{ hold_discharge }}"
+          hold_discharge: "{{ (opt_action_now == 'H' and not pd_discharge_now) if planner_new and opt_ok else hold_discharge }}"
           smart_hold: "{{ smart_hold }}"
           between_charge_hold: "{{ between_charge_hold }}"
           hold_threshold_price: "{{ sh_threshold }}"
@@ -3852,7 +3891,9 @@ template:
             {{ uit.l }}
           battery_model: "{{ 'shared' if model_new else 'classic' }}"
           # Shadow planner (test, controls nothing): action now, charge and hold blocks, costs vs the current plan
-          optimal: "{{ dict(opt | items | rejectattr(0, 'eq', 'actions') | list) if opt is mapping and opt | length > 0 else none }}"
+          optimal: "{{ dict(opt | items | rejectattr(0, 'in', ['actions', 'tl']) | list) if opt_ok else none }}"
+          # current = the existing planner is in control; new = the optimisation per quarter hour is
+          planner: "{{ 'new' if planner_new else 'current' }}"
           # Calculation time of this run (s), as the last attribute: from the start of the variables to here
           calculation_time_s: "{{ (as_timestamp(now()) - now_ts) | round(3) }}"
 
@@ -3868,7 +3909,7 @@ template:
           # charge (1 = planned grid charge), solar_kw, usage_kw, battery_kw (+ charge / - discharge),
           # soc_pct (state of charge at the end of the slot), grid_kw (+ import / - export, incl. car),
           # export (1 = battery exports to the grid), ev_kw (planned car charging)
-          timeline: "{{ timeline }}"
+          timeline: "{{ dict(timeline | items | list + (opt.tl | items | list) + [('empty_ts', opt.empty_ts if opt.empty_ts > 0 else none)]) if planner_new and opt_ok and timeline is mapping and opt.tl.charge | length == timeline.t | length else timeline }}"
           # Shadow planner: action per price slot from t0 (L charge, H hold, N normal)
           optimal_actions: "{{ {'t0': opt.t0, 'actions': opt.actions} if opt is mapping and opt | length > 0 else none }}"
           usage_per_quarter_workday_kwh: "{{ profile_quarter.workday }}"

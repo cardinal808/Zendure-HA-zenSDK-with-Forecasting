@@ -17,7 +17,7 @@ Gebruik (vanuit de root van de repo):
     python3 tools/scenario_sim.py <export.json> --lijst
     python3 tools/scenario_sim.py <export.json> --regels        # regeltests over een raster
     (--model: met de schakelaar Gedeeld accumodel aan)
-    (--opt: de schaduwplanner stuurt aan, actie nu uit opt.acties; zet --model vanzelf aan)
+    (--opt: met de schakelaar Nieuwe planner aan; zet --model vanzelf aan)
 
 Scenario's staan in SCENARIOS hieronder; eigen scenario's kun je daar toevoegen.
 """
@@ -128,6 +128,7 @@ def bouw_export(basis, sc, t, soc, vorig_plan, laden_loopt):
     zet('input_boolean.zonoverschot_ontladen', 'off')
     zet('input_boolean.negatieve_prijs_vooraf_ontladen', 'off')
     zet('input_boolean.forecast_gedeeld_accumodel', MODEL)
+    zet('input_boolean.forecast_nieuwe_planner', 'on' if OPT else 'off')
     # Geen zon
     for k in list(det) + list((e.get('extern') or {})):
         if 'solcast' in k or 'helios' in k or 'forecast_solar' in k or k.startswith('sensor.energy_'):
@@ -171,12 +172,7 @@ def gesloten_lus(basis, sc, yaml_path=YAML_NL, uitvoer=False):
         p = sc['prijs'](t.hour)
         last = sc['last'](t.hour) / 4
         actie = 'NOM'
-        if OPT:
-            a0 = ((ctx.get('opt') or {}).get('acties') or 'N')[0]
-            st = 'Laden' if a0 == 'L' else 'Wachten'
-            vh = a0 == 'H'
-        else:
-            st, vh = out['state'], out.get('ontladen_vasthouden') is True
+        st, vh = out['state'], out.get('ontladen_vasthouden') is True
         if st == 'Laden' and E >= e_max - 0.001:
             verspild += 1
         if st == 'Laden' and E < e_max - 0.001:

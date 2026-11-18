@@ -1534,6 +1534,8 @@ actions:
                 {%- set nu = (' (nu €' ~ ('%.3f' | format(p | float(0)) | replace('.', ',')) ~ ')') if p is number else '' -%}
                 🌀Ontladen gestopt, alleen laden toegestaan: {% if is_state('binary_sensor.hvac_ontladen_geblokkeerd', 'on') and not a.get('ontladen_vasthouden', false) -%}
                 airco aan
+                {%- elif a.get('planner') == 'nieuw' -%}
+                nieuwe planner, accu bewaard voor duurdere kwartieren{{ nu }}
                 {%- elif a.get('slim_vasthouden') and a.get('vasthouden_grensprijs') is number -%}
                 slim vasthouden, accu bewaard voor prijzen vanaf €{{ '%.3f' | format(a.get('vasthouden_grensprijs')) | replace('.', ',') }}{{ nu }}
                 {%- elif a.get('tussen_laden_vasthouden') and a.get('tussen_laden_grensprijs') is number -%}

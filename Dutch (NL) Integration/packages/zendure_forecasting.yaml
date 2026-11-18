@@ -198,6 +198,11 @@ input_boolean:
   forecast_gedeeld_accumodel:
     name: Forecast Gedeeld Accumodel
     icon: mdi:battery-sync
+  # Nieuwe planner (test, standaard uit): de optimalisatie per kwartier stuurt laden en vasthouden
+  # aan in plaats van de huidige planner. Zet het gedeelde accumodel vanzelf aan.
+  forecast_nieuwe_planner:
+    name: Forecast Nieuwe Planner
+    icon: mdi:chart-timeline-variant-shimmer
   # Intern: slim vasthouden is al eens standaard aangezet
   forecast_slim_vasthouden_ingesteld:
     name: Forecast Slim Vasthouden Ingesteld
@@ -1695,6 +1700,7 @@ template:
           - input_boolean.forecast_dal_ontladen_blokkeren
           - input_boolean.forecast_slim_vasthouden
           - input_boolean.forecast_gedeeld_accumodel
+          - input_boolean.forecast_nieuwe_planner
           - input_boolean.zonoverschot_ontladen
           - input_boolean.forecast_kalibratieladen
           - input_number.forecast_kalibratie_dagen
@@ -2471,7 +2477,8 @@ template:
       # begin van het tekort, de pad-check (ruimte per kwartier), de dure kwartieren, slim vasthouden,
       # de Plan Tijdlijn en "accu leeg" lezen daaruit. Eén zonbron (detail van vandaag en morgen),
       # en de pad-check houdt vast tussen laadslots zoals de automation.
-      model_nieuw: "{{ is_state('input_boolean.forecast_gedeeld_accumodel', 'on') }}"
+      planner_nieuw: "{{ is_state('input_boolean.forecast_nieuwe_planner', 'on') }}"
+      model_nieuw: "{{ is_state('input_boolean.forecast_gedeeld_accumodel', 'on') or planner_nieuw }}"
       as_zon: >
         {%- set ts = zon_detail | map(attribute='s') | list -%}
         {{ (zon_detail + (zon_detail_morgen | rejectattr('s', 'in', ts) | list)) | sort(attribute='s') }}
@@ -3541,8 +3548,11 @@ template:
       # eind in de accu zit, telt mee tegen de goedkoopste prijs x rendement ontladen.
       # Rendementsfilter, minimale spread, slim vasthouden, vasthouden tussen laadslots, de dal-blokkade
       # en de pad-check volgen hier vanzelf uit de prijzen; de laadmarge, kalibratieladen en terugleveren
-      # zitten er nog niet in.
+      # zitten er nog niet in. De laadmarge telt als zoveel procent meer verbruik in de afweging
+      # (niet in de kosten). Met de schakelaar Nieuwe planner stuurt dit plan laden en vasthouden aan;
+      # kalibratieladen loopt dan via de kalibratieslots van de huidige planner.
       c_opt_stappen: 40
+      opt_f: "{{ 1 + ([marge_pct, 0] | max) / 100 }}"
       opt: >
         {%- set sl = (accu_slots | selectattr('e', 'gt', nu_ts) | list) if model_nieuw else [] -%}
         {%- if sl | length == 0 or s_max <= 0 or eff_in <= 0 or eff_out <= 0 -%}{{ {} }}
@@ -3554,7 +3564,7 @@ template:
           {#- Achterwaarts: per slot en per laadstand de goedkoopste actie -#}
           {%- for x in sl | reverse -%}
             {%- set dur = (x.e - x.a) / 3600 -%}
-            {%- set ll = [x.k - x.d, 0] | max -%}
+            {%- set ll = ([x.k - x.d, 0] | max) * opt_f -%}
             {%- set nv = namespace(V=[], P='') -%}
             {%- for k in range(K) -%}
               {%- set s1 = [k * st + x.o * eff_in, s_max] | min -%}
@@ -3578,7 +3588,7 @@ template:
           {%- set tl_l = tijdlijn.laden if tijdlijn is mapping else [] -%}
           {%- set tl_v = tijdlijn.vasthouden if tijdlijn is mapping else [] -%}
           {%- set vgl = tl_l | length == sl | length and tl_v | length == sl | length -%}
-          {%- set fw = namespace(s=s_nu, sp=s_nu, a='', c=0, cp=0, leeg=0, mid=-1, net=0, blok=[], cur=none) -%}
+          {%- set fw = namespace(s=s_nu, sp=s_nu, a='', c=0, cp=0, leeg=0, mid=-1, net=0, blok=[], cur=none, tl_l=[], tl_v=[], tl_a=[], tl_s=[], tl_n=[]) -%}
           {%- for x in sl -%}
             {%- set i = loop.index0 -%}
             {%- set dur = (x.e - x.a) / 3600 -%}
@@ -3601,6 +3611,10 @@ template:
                   {%- if fw.cur is mapping -%}{%- set fw.blok = fw.blok + [fw.cur] -%}{%- endif -%}
                   {%- set fw.cur = {'a': act, 's': x.a, 'e': x.e, 'kwh': (bij / eff_in) if act == 'L' else 0, 'pk': (x.v * bij / eff_in) if act == 'L' else 0} -%}
                 {%- endif -%}
+                {%- set acc = ((s2 - s0) / eff_in) if s2 >= s0 else ((s2 - s0) * eff_out) -%}
+                {%- set fw.tl_l = fw.tl_l + [1 if act == 'L' else 0] -%}{%- set fw.tl_v = fw.tl_v + [1 if act == 'H' and s1 > 0.01 else 0] -%}
+                {%- set fw.tl_a = fw.tl_a + [(acc / dur) | round(2)] -%}{%- set fw.tl_n = fw.tl_n + [((x.k - x.d - x.o + acc) / dur) | round(2)] -%}
+                {%- set fw.tl_s = fw.tl_s + [((soc_min + s2 / cap * 100) if cap > 0 else 0) | round(1)] -%}
                 {%- set fw.s = s2 -%}{%- set fw.c = fw.c + c -%}{%- set fw.a = fw.a ~ act -%}
               {%- else -%}{%- set fw.sp = s2 -%}{%- set fw.cp = fw.cp + c -%}{%- endif -%}
             {%- endfor -%}
@@ -3615,10 +3629,31 @@ template:
           {%- set kost = fw.c - fw.s * eindw -%}{%- set kost_p = fw.cp - fw.sp * eindw -%}
           {{ {'nu': {'L': 'Laden', 'H': 'Vasthouden', 'N': 'Normaal'}[fw.a[0]], 'acties': fw.a, 't0': sl[0].s | int,
               'laden': nb.l, 'vasthouden': nb.v, 'netladen_kwh': fw.net | round(2),
-              'leeg_om': (fw.leeg | timestamp_custom('%Y-%m-%d %H:%M')) if fw.leeg > 0 else none,
+              'leeg_om': (fw.leeg | timestamp_custom('%Y-%m-%d %H:%M')) if fw.leeg > 0 else none, 'leeg_ts': fw.leeg | int,
+              'tl': {'laden': fw.tl_l, 'vasthouden': fw.tl_v, 'accu_kw': fw.tl_a, 'soc_pct': fw.tl_s, 'net_kw': fw.tl_n},
               'middernacht_pct': ((soc_min + fw.mid / cap * 100) | round(0)) if fw.mid >= 0 and cap > 0 else none,
               'kosten': kost | round(3), 'kosten_huidig_plan': (kost_p | round(3)) if vgl else none,
               'verschil': ((kost_p - kost) | round(3)) if vgl else none} }}
+        {%- endif -%}
+      opt_ok: "{{ opt is mapping and opt | length > 0 }}"
+      # Actie nu (nieuwe planner): L laden, H vasthouden, N normaal. Laden alleen met ruimte in de
+      # accu; kalibratieladen (laadslot van de huidige planner) gaat altijd voor.
+      opt_actie_nu: >
+        {%- set a = opt.acties[0] if opt_ok else 'N' -%}
+        {%- if (kal_laden or kal_vroeg) and slot_nu -%}L
+        {%- elif a == 'L' -%}{{ 'L' if room > 0.05 else 'H' }}
+        {%- else -%}{{ a }}{%- endif -%}
+      opt_uitleg: >
+        {%- if not opt_ok -%}Nieuwe planner: nog geen plan (gedeeld accumodel nodig, prijzen en accu bekend).
+        {%- else -%}
+          {%- set lb = opt.laden -%}
+          {%- if opt_actie_nu == 'L' -%}Nu laden uit het net{{ ' (kalibratie: tot 100%)' if (kal_laden or kal_vroeg) and opt.acties[0] != 'L' else '' }}.
+          {%- elif opt_actie_nu == 'H' -%}Accu houdt nu vast: deze kwartieren zijn goedkoper dan de kwartieren waarvoor de lading bewaard wordt.
+          {%- else -%}Accu levert nu aan het huis.{%- endif -%}
+          {%- set later = lb | rejectattr('van', 'eq', (nu_ts | timestamp_custom('%H:%M'))) | list if opt_actie_nu == 'L' else lb -%}
+          {%- if later | length > 0 %} Volgende laadmoment: {{ later[0].van }}-{{ later[0].tot }} (ongeveer {{ '%.1f' | format(later[0].kwh) }} kWh, gemiddeld €{{ '%.3f' | format(later[0].prijs) }}){% if lb | length > 1 %}; totaal {{ '%.1f' | format(opt.netladen_kwh) }} kWh in {{ lb | length }} blokken{% endif %}.
+          {%- elif lb | length == 0 %} Geen laden uit het net nodig tot het einde van de bekende prijzen.{%- endif -%}
+          {%- if opt.middernacht_pct is not none %} Om middernacht nog ongeveer {{ opt.middernacht_pct | int }}%.{%- endif -%}
         {%- endif -%}
     sensor:
       - name: "Zendure Forecast Plan"
@@ -3629,6 +3664,8 @@ template:
             Geen prijzen
           {% elif cap <= 0 or not has_value('sensor.zendure_2400_ac_laadpercentage') %}
             Geen batterijdata
+          {% elif planner_nieuw and opt_ok %}
+            {{ 'Laden' if opt_actie_nu == 'L' else ('Wachten' if 'L' in opt.acties else 'Niet nodig') }}
           {% else %}
             {% set drempel = c_laden_stop_kwh if this.state == 'Laden' else c_laden_start_kwh %}
             {% if netladen_ac < drempel %}
@@ -3650,7 +3687,7 @@ template:
           morgen_prijzen_bekend: "{{ morgen_bekend }}"
           netladen_vandaag_kwh: "{{ netladen_ac }}"
           netladen_energiebalans_kwh: "{{ grid_ac }}"
-          gepland_netladen_kwh: "{{ gepland_ac }}"
+          gepland_netladen_kwh: "{{ opt.netladen_kwh if planner_nieuw and opt_ok else gepland_ac }}"
           verbruik_bijsturing: "{{ verbruik_factor }}"
           doel_opgeslagen_kwh: "{{ target_dc }}"
           batterij_nu_kwh: "{{ s_nu }}"
@@ -3687,6 +3724,7 @@ template:
             {{ ns.l }}
           # --- Uitleg van het plan in gewone taal (voor het dashboard) ---
           plan_uitleg: >
+            {%- if planner_nieuw -%}{{ opt_uitleg }}{%- else -%}
             {%- macro tijd(ts) -%}{{ ('morgen ' if (ts | timestamp_custom('%Y-%m-%d', true)) != (nu_ts | timestamp_custom('%Y-%m-%d', true)) else '') ~ (ts | timestamp_custom('%H:%M', true)) }}{%- endmacro -%}
             {%- macro hm(ts) -%}{{ ts | timestamp_custom('%H:%M', true) }}{%- endmacro -%}
             {%- macro blok(b) -%}{{ tijd(b.s) }}-{{ hm(b.e) }} ({{ ((b.e - b.s) / 60) | round(0) | int }} min, ongeveer {{ '%.1f' | format(b.kwh) }} kWh, gemiddeld €{{ '%.3f' | format(b.som / b.n) }}){%- endmacro -%}
@@ -3725,6 +3763,7 @@ template:
               {%- else %}.{% endif -%}
               {%- if vo_sim.e > vo_doel_dc + 0.05 %} Ook dan is er naar verwachting nog geen ruimte voor alles; de rest vangt de omvormerbegrenzing op.{% endif -%}
             {%- endif -%}
+            {%- endif -%}
           # --- Pad-check (haalt de accu het moment dat er weer energie bijkomt?) ---
           padcheck_accu_leeg_om: "{{ (t_leeg_weergave_ts | timestamp_custom('%Y-%m-%d %H:%M', true)) if t_leeg_weergave_ts < nu_ts + 172800 else none }}"
           padcheck_zon_dekt_vanaf: "{{ t_zon_dek_ts | timestamp_custom('%Y-%m-%d %H:%M', true) }}"
@@ -3754,7 +3793,7 @@ template:
           prijzen_bron: "{{ raw_bron }}"
           dal_drempel: "{{ dal_drempel }}"
           in_dal: "{{ in_dal }}"
-          ontladen_vasthouden: "{{ ontladen_vasthouden }}"
+          ontladen_vasthouden: "{{ (opt_actie_nu == 'H' and not vo_ontladen_nu) if planner_nieuw and opt_ok else ontladen_vasthouden }}"
           slim_vasthouden: "{{ slim_vasthouden }}"
           tussen_laden_vasthouden: "{{ tussen_laden_vasthouden }}"
           vasthouden_grensprijs: "{{ vh_grens }}"
@@ -3851,7 +3890,9 @@ template:
             {{ uit.l }}
           accumodel: "{{ 'gedeeld' if model_nieuw else 'klassiek' }}"
           # Schaduwplanner (test, stuurt niets aan): actie nu, laad- en vasthoudblokken, kosten t.o.v. het huidige plan
-          optimaal: "{{ dict(opt | items | rejectattr(0, 'eq', 'acties') | list) if opt is mapping and opt | length > 0 else none }}"
+          optimaal: "{{ dict(opt | items | rejectattr(0, 'in', ['acties', 'tl']) | list) if opt_ok else none }}"
+          # huidig = de bestaande planner stuurt; nieuw = de optimalisatie per kwartier stuurt
+          planner: "{{ 'nieuw' if planner_nieuw else 'huidig' }}"
           # Rekentijd van deze berekening (s), als laatste attribuut: van het begin van de variabelen tot hier
           rekentijd_s: "{{ (as_timestamp(now()) - nu_ts) | round(3) }}"
 
@@ -3867,7 +3908,7 @@ template:
           # laden (1 = gepland netladen), zon_kw, verbruik_kw, accu_kw (+ laden / - ontladen),
           # soc_pct (laadpercentage aan het eind van het slot), net_kw (+ import / - export, incl. auto),
           # terugleveren (1 = accu levert terug aan het net), ev_kw (gepland laden van de auto)
-          tijdlijn: "{{ tijdlijn }}"
+          tijdlijn: "{{ dict(tijdlijn | items | list + (opt.tl | items | list) + [('leeg_ts', opt.leeg_ts if opt.leeg_ts > 0 else none)]) if planner_nieuw and opt_ok and tijdlijn is mapping and opt.tl.laden | length == tijdlijn.t | length else tijdlijn }}"
           # Schaduwplanner: actie per prijsslot vanaf t0 (L laden, H vasthouden, N normaal)
           optimaal_acties: "{{ {'t0': opt.t0, 'acties': opt.acties} if opt is mapping and opt | length > 0 else none }}"
           verbruik_per_kwartier_werkdag_kwh: "{{ profiel_kwartier.werkdag }}"

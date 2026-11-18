@@ -1516,6 +1516,8 @@ actions:
                 {%- set now_txt = (' (now €' ~ ('%.3f' | format(p | float(0))) ~ ')') if p is number else '' -%}
                 🌀Discharging stopped, charging only: {% if is_state('binary_sensor.hvac_discharge_blocked', 'on') and not a.get('hold_discharge', false) -%}
                 AC on
+                {%- elif a.get('planner') == 'new' -%}
+                new planner, battery saved for more expensive quarter hours{{ now_txt }}
                 {%- elif a.get('smart_hold') and a.get('hold_threshold_price') is number -%}
                 smart hold, battery saved for prices from €{{ '%.3f' | format(a.get('hold_threshold_price')) }}{{ now_txt }}
                 {%- elif a.get('between_charge_hold') and a.get('between_charge_threshold_price') is number -%}
