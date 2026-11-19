@@ -943,7 +943,6 @@ views:
                         max: 1.25
                     chart:
                       height: 52px
-                      stacked: true
                       sparkline:
                         enabled: false
                     legend:
@@ -997,11 +996,8 @@ views:
                           const d = new Date(t);
                           const tijd = d.toLocaleString(navigator.language, { weekday: 'short', hour: '2-digit', minute: '2-digit' });
                           const delen = [];
-                          w.globals.seriesNames.forEach((naam, i) => {
-                            const v = series[i] ? series[i][k] : null;
-                            if (!v) return;
-                            delen.push('<span style="color:' + w.globals.colors[i] + '">●</span> ' + naam);
-                          });
+                          const p = d0[k];
+                          delen.push('<span style="color:' + p.fillColor + '">●</span> ' + p.a);
                           return '<div style="padding:1px 6px;font-size:11px;line-height:16px;white-space:nowrap;background:var(--card-background-color,#1c1f26);color:var(--primary-text-color,#e1e1e1);border:1px solid var(--divider-color,#444);border-radius:4px">' + tijd + ' · ' + delen.join(' · ') + '</div>';
                         }
                     xaxis:
@@ -1020,72 +1016,20 @@ views:
                         show: false
                   series:
                     - entity: sensor.zendure_forecast_grafiek
-                      name: Laden
-                      type: column
-                      color: '#2e7dd7'
-                      show:
-                        in_header: false
-                      data_generator: |
-                        const d = entity.attributes.tijdlijn;
-                        if (!d || !d.t) return [];
-                        return d.t.map((t, i) => ({ x: (t + ((d.t[i + 1] ?? t + (i > 0 ? t - d.t[i - 1] : 900)) - t) / 2) * 1000, t0: t * 1000, t1: (d.t[i + 1] ?? t + (i > 0 ? t - d.t[i - 1] : 900)) * 1000, y: d.laden[i] ? 1 : null }));
-                    - entity: sensor.zendure_forecast_grafiek
-                      name: Leveren
-                      type: column
-                      color: '#e8743b'
-                      show:
-                        in_header: false
-                      data_generator: |
-                        const d = entity.attributes.tijdlijn;
-                        if (!d || !d.t) return [];
-                        return d.t.map((t, i) => ({ x: (t + ((d.t[i + 1] ?? t + (i > 0 ? t - d.t[i - 1] : 900)) - t) / 2) * 1000, t0: t * 1000, t1: (d.t[i + 1] ?? t + (i > 0 ? t - d.t[i - 1] : 900)) * 1000, y: (d.leveren ? d.leveren[i] : (d.accu_kw[i] < -0.01 && !(d.terugleveren && d.terugleveren[i]))) ? 1 : null }));
-                    - entity: sensor.zendure_forecast_grafiek
-                      name: Vasthouden
+                      name: Plan
                       type: column
                       color: '#9e9e9e'
                       show:
                         in_header: false
                       data_generator: |
+                        // Eén reeks met een kleur per kwartier (minder SVG dan een reeks per actie)
                         const d = entity.attributes.tijdlijn;
                         if (!d || !d.t) return [];
-                        return d.t.map((t, i) => ({ x: (t + ((d.t[i + 1] ?? t + (i > 0 ? t - d.t[i - 1] : 900)) - t) / 2) * 1000, t0: t * 1000, t1: (d.t[i + 1] ?? t + (i > 0 ? t - d.t[i - 1] : 900)) * 1000, y: (d.vasthouden && d.vasthouden[i]) ? 1 : null }));
-                    - entity: sensor.zendure_forecast_grafiek
-                      name: Terugleveren
-                      type: column
-                      color: '#c0392b'
-                      show:
-                        in_header: false
-                      data_generator: |
-                        const d = entity.attributes.tijdlijn;
-                        if (!d || !d.t) return [];
-                        return d.t.map((t, i) => ({ x: (t + ((d.t[i + 1] ?? t + (i > 0 ? t - d.t[i - 1] : 900)) - t) / 2) * 1000, t0: t * 1000, t1: (d.t[i + 1] ?? t + (i > 0 ? t - d.t[i - 1] : 900)) * 1000, y: (d.terugleveren && d.terugleveren[i]) ? 1 : null }));
-                    - entity: sensor.zendure_forecast_grafiek
-                      name: Zon
-                      type: column
-                      color: '#f2c037'
-                      show:
-                        in_header: false
-                      data_generator: |
-                        const d = entity.attributes.tijdlijn;
-                        if (!d || !d.t) return [];
+                        const A = [['Laden', '#2e7dd7'], ['Leveren', '#e8743b'], ['Vasthouden', '#9e9e9e'], ['Terugleveren', '#c0392b'], ['Zon', '#f2c037'], ['Accu leeg', '#4a4a4a']];
                         return d.t.map((t, i) => {
-                          const bezet = (d.laden[i] || (d.leveren ? d.leveren[i] : (d.accu_kw[i] < -0.01 && !(d.terugleveren && d.terugleveren[i]))) || (d.vasthouden && d.vasthouden[i]) || (d.terugleveren && d.terugleveren[i]));
-                          const zon = ((d.zon_kw[i] ?? 0) >= (d.verbruik_kw[i] ?? 0) - 0.01 || (d.accu_kw[i] ?? 0) > 0.01);
-                          return { x: (t + ((d.t[i + 1] ?? t + (i > 0 ? t - d.t[i - 1] : 900)) - t) / 2) * 1000, t0: t * 1000, t1: (d.t[i + 1] ?? t + (i > 0 ? t - d.t[i - 1] : 900)) * 1000, y: (!bezet && zon) ? 1 : null };
-                        });
-                    - entity: sensor.zendure_forecast_grafiek
-                      name: Accu leeg
-                      type: column
-                      color: '#4a4a4a'
-                      show:
-                        in_header: false
-                      data_generator: |
-                        const d = entity.attributes.tijdlijn;
-                        if (!d || !d.t) return [];
-                        return d.t.map((t, i) => {
-                          const bezet = (d.laden[i] || (d.leveren ? d.leveren[i] : (d.accu_kw[i] < -0.01 && !(d.terugleveren && d.terugleveren[i]))) || (d.vasthouden && d.vasthouden[i]) || (d.terugleveren && d.terugleveren[i]));
-                          const zon = ((d.zon_kw[i] ?? 0) >= (d.verbruik_kw[i] ?? 0) - 0.01 || (d.accu_kw[i] ?? 0) > 0.01);
-                          return { x: (t + ((d.t[i + 1] ?? t + (i > 0 ? t - d.t[i - 1] : 900)) - t) / 2) * 1000, t0: t * 1000, t1: (d.t[i + 1] ?? t + (i > 0 ? t - d.t[i - 1] : 900)) * 1000, y: (!bezet && !zon) ? 1 : null };
+                          const k = (d.terugleveren && d.terugleveren[i]) ? 3 : d.laden[i] ? 0 : (d.leveren ? d.leveren[i] : (d.accu_kw[i] < -0.01 && !(d.terugleveren && d.terugleveren[i]))) ? 1 : (d.vasthouden && d.vasthouden[i]) ? 2
+                            : ((d.zon_kw[i] ?? 0) >= (d.verbruik_kw[i] ?? 0) - 0.01 || (d.accu_kw[i] ?? 0) > 0.01) ? 4 : 5;
+                          return { x: (t + ((d.t[i + 1] ?? t + (i > 0 ? t - d.t[i - 1] : 900)) - t) / 2) * 1000, t0: t * 1000, t1: (d.t[i + 1] ?? t + (i > 0 ? t - d.t[i - 1] : 900)) * 1000, y: 1, fillColor: A[k][1], a: A[k][0] };
                         });
                   card_mod:
                     style: |

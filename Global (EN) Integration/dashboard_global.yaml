@@ -943,7 +943,6 @@ views:
                         max: 1.25
                     chart:
                       height: 52px
-                      stacked: true
                       sparkline:
                         enabled: false
                     legend:
@@ -997,11 +996,8 @@ views:
                           const d = new Date(t);
                           const tijd = d.toLocaleString(navigator.language, { weekday: 'short', hour: '2-digit', minute: '2-digit' });
                           const delen = [];
-                          w.globals.seriesNames.forEach((naam, i) => {
-                            const v = series[i] ? series[i][k] : null;
-                            if (!v) return;
-                            delen.push('<span style="color:' + w.globals.colors[i] + '">●</span> ' + naam);
-                          });
+                          const p = d0[k];
+                          delen.push('<span style="color:' + p.fillColor + '">●</span> ' + p.a);
                           return '<div style="padding:1px 6px;font-size:11px;line-height:16px;white-space:nowrap;background:var(--card-background-color,#1c1f26);color:var(--primary-text-color,#e1e1e1);border:1px solid var(--divider-color,#444);border-radius:4px">' + tijd + ' · ' + delen.join(' · ') + '</div>';
                         }
                     xaxis:
@@ -1020,72 +1016,20 @@ views:
                         show: false
                   series:
                     - entity: sensor.zendure_forecast_grafiek
-                      name: Charge
-                      type: column
-                      color: '#2e7dd7'
-                      show:
-                        in_header: false
-                      data_generator: |
-                        const d = entity.attributes.timeline;
-                        if (!d || !d.t) return [];
-                        return d.t.map((t, i) => ({ x: (t + ((d.t[i + 1] ?? t + (i > 0 ? t - d.t[i - 1] : 900)) - t) / 2) * 1000, t0: t * 1000, t1: (d.t[i + 1] ?? t + (i > 0 ? t - d.t[i - 1] : 900)) * 1000, y: d.charge[i] ? 1 : null }));
-                    - entity: sensor.zendure_forecast_grafiek
-                      name: Supply
-                      type: column
-                      color: '#e8743b'
-                      show:
-                        in_header: false
-                      data_generator: |
-                        const d = entity.attributes.timeline;
-                        if (!d || !d.t) return [];
-                        return d.t.map((t, i) => ({ x: (t + ((d.t[i + 1] ?? t + (i > 0 ? t - d.t[i - 1] : 900)) - t) / 2) * 1000, t0: t * 1000, t1: (d.t[i + 1] ?? t + (i > 0 ? t - d.t[i - 1] : 900)) * 1000, y: (d.supply ? d.supply[i] : (d.battery_kw[i] < -0.01 && !(d.export && d.export[i]))) ? 1 : null }));
-                    - entity: sensor.zendure_forecast_grafiek
-                      name: Hold
+                      name: Plan
                       type: column
                       color: '#9e9e9e'
                       show:
                         in_header: false
                       data_generator: |
+                        // One series with a colour per quarter hour (less SVG than one series per action)
                         const d = entity.attributes.timeline;
                         if (!d || !d.t) return [];
-                        return d.t.map((t, i) => ({ x: (t + ((d.t[i + 1] ?? t + (i > 0 ? t - d.t[i - 1] : 900)) - t) / 2) * 1000, t0: t * 1000, t1: (d.t[i + 1] ?? t + (i > 0 ? t - d.t[i - 1] : 900)) * 1000, y: (d.hold && d.hold[i]) ? 1 : null }));
-                    - entity: sensor.zendure_forecast_grafiek
-                      name: Export
-                      type: column
-                      color: '#c0392b'
-                      show:
-                        in_header: false
-                      data_generator: |
-                        const d = entity.attributes.timeline;
-                        if (!d || !d.t) return [];
-                        return d.t.map((t, i) => ({ x: (t + ((d.t[i + 1] ?? t + (i > 0 ? t - d.t[i - 1] : 900)) - t) / 2) * 1000, t0: t * 1000, t1: (d.t[i + 1] ?? t + (i > 0 ? t - d.t[i - 1] : 900)) * 1000, y: (d.export && d.export[i]) ? 1 : null }));
-                    - entity: sensor.zendure_forecast_grafiek
-                      name: Solar
-                      type: column
-                      color: '#f2c037'
-                      show:
-                        in_header: false
-                      data_generator: |
-                        const d = entity.attributes.timeline;
-                        if (!d || !d.t) return [];
+                        const A = [['Charge', '#2e7dd7'], ['Supply', '#e8743b'], ['Hold', '#9e9e9e'], ['Export', '#c0392b'], ['Solar', '#f2c037'], ['Battery empty', '#4a4a4a']];
                         return d.t.map((t, i) => {
-                          const bezet = (d.charge[i] || (d.supply ? d.supply[i] : (d.battery_kw[i] < -0.01 && !(d.export && d.export[i]))) || (d.hold && d.hold[i]) || (d.export && d.export[i]));
-                          const zon = ((d.solar_kw[i] ?? 0) >= (d.usage_kw[i] ?? 0) - 0.01 || (d.battery_kw[i] ?? 0) > 0.01);
-                          return { x: (t + ((d.t[i + 1] ?? t + (i > 0 ? t - d.t[i - 1] : 900)) - t) / 2) * 1000, t0: t * 1000, t1: (d.t[i + 1] ?? t + (i > 0 ? t - d.t[i - 1] : 900)) * 1000, y: (!bezet && zon) ? 1 : null };
-                        });
-                    - entity: sensor.zendure_forecast_grafiek
-                      name: Battery empty
-                      type: column
-                      color: '#4a4a4a'
-                      show:
-                        in_header: false
-                      data_generator: |
-                        const d = entity.attributes.timeline;
-                        if (!d || !d.t) return [];
-                        return d.t.map((t, i) => {
-                          const bezet = (d.charge[i] || (d.supply ? d.supply[i] : (d.battery_kw[i] < -0.01 && !(d.export && d.export[i]))) || (d.hold && d.hold[i]) || (d.export && d.export[i]));
-                          const zon = ((d.solar_kw[i] ?? 0) >= (d.usage_kw[i] ?? 0) - 0.01 || (d.battery_kw[i] ?? 0) > 0.01);
-                          return { x: (t + ((d.t[i + 1] ?? t + (i > 0 ? t - d.t[i - 1] : 900)) - t) / 2) * 1000, t0: t * 1000, t1: (d.t[i + 1] ?? t + (i > 0 ? t - d.t[i - 1] : 900)) * 1000, y: (!bezet && !zon) ? 1 : null };
+                          const k = (d.export && d.export[i]) ? 3 : d.charge[i] ? 0 : (d.supply ? d.supply[i] : (d.battery_kw[i] < -0.01 && !(d.export && d.export[i]))) ? 1 : (d.hold && d.hold[i]) ? 2
+                            : ((d.solar_kw[i] ?? 0) >= (d.usage_kw[i] ?? 0) - 0.01 || (d.battery_kw[i] ?? 0) > 0.01) ? 4 : 5;
+                          return { x: (t + ((d.t[i + 1] ?? t + (i > 0 ? t - d.t[i - 1] : 900)) - t) / 2) * 1000, t0: t * 1000, t1: (d.t[i + 1] ?? t + (i > 0 ? t - d.t[i - 1] : 900)) * 1000, y: 1, fillColor: A[k][1], a: A[k][0] };
                         });
                   card_mod:
                     style: |
