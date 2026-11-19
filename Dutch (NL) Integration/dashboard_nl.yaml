@@ -774,7 +774,7 @@ views:
             heading_style: title
           - type: markdown
             content: >-
-              <ha-alert alert-type="info">Helptekst</ha-alert>Voorspelling per prijsslot voor de komende 36 uur. Prijs (kleuren zoals Gielz): blauw = gepland laden uit het net, rood = duur (duurste periodes van Gielz), grijs = overig, lichtgrijs = prijs nog onbekend. Plan (smalle balk eronder): wat de accu per kwartier doet, uit hetzelfde plan als het blok Planning: blauw = laden, oranje = leveren aan het huis, grijs = vasthouden (het huis koopt direct in), rood = terugleveren; leeg = de accu staat stil (leeg, vol of de zon dekt het verbruik). Accu: blauw = laden uit het net, geel = laden uit zon, oranje = ontladen, rood = terugleveren aan het net (bij zonoverschot of vóór negatieve prijzen); witte lijn = laadpercentage (0–100%). Net: blauw = accu laden uit het net, paars = huis (en auto) uit het net, grijs = teruglevering. Paarse lijn bij Zon en verbruik = gepland laden van de auto (EV-pakket, Nacht). Zolang de prijzen van morgen onbekend zijn, is het plan voor morgen indicatief (patroon van vandaag). Zon alleen met een detailvoorspelling (Solcast of Helios Forecast).
+              <ha-alert alert-type="info">Helptekst</ha-alert>Voorspelling per prijsslot voor de komende 36 uur. Prijs (kleuren zoals Gielz): blauw = gepland laden uit het net, rood = duur (duurste periodes van Gielz), grijs = overig, lichtgrijs = prijs nog onbekend. Plan (smalle balk eronder): wat de accu per kwartier doet, uit hetzelfde plan als het blok Planning: blauw = laden, oranje = leveren aan het huis, grijs = vasthouden (het huis koopt direct in), rood = terugleveren, geel = de zon dekt het verbruik of laadt de accu, donkergrijs = de accu is leeg. Accu: blauw = laden uit het net, geel = laden uit zon, oranje = ontladen, rood = terugleveren aan het net (bij zonoverschot of vóór negatieve prijzen); witte lijn = laadpercentage (0–100%). Net: blauw = accu laden uit het net, paars = huis (en auto) uit het net, grijs = teruglevering. Paarse lijn bij Zon en verbruik = gepland laden van de auto (EV-pakket, Nacht). Zolang de prijzen van morgen onbekend zijn, is het plan voor morgen indicatief (patroon van vandaag). Zon alleen met een detailvoorspelling (Solcast of Helios Forecast).
 
 
               Let op: mod-card (card-mod, HACS) benodigd.
@@ -968,7 +968,7 @@ views:
                       texts:
                         - x: 4
                           'y': 11
-                          text: 'Plan: laden (blauw), leveren (oranje), vasthouden (grijs), terugleveren (rood)'
+                          text: 'Plan: laden (blauw), leveren (oranje), vasthouden (grijs), terugleveren (rood), zon (geel), leeg (donkergrijs)'
                           fontSize: 10px
                           foreColor: grey
                           textAnchor: start
@@ -1059,6 +1059,34 @@ views:
                         const d = entity.attributes.tijdlijn;
                         if (!d || !d.t) return [];
                         return d.t.map((t, i) => ({ x: (t + ((d.t[i + 1] ?? t + (i > 0 ? t - d.t[i - 1] : 900)) - t) / 2) * 1000, t0: t * 1000, t1: (d.t[i + 1] ?? t + (i > 0 ? t - d.t[i - 1] : 900)) * 1000, y: (d.terugleveren && d.terugleveren[i]) ? 1 : null }));
+                    - entity: sensor.zendure_forecast_grafiek
+                      name: Zon
+                      type: column
+                      color: '#f2c037'
+                      show:
+                        in_header: false
+                      data_generator: |
+                        const d = entity.attributes.tijdlijn;
+                        if (!d || !d.t) return [];
+                        return d.t.map((t, i) => {
+                          const bezet = (d.laden[i] || (d.leveren ? d.leveren[i] : (d.accu_kw[i] < -0.01 && !(d.terugleveren && d.terugleveren[i]))) || (d.vasthouden && d.vasthouden[i]) || (d.terugleveren && d.terugleveren[i]));
+                          const zon = ((d.zon_kw[i] ?? 0) >= (d.verbruik_kw[i] ?? 0) - 0.01 || (d.accu_kw[i] ?? 0) > 0.01);
+                          return { x: (t + ((d.t[i + 1] ?? t + (i > 0 ? t - d.t[i - 1] : 900)) - t) / 2) * 1000, t0: t * 1000, t1: (d.t[i + 1] ?? t + (i > 0 ? t - d.t[i - 1] : 900)) * 1000, y: (!bezet && zon) ? 1 : null };
+                        });
+                    - entity: sensor.zendure_forecast_grafiek
+                      name: Leeg
+                      type: column
+                      color: '#4a4a4a'
+                      show:
+                        in_header: false
+                      data_generator: |
+                        const d = entity.attributes.tijdlijn;
+                        if (!d || !d.t) return [];
+                        return d.t.map((t, i) => {
+                          const bezet = (d.laden[i] || (d.leveren ? d.leveren[i] : (d.accu_kw[i] < -0.01 && !(d.terugleveren && d.terugleveren[i]))) || (d.vasthouden && d.vasthouden[i]) || (d.terugleveren && d.terugleveren[i]));
+                          const zon = ((d.zon_kw[i] ?? 0) >= (d.verbruik_kw[i] ?? 0) - 0.01 || (d.accu_kw[i] ?? 0) > 0.01);
+                          return { x: (t + ((d.t[i + 1] ?? t + (i > 0 ? t - d.t[i - 1] : 900)) - t) / 2) * 1000, t0: t * 1000, t1: (d.t[i + 1] ?? t + (i > 0 ? t - d.t[i - 1] : 900)) * 1000, y: (!bezet && !zon) ? 1 : null };
+                        });
                   card_mod:
                     style: |
                       ha-card {

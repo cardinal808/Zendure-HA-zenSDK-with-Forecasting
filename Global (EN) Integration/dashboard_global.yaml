@@ -774,7 +774,7 @@ views:
             heading_style: title
           - type: markdown
             content: >-
-              <ha-alert alert-type="info">Help</ha-alert>Forecast per price slot for the next 36 hours. Price (colours as in Gielz): blue = planned grid charging, red = expensive (Gielz's most expensive periods), grey = other, light grey = price not known yet. Plan (narrow bar below it): what the battery does per quarter hour, from the same plan as the Planning block: blue = charge, orange = supply the house, grey = hold (the house buys directly), red = export; empty = the battery is idle (empty, full or solar covers the usage). Battery: blue = charging from the grid, yellow = charging from solar, orange = discharging, red = export to the grid (at solar surplus or ahead of negative prices); white line = state of charge (0–100%). Grid: blue = battery charging from the grid, purple = house (and car) from the grid, grey = export. Purple line under Solar and usage = planned car charging (EV package, Night). While tomorrow's prices are unknown, the plan for tomorrow is indicative (today's pattern). Solar only with a detailed forecast (Solcast or Helios Forecast).
+              <ha-alert alert-type="info">Help</ha-alert>Forecast per price slot for the next 36 hours. Price (colours as in Gielz): blue = planned grid charging, red = expensive (Gielz's most expensive periods), grey = other, light grey = price not known yet. Plan (narrow bar below it): what the battery does per quarter hour, from the same plan as the Planning block: blue = charge, orange = supply the house, grey = hold (the house buys directly), red = export, yellow = solar covers the usage or charges the battery, dark grey = the battery is empty. Battery: blue = charging from the grid, yellow = charging from solar, orange = discharging, red = export to the grid (at solar surplus or ahead of negative prices); white line = state of charge (0–100%). Grid: blue = battery charging from the grid, purple = house (and car) from the grid, grey = export. Purple line under Solar and usage = planned car charging (EV package, Night). While tomorrow's prices are unknown, the plan for tomorrow is indicative (today's pattern). Solar only with a detailed forecast (Solcast or Helios Forecast).
 
 
               Note: needs mod-card (card-mod, HACS).
@@ -968,7 +968,7 @@ views:
                       texts:
                         - x: 4
                           'y': 11
-                          text: 'Plan: charge (blue), supply (orange), hold (grey), export (red)'
+                          text: 'Plan: charge (blue), supply (orange), hold (grey), export (red), solar (yellow), empty (dark grey)'
                           fontSize: 10px
                           foreColor: grey
                           textAnchor: start
@@ -1059,6 +1059,34 @@ views:
                         const d = entity.attributes.timeline;
                         if (!d || !d.t) return [];
                         return d.t.map((t, i) => ({ x: (t + ((d.t[i + 1] ?? t + (i > 0 ? t - d.t[i - 1] : 900)) - t) / 2) * 1000, t0: t * 1000, t1: (d.t[i + 1] ?? t + (i > 0 ? t - d.t[i - 1] : 900)) * 1000, y: (d.export && d.export[i]) ? 1 : null }));
+                    - entity: sensor.zendure_forecast_grafiek
+                      name: Solar
+                      type: column
+                      color: '#f2c037'
+                      show:
+                        in_header: false
+                      data_generator: |
+                        const d = entity.attributes.timeline;
+                        if (!d || !d.t) return [];
+                        return d.t.map((t, i) => {
+                          const bezet = (d.charge[i] || (d.supply ? d.supply[i] : (d.battery_kw[i] < -0.01 && !(d.export && d.export[i]))) || (d.hold && d.hold[i]) || (d.export && d.export[i]));
+                          const zon = ((d.solar_kw[i] ?? 0) >= (d.usage_kw[i] ?? 0) - 0.01 || (d.battery_kw[i] ?? 0) > 0.01);
+                          return { x: (t + ((d.t[i + 1] ?? t + (i > 0 ? t - d.t[i - 1] : 900)) - t) / 2) * 1000, t0: t * 1000, t1: (d.t[i + 1] ?? t + (i > 0 ? t - d.t[i - 1] : 900)) * 1000, y: (!bezet && zon) ? 1 : null };
+                        });
+                    - entity: sensor.zendure_forecast_grafiek
+                      name: Empty
+                      type: column
+                      color: '#4a4a4a'
+                      show:
+                        in_header: false
+                      data_generator: |
+                        const d = entity.attributes.timeline;
+                        if (!d || !d.t) return [];
+                        return d.t.map((t, i) => {
+                          const bezet = (d.charge[i] || (d.supply ? d.supply[i] : (d.battery_kw[i] < -0.01 && !(d.export && d.export[i]))) || (d.hold && d.hold[i]) || (d.export && d.export[i]));
+                          const zon = ((d.solar_kw[i] ?? 0) >= (d.usage_kw[i] ?? 0) - 0.01 || (d.battery_kw[i] ?? 0) > 0.01);
+                          return { x: (t + ((d.t[i + 1] ?? t + (i > 0 ? t - d.t[i - 1] : 900)) - t) / 2) * 1000, t0: t * 1000, t1: (d.t[i + 1] ?? t + (i > 0 ? t - d.t[i - 1] : 900)) * 1000, y: (!bezet && !zon) ? 1 : null };
+                        });
                   card_mod:
                     style: |
                       ha-card {
