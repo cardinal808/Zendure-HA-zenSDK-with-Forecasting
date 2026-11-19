@@ -856,12 +856,18 @@ views:
                       followCursor: true
                       custom: >-
                         EVAL:function({ series, dataPointIndex, w }) {
-                          const t = Math.floor(w.globals.seriesX[0][dataPointIndex] / 900000) * 900000;
+                          // Slot onder de muis zelf bepalen (apex kiest bij kolommen soms het buurslot)
+                          const r = w.globals.dom.Paper.node.getBoundingClientRect();
+                          const T = w.globals.minX + (w.globals.clientX - r.left - w.globals.translateX) / w.globals.gridWidth * (w.globals.maxX - w.globals.minX);
+                          const d0 = (w.config.series[0] || {}).data || [];
+                          const k = d0.findIndex((p) => p && p.t0 <= T && T < p.t1);
+                          if (k < 0) return '';
+                          const t = d0[k].t0;
                           const d = new Date(t);
                           const tijd = d.toLocaleString(navigator.language, { weekday: 'short', hour: '2-digit', minute: '2-digit' });
                           const delen = [];
                           w.globals.seriesNames.forEach((naam, i) => {
-                            const v = series[i] ? series[i][dataPointIndex] : null;
+                            const v = series[i] ? series[i][k] : null;
                             if (v === null || v === undefined || Number.isNaN(v)) return;
                             const n = naam.toLowerCase();
                             const txt = (n.startsWith('prijs') || n.startsWith('price')) ? v.toFixed(3) + ' €'
@@ -910,7 +916,7 @@ views:
                           if (duur.has(t * 1000)) c = 'rgba(197,59,44,1)';
                           if (!d.bekend[i]) c = 'rgba(162,162,163,0.4)';
                           if (d.laden[i]) c = 'rgba(46,125,215,1)';
-                          return { x: (t + ((d.t[i + 1] ?? t + 900) - t) / 2) * 1000, y: v, fillColor: c };
+                          return { x: (t + ((d.t[i + 1] ?? t + (i > 0 ? t - d.t[i - 1] : 900)) - t) / 2) * 1000, t0: t * 1000, t1: (d.t[i + 1] ?? t + (i > 0 ? t - d.t[i - 1] : 900)) * 1000, y: v, fillColor: c };
                         });
                   card_mod:
                     style: |
@@ -934,9 +940,10 @@ views:
                     yaxis:
                       - show: false
                         min: 0
-                        max: 1.9
+                        max: 1.25
                     chart:
-                      height: 40px
+                      height: 52px
+                      stacked: true
                       sparkline:
                         enabled: false
                     legend:
@@ -980,12 +987,18 @@ views:
                       followCursor: true
                       custom: >-
                         EVAL:function({ series, dataPointIndex, w }) {
-                          const t = Math.floor(w.globals.seriesX[0][dataPointIndex] / 900000) * 900000;
+                          // Slot onder de muis zelf bepalen (apex kiest bij kolommen soms het buurslot)
+                          const r = w.globals.dom.Paper.node.getBoundingClientRect();
+                          const T = w.globals.minX + (w.globals.clientX - r.left - w.globals.translateX) / w.globals.gridWidth * (w.globals.maxX - w.globals.minX);
+                          const d0 = (w.config.series[0] || {}).data || [];
+                          const k = d0.findIndex((p) => p && p.t0 <= T && T < p.t1);
+                          if (k < 0) return '';
+                          const t = d0[k].t0;
                           const d = new Date(t);
                           const tijd = d.toLocaleString(navigator.language, { weekday: 'short', hour: '2-digit', minute: '2-digit' });
                           const delen = [];
                           w.globals.seriesNames.forEach((naam, i) => {
-                            const v = series[i] ? series[i][dataPointIndex] : null;
+                            const v = series[i] ? series[i][k] : null;
                             if (!v) return;
                             delen.push('<span style="color:' + w.globals.colors[i] + '">●</span> ' + naam);
                           });
@@ -1015,7 +1028,7 @@ views:
                       data_generator: |
                         const d = entity.attributes.tijdlijn;
                         if (!d || !d.t) return [];
-                        return d.t.map((t, i) => ({ x: (t + ((d.t[i + 1] ?? t + 900) - t) / 2) * 1000, y: d.laden[i] ? 1 : null }));
+                        return d.t.map((t, i) => ({ x: (t + ((d.t[i + 1] ?? t + (i > 0 ? t - d.t[i - 1] : 900)) - t) / 2) * 1000, t0: t * 1000, t1: (d.t[i + 1] ?? t + (i > 0 ? t - d.t[i - 1] : 900)) * 1000, y: d.laden[i] ? 1 : null }));
                     - entity: sensor.zendure_forecast_grafiek
                       name: Leveren
                       type: column
@@ -1025,7 +1038,7 @@ views:
                       data_generator: |
                         const d = entity.attributes.tijdlijn;
                         if (!d || !d.t) return [];
-                        return d.t.map((t, i) => ({ x: (t + ((d.t[i + 1] ?? t + 900) - t) / 2) * 1000, y: (d.leveren ? d.leveren[i] : (d.accu_kw[i] < -0.01 && !(d.terugleveren && d.terugleveren[i]))) ? 1 : null }));
+                        return d.t.map((t, i) => ({ x: (t + ((d.t[i + 1] ?? t + (i > 0 ? t - d.t[i - 1] : 900)) - t) / 2) * 1000, t0: t * 1000, t1: (d.t[i + 1] ?? t + (i > 0 ? t - d.t[i - 1] : 900)) * 1000, y: (d.leveren ? d.leveren[i] : (d.accu_kw[i] < -0.01 && !(d.terugleveren && d.terugleveren[i]))) ? 1 : null }));
                     - entity: sensor.zendure_forecast_grafiek
                       name: Vasthouden
                       type: column
@@ -1035,7 +1048,7 @@ views:
                       data_generator: |
                         const d = entity.attributes.tijdlijn;
                         if (!d || !d.t) return [];
-                        return d.t.map((t, i) => ({ x: (t + ((d.t[i + 1] ?? t + 900) - t) / 2) * 1000, y: (d.vasthouden && d.vasthouden[i]) ? 1 : null }));
+                        return d.t.map((t, i) => ({ x: (t + ((d.t[i + 1] ?? t + (i > 0 ? t - d.t[i - 1] : 900)) - t) / 2) * 1000, t0: t * 1000, t1: (d.t[i + 1] ?? t + (i > 0 ? t - d.t[i - 1] : 900)) * 1000, y: (d.vasthouden && d.vasthouden[i]) ? 1 : null }));
                     - entity: sensor.zendure_forecast_grafiek
                       name: Terugleveren
                       type: column
@@ -1045,7 +1058,7 @@ views:
                       data_generator: |
                         const d = entity.attributes.tijdlijn;
                         if (!d || !d.t) return [];
-                        return d.t.map((t, i) => ({ x: (t + ((d.t[i + 1] ?? t + 900) - t) / 2) * 1000, y: (d.terugleveren && d.terugleveren[i]) ? 1 : null }));
+                        return d.t.map((t, i) => ({ x: (t + ((d.t[i + 1] ?? t + (i > 0 ? t - d.t[i - 1] : 900)) - t) / 2) * 1000, t0: t * 1000, t1: (d.t[i + 1] ?? t + (i > 0 ? t - d.t[i - 1] : 900)) * 1000, y: (d.terugleveren && d.terugleveren[i]) ? 1 : null }));
                   card_mod:
                     style: |
                       ha-card {
@@ -1112,12 +1125,18 @@ views:
                       followCursor: true
                       custom: >-
                         EVAL:function({ series, dataPointIndex, w }) {
-                          const t = Math.floor(w.globals.seriesX[0][dataPointIndex] / 900000) * 900000;
+                          // Slot onder de muis zelf bepalen (apex kiest bij kolommen soms het buurslot)
+                          const r = w.globals.dom.Paper.node.getBoundingClientRect();
+                          const T = w.globals.minX + (w.globals.clientX - r.left - w.globals.translateX) / w.globals.gridWidth * (w.globals.maxX - w.globals.minX);
+                          const d0 = (w.config.series[0] || {}).data || [];
+                          const k = d0.findIndex((p) => p && p.t0 <= T && T < p.t1);
+                          if (k < 0) return '';
+                          const t = d0[k].t0;
                           const d = new Date(t);
                           const tijd = d.toLocaleString(navigator.language, { weekday: 'short', hour: '2-digit', minute: '2-digit' });
                           const delen = [];
                           w.globals.seriesNames.forEach((naam, i) => {
-                            const v = series[i] ? series[i][dataPointIndex] : null;
+                            const v = series[i] ? series[i][k] : null;
                             if (v === null || v === undefined || Number.isNaN(v)) return;
                             const n = naam.toLowerCase();
                             const txt = (n.startsWith('prijs') || n.startsWith('price')) ? v.toFixed(3) + ' €'
@@ -1152,7 +1171,7 @@ views:
                       data_generator: |
                         const d = entity.attributes.tijdlijn;
                         if (!d || !d.t) return [];
-                        return d.t.map((t, i) => ({ x: (t + ((d.t[i + 1] ?? t + 900) - t) / 2) * 1000, y: d.zon_kw[i] }));
+                        return d.t.map((t, i) => ({ x: (t + ((d.t[i + 1] ?? t + (i > 0 ? t - d.t[i - 1] : 900)) - t) / 2) * 1000, t0: t * 1000, t1: (d.t[i + 1] ?? t + (i > 0 ? t - d.t[i - 1] : 900)) * 1000, y: d.zon_kw[i] }));
                     - entity: sensor.zendure_forecast_grafiek
                       name: Verbruik
                       type: line
@@ -1199,145 +1218,21 @@ views:
                   header:
                     show: false
                   apex_config:
-                    # Twee assen met de nul op dezelfde hoogte: accu kW symmetrisch (minstens ±2,4 kW), laadpercentage
-                    # −100…100%, zodat 0% op de nullijn van de kolommen valt en de lijn er nooit onder komt.
                     yaxis:
-                      - seriesName: Accu
+                      - seriesName: Net
                         show: false
                         min: 'EVAL:function(min) { return Math.min(min, -2.4); }'
                         max: 'EVAL:function(max) { return Math.max(max, 2.4); }'
+                      - seriesName: Net
+                        show: false
                       - seriesName: Laadpercentage
                         opposite: true
                         min: -100
                         max: 100
                         show: false
                     chart:
-                      height: 80px
-                      sparkline:
-                        enabled: false
-                    legend:
-                      show: false
-                    plotOptions:
-                      bar:
-                        columnWidth: 100%
-                    dataLabels:
-                      enabled: false
-                    annotations:
-                      # Stippellijn bij middernacht (vandaag, morgen, overmorgen)
-                      xaxis:
-                        - x: 'EVAL:(() => { const d = new Date(); d.setHours(0, 0, 0, 0); return d.getTime(); })()'
-                          borderColor: 'rgba(160,160,160,0.7)'
-                          strokeDashArray: 3
-                        - x: 'EVAL:(() => { const d = new Date(); d.setHours(24, 0, 0, 0); return d.getTime(); })()'
-                          borderColor: 'rgba(160,160,160,0.7)'
-                          strokeDashArray: 3
-                        - x: 'EVAL:(() => { const d = new Date(); d.setHours(48, 0, 0, 0); return d.getTime(); })()'
-                          borderColor: 'rgba(160,160,160,0.7)'
-                          strokeDashArray: 3
-                      texts:
-                        - x: 4
-                          'y': 11
-                          text: 'Accu kW en laadpercentage'
-                          fontSize: 10px
-                          foreColor: grey
-                          textAnchor: start
-                    grid:
-                      show: true
-                      borderColor: color-mix(in srgb, var(--divider-color) 40%, transparent)
-                      strokeDashArray: 0
-                      padding:
-                        top: -10
-                        bottom: -28
-                        left: 6
-                        right: 4
-                    tooltip:
-                      shared: true
-                      intersect: false
-                      followCursor: true
-                      custom: >-
-                        EVAL:function({ series, dataPointIndex, w }) {
-                          const t = Math.floor(w.globals.seriesX[0][dataPointIndex] / 900000) * 900000;
-                          const d = new Date(t);
-                          const tijd = d.toLocaleString(navigator.language, { weekday: 'short', hour: '2-digit', minute: '2-digit' });
-                          const delen = [];
-                          w.globals.seriesNames.forEach((naam, i) => {
-                            const v = series[i] ? series[i][dataPointIndex] : null;
-                            if (v === null || v === undefined || Number.isNaN(v)) return;
-                            const n = naam.toLowerCase();
-                            const txt = (n.startsWith('prijs') || n.startsWith('price')) ? v.toFixed(3) + ' €'
-                              : ((n.startsWith('laadperc') || n.startsWith('state')) ? Math.round(v) + '%' : v.toFixed(2) + ' kW');
-                            delen.push('<span style="color:' + w.globals.colors[i] + '">●</span> ' + naam + ' ' + txt);
-                          });
-                          return '<div style="padding:1px 6px;font-size:11px;line-height:16px;white-space:nowrap;background:var(--card-background-color,#1c1f26);color:var(--primary-text-color,#e1e1e1);border:1px solid var(--divider-color,#444);border-radius:4px">' + tijd + ' · ' + delen.join(' · ') + '</div>';
-                        }
-                    xaxis:
-                      tooltip:
-                        enabled: false
-                      labels:
-                        show: false
-                        datetimeUTC: false
-                        format: HH:mm
-                        style:
-                          fontSize: 10px
-                          colors: grey
-                      axisTicks:
-                        show: false
-                      axisBorder:
-                        show: false
-                  series:
-                    - entity: sensor.zendure_forecast_grafiek
-                      name: Accu
-                      type: column
-                      color: '#01a180'
-                      float_precision: 2
-                      show:
-                        in_header: false
-                      data_generator: |
-                        const d = entity.attributes.tijdlijn;
-                        if (!d || !d.t) return [];
-                        return d.t.map((t, i) => {
-                          const v = d.accu_kw[i];
-                          const c = v < 0 ? ((d.terugleveren && d.terugleveren[i]) ? '#c0392b' : '#e8743b') : (d.laden[i] ? '#2e7dd7' : '#f2c037');
-                          return { x: (t + ((d.t[i + 1] ?? t + 900) - t) / 2) * 1000, y: v, fillColor: c };
-                        });
-                    - entity: sensor.zendure_forecast_grafiek
-                      name: Laadpercentage
-                      type: line
-                      color: '#e1e1e1'
-                      stroke_width: 1.5
-                      curve: straight
-                      float_precision: 0
-                      show:
-                        in_header: false
-                      data_generator: |
-                        const d = entity.attributes.tijdlijn;
-                        if (!d || !d.t) return [];
-                        // laadpercentage aan het begin van elk slot (linkerrand van de kolom)
-                        return d.t.map((t, i) => ({ x: t * 1000, y: i === 0 ? d.soc_nu_pct : d.soc_pct[i - 1] }));
-                  card_mod:
-                    style: |
-                      ha-card {
-                        background: none !important;
-                        border: none !important;
-                        border-radius: 0 !important;
-                        box-shadow: none !important;
-                        border-top: 1px solid var(--divider-color) !important;
-                      }
-                - type: custom:apexcharts-card
-                  graph_span: 36h
-                  span:
-                    start: hour
-                  now:
-                    show: true
-                    color: var(--primary-text-color)
-                  update_interval: 5min
-                  header:
-                    show: false
-                  apex_config:
-                    yaxis:
-                      - show: false
-                    chart:
-                      height: 100px
+                      height: 140px
+                      stacked: true
                       sparkline:
                         enabled: false
                     legend:
@@ -1355,7 +1250,7 @@ views:
                       texts:
                         - x: 4
                           'y': 11
-                          text: 'Net kW'
+                          text: 'Net en accu kW (boven: uit het net en zon naar de accu; onder: uit de accu) en laadpercentage'
                           fontSize: 10px
                           foreColor: grey
                           textAnchor: start
@@ -1374,12 +1269,18 @@ views:
                       followCursor: true
                       custom: >-
                         EVAL:function({ series, dataPointIndex, w }) {
-                          const t = Math.floor(w.globals.seriesX[0][dataPointIndex] / 900000) * 900000;
+                          // Slot onder de muis zelf bepalen (apex kiest bij kolommen soms het buurslot)
+                          const r = w.globals.dom.Paper.node.getBoundingClientRect();
+                          const T = w.globals.minX + (w.globals.clientX - r.left - w.globals.translateX) / w.globals.gridWidth * (w.globals.maxX - w.globals.minX);
+                          const d0 = (w.config.series[0] || {}).data || [];
+                          const k = d0.findIndex((p) => p && p.t0 <= T && T < p.t1);
+                          if (k < 0) return '';
+                          const t = d0[k].t0;
                           const d = new Date(t);
                           const tijd = d.toLocaleString(navigator.language, { weekday: 'short', hour: '2-digit', minute: '2-digit' });
                           const delen = [];
                           w.globals.seriesNames.forEach((naam, i) => {
-                            const v = series[i] ? series[i][dataPointIndex] : null;
+                            const v = series[i] ? series[i][k] : null;
                             if (v === null || v === undefined || Number.isNaN(v)) return;
                             const n = naam.toLowerCase();
                             const txt = (n.startsWith('prijs') || n.startsWith('price')) ? v.toFixed(3) + ' €'
@@ -1410,11 +1311,44 @@ views:
                         const d = entity.attributes.tijdlijn;
                         if (!d || !d.t) return [];
                         return d.t.map((t, i) => {
-                          const v = d.net_kw[i];
+                          let v = d.net_kw[i];
+                          // teruglevering terwijl de accu ontlaadt staat al bij Accu (rood)
+                          if (v < 0 && d.accu_kw[i] < -0.01) v = null;
                           // blauw = accu laden uit het net, paars = huis uit het net, grijs = teruglevering
                           const c = v < 0 ? '#a2a2a3' : (d.laden[i] ? '#2e7dd7' : '#8e7cc3');
-                          return { x: (t + ((d.t[i + 1] ?? t + 900) - t) / 2) * 1000, y: v, fillColor: c };
+                          return { x: (t + ((d.t[i + 1] ?? t + (i > 0 ? t - d.t[i - 1] : 900)) - t) / 2) * 1000, t0: t * 1000, t1: (d.t[i + 1] ?? t + (i > 0 ? t - d.t[i - 1] : 900)) * 1000, y: v, fillColor: c };
                         });
+                    - entity: sensor.zendure_forecast_grafiek
+                      name: Accu
+                      type: column
+                      color: '#01a180'
+                      float_precision: 2
+                      show:
+                        in_header: false
+                      data_generator: |
+                        const d = entity.attributes.tijdlijn;
+                        if (!d || !d.t) return [];
+                        return d.t.map((t, i) => {
+                          let v = d.accu_kw[i];
+                          // laden uit het net staat al bij Net (blauw); hier alleen zon naar de accu en ontladen
+                          if (v > 0 && d.laden[i]) v = null;
+                          const c = v < 0 ? ((d.terugleveren && d.terugleveren[i]) ? '#c0392b' : '#e8743b') : (d.laden[i] ? '#2e7dd7' : '#f2c037');
+                          return { x: (t + ((d.t[i + 1] ?? t + (i > 0 ? t - d.t[i - 1] : 900)) - t) / 2) * 1000, t0: t * 1000, t1: (d.t[i + 1] ?? t + (i > 0 ? t - d.t[i - 1] : 900)) * 1000, y: v, fillColor: c };
+                        });
+                    - entity: sensor.zendure_forecast_grafiek
+                      name: Laadpercentage
+                      type: line
+                      color: '#e1e1e1'
+                      stroke_width: 1.5
+                      curve: straight
+                      float_precision: 0
+                      show:
+                        in_header: false
+                      data_generator: |
+                        const d = entity.attributes.tijdlijn;
+                        if (!d || !d.t) return [];
+                        // laadpercentage aan het begin van elk slot (linkerrand van de kolom)
+                        return d.t.map((t, i) => ({ x: t * 1000, y: i === 0 ? d.soc_nu_pct : d.soc_pct[i - 1] }));
                   card_mod:
                     style: |
                       ha-card {
