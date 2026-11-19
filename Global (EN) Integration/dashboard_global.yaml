@@ -652,10 +652,10 @@ views:
             series:
               - entity: sensor.zendure_power_pv_total
                 name: Total
-                group_by:
-                  func: avg
-                  duration: 5min
-                  fill: last
+                statistics:
+                  period: 5minute
+                  type: mean
+                  align: start
                 type: area
                 stroke_width: 2
                 opacity: 0.35
@@ -686,10 +686,10 @@ views:
                     opacity: 0.5
               - entity: sensor.zendure_power_pv_to_battery
                 name: To Battery
-                group_by:
-                  func: avg
-                  duration: 5min
-                  fill: last
+                statistics:
+                  period: 5minute
+                  type: mean
+                  align: start
                 type: area
                 opacity: 0
                 stroke_width: 0
@@ -703,10 +703,10 @@ views:
                   in_legend: false
               - entity: sensor.zendure_power_pv_to_home
                 name: To Home
-                group_by:
-                  func: avg
-                  duration: 5min
-                  fill: last
+                statistics:
+                  period: 5minute
+                  type: mean
+                  align: start
                 type: area
                 opacity: 0.35
                 stroke_width: 0
