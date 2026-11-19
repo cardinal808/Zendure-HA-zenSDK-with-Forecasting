@@ -2205,8 +2205,8 @@ views:
 
               {% endif %}- Nu: **{{ o.nu }}**{% if not nw %} (huidig plan: {{ 'Laden' if states('sensor.zendure_forecast_plan') == 'Laden' else ('Vasthouden' if a.ontladen_vasthouden else 'Leveren') }}){% endif %}
               - Laden: {% if (o.laden | default([])) | length > 0 %}{% for b in o.laden %}{{ b.van }}–{{ b.tot }} ({{ '%.1f' | format(b.kwh) }} kWh, gem. €{{ '%.3f' | format(b.prijs) }}){{ ', ' if not loop.last }}{% endfor %}{% else %}niets{% endif %}
-              - Leveren: {% if (o.leveren | default([])) | length > 0 %}{% for b in o.leveren %}{{ b.van }}–{{ b.tot }} ({{ '%.1f' | format(b.kwh) }} kWh){{ ', ' if not loop.last }}{% endfor %}{% else %}niet{% endif %}
-              - Vasthouden: {% if (o.vasthouden | default([])) | length > 0 %}{% for b in o.vasthouden %}{{ b.van }}–{{ b.tot }}{{ ', ' if not loop.last }}{% endfor %}{% else %}niet{% endif %}
+              {% set pm = a.morgen_prijzen_bekend | default(false) %}{% set lv = (o.leveren | default([])) if pm else ((o.leveren | default([])) | rejectattr('van', 'search', '^morgen') | list) %}{% set vh = (o.vasthouden | default([])) if pm else ((o.vasthouden | default([])) | rejectattr('van', 'search', '^morgen') | list) %}- Leveren: {% if lv | length > 0 %}{% for b in lv %}{{ b.van }}–{{ b.tot }} ({{ '%.1f' | format(b.kwh) }} kWh){{ ', ' if not loop.last }}{% endfor %}{% else %}niet{% endif %}
+              - Vasthouden: {% if vh | length > 0 %}{% for b in vh %}{{ b.van }}–{{ b.tot }}{{ ', ' if not loop.last }}{% endfor %}{% else %}niet{% endif %}
               {% if (o.terugleveren | default([])) | length > 0 %}- Terugleveren: {% for b in o.terugleveren %}{{ b.van }}–{{ b.tot }} ({{ '%.1f' | format(b.kwh) }} kWh, €{{ '%.3f' | format(b.prijs) }}){{ ', ' if not loop.last }}{% endfor %}
               {% endif %}{% if o.kalibratie_100_om %}- Kalibratie: accu op 100% om {{ o.kalibratie_100_om }}
               {% endif %}{% if o.middernacht_pct is not none %}- Om middernacht nog ongeveer **{{ o.middernacht_pct | int }}%**{% if o.leeg_om %}; leeg {{ 'morgen ' if o.leeg_om[:10] != now().strftime('%Y-%m-%d') else '' }}om {{ o.leeg_om[11:] }}{% endif %}

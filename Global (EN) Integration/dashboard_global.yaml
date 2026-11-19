@@ -2200,8 +2200,8 @@ views:
 
               {% endif %}- Now: **{{ o.now }}**{% if not nw %} (current plan: {{ 'Charge' if states('sensor.zendure_forecast_plan') == 'Charge' else ('Hold' if a.hold_discharge else 'Supply') }}){% endif %}
               - Charge: {% if (o.charge | default([])) | length > 0 %}{% for b in o.charge %}{{ b.from }}–{{ b.until }} ({{ '%.1f' | format(b.kwh) }} kWh, avg. €{{ '%.3f' | format(b.price) }}){{ ', ' if not loop.last }}{% endfor %}{% else %}nothing{% endif %}
-              - Supply: {% if (o.supply | default([])) | length > 0 %}{% for b in o.supply %}{{ b.from }}–{{ b.until }} ({{ '%.1f' | format(b.kwh) }} kWh){{ ', ' if not loop.last }}{% endfor %}{% else %}no{% endif %}
-              - Hold: {% if (o.hold | default([])) | length > 0 %}{% for b in o.hold %}{{ b.from }}–{{ b.until }}{{ ', ' if not loop.last }}{% endfor %}{% else %}no{% endif %}
+              {% set pm = a.tomorrow_prices_known | default(false) %}{% set lv = (o.supply | default([])) if pm else ((o.supply | default([])) | rejectattr('from', 'search', '^tomorrow') | list) %}{% set vh = (o.hold | default([])) if pm else ((o.hold | default([])) | rejectattr('from', 'search', '^tomorrow') | list) %}- Supply: {% if lv | length > 0 %}{% for b in lv %}{{ b.from }}–{{ b.until }} ({{ '%.1f' | format(b.kwh) }} kWh){{ ', ' if not loop.last }}{% endfor %}{% else %}no{% endif %}
+              - Hold: {% if vh | length > 0 %}{% for b in vh %}{{ b.from }}–{{ b.until }}{{ ', ' if not loop.last }}{% endfor %}{% else %}no{% endif %}
               {% if (o.export | default([])) | length > 0 %}- Export: {% for b in o.export %}{{ b.from }}–{{ b.until }} ({{ '%.1f' | format(b.kwh) }} kWh, €{{ '%.3f' | format(b.price) }}){{ ', ' if not loop.last }}{% endfor %}
               {% endif %}{% if o.calibration_100_at %}- Calibration: battery at 100% at {{ o.calibration_100_at }}
               {% endif %}{% if o.midnight_pct is not none %}- At midnight still about **{{ o.midnight_pct | int }}%**{% if o.empty_at %}; empty {{ 'tomorrow ' if o.empty_at[:10] != now().strftime('%Y-%m-%d') else '' }}at {{ o.empty_at[11:] }}{% endif %}
