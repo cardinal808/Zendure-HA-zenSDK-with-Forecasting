@@ -3689,13 +3689,15 @@ template:
                 {%- if fw.empty == 0 and act == 'N' and s2 <= 0.01 and ll > 0 -%}{%- set fw.empty = x.a + (s1 * eff_out / ll) * (x.e - x.a) -%}{%- endif -%}
                 {%- if act == 'L' -%}{%- set fw.net = fw.net + add / eff_in -%}{%- endif -%}
                 {%- if act == 'X' -%}{%- set fw.terug = fw.terug + xo - xh -%}{%- endif -%}
-                {%- if fw.cur is mapping and fw.cur.a == act and fw.cur.e == x.s -%}
-                  {%- set kw_ = (add / eff_in) if act == 'L' else ((xo - xh) if act == 'X' else 0) -%}
-                  {%- set fw.cur = dict(fw.cur, e=x.e, kwh=fw.cur.kwh + kw_, pk=fw.cur.pk + kw_ * (x.v if act == 'L' else fx)) -%}
+                {#- Blok voor de lijsten: Leveren alleen als de accu echt levert (E = staat stil/leeg) -#}
+                {%- set ba = ('N' if out > 0.001 else 'E') if act == 'N' else act -%}
+                {%- if fw.cur is mapping and fw.cur.a == ba and fw.cur.e == x.s -%}
+                  {%- set kw_ = (add / eff_in) if act == 'L' else ((xo - xh) if act == 'X' else (out if ba == 'N' else 0)) -%}
+                  {%- set fw.cur = dict(fw.cur, e=x.e, kwh=fw.cur.kwh + kw_, pk=fw.cur.pk + kw_ * (x.v if act == 'L' else (fx if act == 'X' else 0))) -%}
                 {%- else -%}
                   {%- if fw.cur is mapping -%}{%- set fw.blok = fw.blok + [fw.cur] -%}{%- endif -%}
-                  {%- set kw_ = (add / eff_in) if act == 'L' else ((xo - xh) if act == 'X' else 0) -%}
-                  {%- set fw.cur = {'a': act, 's': x.a, 'e': x.e, 'kwh': kw_, 'pk': kw_ * (x.v if act == 'L' else fx)} -%}
+                  {%- set kw_ = (add / eff_in) if act == 'L' else ((xo - xh) if act == 'X' else (out if ba == 'N' else 0)) -%}
+                  {%- set fw.cur = {'a': ba, 's': x.a, 'e': x.e, 'kwh': kw_, 'pk': kw_ * (x.v if act == 'L' else (fx if act == 'X' else 0))} -%}
                 {%- endif -%}
                 {%- set acc = ((s2 - s0) / eff_in) if s2 >= s0 else ((s2 - s0) * eff_out) -%}
                 {%- set fw.tl_t = fw.tl_t + [1 if act == 'X' else 0] -%}{%- set fw.tl_l = fw.tl_l + [1 if act == 'L' else 0] -%}{%- set fw.tl_v = fw.tl_v + [1 if act == 'H' and s1 > 0.01 else 0] -%}
@@ -3707,16 +3709,17 @@ template:
             {%- endfor -%}
           {%- endfor -%}
           {%- if fw.cur is mapping -%}{%- set fw.blok = fw.blok + [fw.cur] -%}{%- endif -%}
-          {%- set nb = namespace(l=[], v=[], t=[]) -%}
-          {%- for b in fw.blok if b.a in ['L', 'H', 'X'] and b.e - b.s >= 600 -%}
+          {%- set nb = namespace(l=[], v=[], t=[], n=[]) -%}
+          {%- for b in fw.blok if b.a in ['L', 'H', 'X', 'N'] and b.e - b.s >= 600 -%}
             {%- set r = {'from': (('tomorrow ' if b.s >= end_today_ts else '') ~ b.s | timestamp_custom('%H:%M')), 'until': b.e | timestamp_custom('%H:%M')} -%}
             {%- if b.a == 'L' -%}{%- set nb.l = nb.l + [dict(r, kwh=b.kwh | round(2), price=((b.pk / b.kwh) if b.kwh > 0 else 0) | round(3))] -%}
             {%- elif b.a == 'X' -%}{%- set nb.t = nb.t + [dict(r, kwh=b.kwh | round(2), price=((b.pk / b.kwh) if b.kwh > 0 else 0) | round(3))] -%}
+            {%- elif b.a == 'N' -%}{%- set nb.n = nb.n + [dict(r, kwh=b.kwh | round(2))] -%}
             {%- else -%}{%- set nb.v = nb.v + [r] -%}{%- endif -%}
           {%- endfor -%}
           {%- set cost = fw.c - fw.s * endv -%}{%- set cost_p = fw.cp - fw.sp * endv -%}
           {{ {'now': {'L': 'Charge', 'H': 'Hold', 'N': 'Supply', 'X': 'Export'}[fw.a[0]], 'actions': fw.a, 't0': sl[0].s | int,
-              'charge': nb.l, 'hold': nb.v, 'export': nb.t, 'grid_charge_kwh': fw.net | round(2), 'export_kwh': fw.terug | round(2),
+              'charge': nb.l, 'supply': nb.n, 'hold': nb.v, 'export': nb.t, 'grid_charge_kwh': fw.net | round(2), 'export_kwh': fw.terug | round(2),
               'calibration_100_at': ((('tomorrow ' if fw.kal_ts >= end_today_ts else '') ~ fw.kal_ts | timestamp_custom('%H:%M')) if fw.kal_ts > 0 else none) if opt_cal_penalty | float(0) > 0 else none,
               'empty_at': (fw.empty | timestamp_custom('%Y-%m-%d %H:%M')) if fw.empty > 0 else none, 'empty_ts': fw.empty | int,
               'tl': {'charge': fw.tl_l, 'hold': fw.tl_v, 'export': fw.tl_t, 'battery_kw': fw.tl_a, 'soc_pct': fw.tl_s, 'grid_kw': fw.tl_n},
