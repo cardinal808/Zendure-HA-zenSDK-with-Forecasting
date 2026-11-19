@@ -3645,7 +3645,7 @@ template:
           {%- set tl_l = timeline.charge if timeline is mapping else [] -%}
           {%- set tl_v = timeline.hold if timeline is mapping else [] -%}
           {%- set cmp = tl_l | length == sl | length and tl_v | length == sl | length -%}
-          {%- set fw = namespace(s=s_now, sp=s_now, a='', c=0, cp=0, empty=0, mid=-1, net=0, terug=0, blok=[], cur=none, kal=(0 if opt_cal_penalty | float(0) > 0 else 1), kal_ts=0, tl_l=[], tl_v=[], tl_a=[], tl_s=[], tl_n=[], tl_t=[]) -%}
+          {%- set fw = namespace(s=s_now, sp=s_now, a='', c=0, cp=0, empty=0, mid=-1, net=0, terug=0, blok=[], cur=none, kal=(0 if opt_cal_penalty | float(0) > 0 else 1), kal_ts=0, tl_l=[], tl_v=[], tl_lv=[], tl_a=[], tl_s=[], tl_n=[], tl_t=[]) -%}
           {%- for x in sl -%}
             {%- set i = loop.index0 -%}
             {%- set dur = (x.e - x.a) / 3600 -%}
@@ -3700,7 +3700,7 @@ template:
                   {%- set fw.cur = {'a': ba, 's': x.a, 'e': x.e, 'kwh': kw_, 'pk': kw_ * (x.v if act == 'L' else (fx if act == 'X' else 0))} -%}
                 {%- endif -%}
                 {%- set acc = ((s2 - s0) / eff_in) if s2 >= s0 else ((s2 - s0) * eff_out) -%}
-                {%- set fw.tl_t = fw.tl_t + [1 if act == 'X' else 0] -%}{%- set fw.tl_l = fw.tl_l + [1 if act == 'L' else 0] -%}{%- set fw.tl_v = fw.tl_v + [1 if act == 'H' and s1 > 0.01 else 0] -%}
+                {%- set fw.tl_t = fw.tl_t + [1 if act == 'X' else 0] -%}{%- set fw.tl_l = fw.tl_l + [1 if act == 'L' else 0] -%}{%- set fw.tl_v = fw.tl_v + [1 if act == 'H' and s1 > 0.01 else 0] -%}{%- set fw.tl_lv = fw.tl_lv + [1 if ba == 'N' else 0] -%}
                 {%- set fw.tl_a = fw.tl_a + [(acc / dur) | round(2)] -%}{%- set fw.tl_n = fw.tl_n + [((x.k - x.d - x.o + acc) / dur) | round(2)] -%}
                 {%- set fw.tl_s = fw.tl_s + [((soc_min + s2 / cap * 100) if cap > 0 else 0) | round(1)] -%}
                 {%- if fw.kal == 0 and s2 >= s_max - 0.001 -%}{%- set fw.kal = 1 -%}{%- set fw.kal_ts = x.e -%}{%- endif -%}
@@ -3722,7 +3722,7 @@ template:
               'charge': nb.l, 'supply': nb.n, 'hold': nb.v, 'export': nb.t, 'grid_charge_kwh': fw.net | round(2), 'export_kwh': fw.terug | round(2),
               'calibration_100_at': ((('tomorrow ' if fw.kal_ts >= end_today_ts else '') ~ fw.kal_ts | timestamp_custom('%H:%M')) if fw.kal_ts > 0 else none) if opt_cal_penalty | float(0) > 0 else none,
               'empty_at': (fw.empty | timestamp_custom('%Y-%m-%d %H:%M')) if fw.empty > 0 else none, 'empty_ts': fw.empty | int,
-              'tl': {'charge': fw.tl_l, 'hold': fw.tl_v, 'export': fw.tl_t, 'battery_kw': fw.tl_a, 'soc_pct': fw.tl_s, 'grid_kw': fw.tl_n},
+              'tl': {'charge': fw.tl_l, 'supply': fw.tl_lv, 'hold': fw.tl_v, 'export': fw.tl_t, 'battery_kw': fw.tl_a, 'soc_pct': fw.tl_s, 'grid_kw': fw.tl_n},
               'midnight_pct': ((soc_min + fw.mid / cap * 100) | round(0)) if fw.mid >= 0 and cap > 0 else none,
               'costs': cost | round(3), 'costs_current_plan': (cost_p | round(3)) if cmp else none,
               'difference': ((cost_p - cost) | round(3)) if cmp else none} }}

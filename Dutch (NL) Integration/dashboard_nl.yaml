@@ -774,7 +774,7 @@ views:
             heading_style: title
           - type: markdown
             content: >-
-              <ha-alert alert-type="info">Helptekst</ha-alert>Voorspelling per prijsslot voor de komende 36 uur. Prijs (kleuren zoals Gielz): blauw = gepland laden uit het net, rood = duur (duurste periodes van Gielz), grijs = overig, lichtgrijs = prijs nog onbekend. Accu: blauw = laden uit het net, geel = laden uit zon, oranje = ontladen, rood = terugleveren aan het net (bij zonoverschot of vóór negatieve prijzen); witte lijn = laadpercentage (0–100%). Net: blauw = accu laden uit het net, paars = huis (en auto) uit het net, grijs = teruglevering. Paarse lijn bij Zon en verbruik = gepland laden van de auto (EV-pakket, Nacht). Het laden van morgen is indicatief; de dal-blokkade zit niet in deze voorspelling. Zon alleen met een detailvoorspelling (Solcast of Helios Forecast).
+              <ha-alert alert-type="info">Helptekst</ha-alert>Voorspelling per prijsslot voor de komende 36 uur. Prijs (kleuren zoals Gielz): blauw = gepland laden uit het net, rood = duur (duurste periodes van Gielz), grijs = overig, lichtgrijs = prijs nog onbekend. Plan (smalle balk eronder): wat de accu per kwartier doet, uit hetzelfde plan als het blok Planning: blauw = laden, oranje = leveren aan het huis, grijs = vasthouden (het huis koopt direct in), rood = terugleveren; leeg = de accu staat stil (leeg, vol of de zon dekt het verbruik). Accu: blauw = laden uit het net, geel = laden uit zon, oranje = ontladen, rood = terugleveren aan het net (bij zonoverschot of vóór negatieve prijzen); witte lijn = laadpercentage (0–100%). Net: blauw = accu laden uit het net, paars = huis (en auto) uit het net, grijs = teruglevering. Paarse lijn bij Zon en verbruik = gepland laden van de auto (EV-pakket, Nacht). Zolang de prijzen van morgen onbekend zijn, is het plan voor morgen indicatief (patroon van vandaag). Zon alleen met een detailvoorspelling (Solcast of Helios Forecast).
 
 
               Let op: mod-card (card-mod, HACS) benodigd.
@@ -912,6 +912,140 @@ views:
                           if (d.laden[i]) c = 'rgba(46,125,215,1)';
                           return { x: (t + ((d.t[i + 1] ?? t + 900) - t) / 2) * 1000, y: v, fillColor: c };
                         });
+                  card_mod:
+                    style: |
+                      ha-card {
+                        background: none !important;
+                        border: none !important;
+                        border-radius: 0 !important;
+                        box-shadow: none !important;
+                      }
+                - type: custom:apexcharts-card
+                  graph_span: 36h
+                  span:
+                    start: hour
+                  now:
+                    show: true
+                    color: var(--primary-text-color)
+                  update_interval: 5min
+                  header:
+                    show: false
+                  apex_config:
+                    yaxis:
+                      - show: false
+                        min: 0
+                        max: 1.9
+                    chart:
+                      height: 40px
+                      sparkline:
+                        enabled: false
+                    legend:
+                      show: false
+                    plotOptions:
+                      bar:
+                        columnWidth: 100%
+                    dataLabels:
+                      enabled: false
+                    annotations:
+                      # Stippellijn bij middernacht (vandaag, morgen, overmorgen)
+                      xaxis:
+                        - x: 'EVAL:(() => { const d = new Date(); d.setHours(0, 0, 0, 0); return d.getTime(); })()'
+                          borderColor: 'rgba(160,160,160,0.7)'
+                          strokeDashArray: 3
+                        - x: 'EVAL:(() => { const d = new Date(); d.setHours(24, 0, 0, 0); return d.getTime(); })()'
+                          borderColor: 'rgba(160,160,160,0.7)'
+                          strokeDashArray: 3
+                        - x: 'EVAL:(() => { const d = new Date(); d.setHours(48, 0, 0, 0); return d.getTime(); })()'
+                          borderColor: 'rgba(160,160,160,0.7)'
+                          strokeDashArray: 3
+                      texts:
+                        - x: 4
+                          'y': 11
+                          text: 'Plan: laden (blauw), leveren (oranje), vasthouden (grijs), terugleveren (rood)'
+                          fontSize: 10px
+                          foreColor: grey
+                          textAnchor: start
+                    grid:
+                      show: true
+                      borderColor: color-mix(in srgb, var(--divider-color) 40%, transparent)
+                      strokeDashArray: 0
+                      padding:
+                        top: -10
+                        bottom: -28
+                        left: 6
+                        right: 4
+                    tooltip:
+                      shared: true
+                      intersect: false
+                      followCursor: true
+                      custom: >-
+                        EVAL:function({ series, dataPointIndex, w }) {
+                          const t = Math.floor(w.globals.seriesX[0][dataPointIndex] / 900000) * 900000;
+                          const d = new Date(t);
+                          const tijd = d.toLocaleString(navigator.language, { weekday: 'short', hour: '2-digit', minute: '2-digit' });
+                          const delen = [];
+                          w.globals.seriesNames.forEach((naam, i) => {
+                            const v = series[i] ? series[i][dataPointIndex] : null;
+                            if (!v) return;
+                            delen.push('<span style="color:' + w.globals.colors[i] + '">●</span> ' + naam);
+                          });
+                          return '<div style="padding:1px 6px;font-size:11px;line-height:16px;white-space:nowrap;background:var(--card-background-color,#1c1f26);color:var(--primary-text-color,#e1e1e1);border:1px solid var(--divider-color,#444);border-radius:4px">' + tijd + ' · ' + delen.join(' · ') + '</div>';
+                        }
+                    xaxis:
+                      tooltip:
+                        enabled: false
+                      labels:
+                        show: false
+                        datetimeUTC: false
+                        format: HH:mm
+                        style:
+                          fontSize: 10px
+                          colors: grey
+                      axisTicks:
+                        show: false
+                      axisBorder:
+                        show: false
+                  series:
+                    - entity: sensor.zendure_forecast_grafiek
+                      name: Laden
+                      type: column
+                      color: '#2e7dd7'
+                      show:
+                        in_header: false
+                      data_generator: |
+                        const d = entity.attributes.tijdlijn;
+                        if (!d || !d.t) return [];
+                        return d.t.map((t, i) => ({ x: (t + ((d.t[i + 1] ?? t + 900) - t) / 2) * 1000, y: d.laden[i] ? 1 : null }));
+                    - entity: sensor.zendure_forecast_grafiek
+                      name: Leveren
+                      type: column
+                      color: '#e8743b'
+                      show:
+                        in_header: false
+                      data_generator: |
+                        const d = entity.attributes.tijdlijn;
+                        if (!d || !d.t) return [];
+                        return d.t.map((t, i) => ({ x: (t + ((d.t[i + 1] ?? t + 900) - t) / 2) * 1000, y: (d.leveren ? d.leveren[i] : (d.accu_kw[i] < -0.01 && !(d.terugleveren && d.terugleveren[i]))) ? 1 : null }));
+                    - entity: sensor.zendure_forecast_grafiek
+                      name: Vasthouden
+                      type: column
+                      color: '#9e9e9e'
+                      show:
+                        in_header: false
+                      data_generator: |
+                        const d = entity.attributes.tijdlijn;
+                        if (!d || !d.t) return [];
+                        return d.t.map((t, i) => ({ x: (t + ((d.t[i + 1] ?? t + 900) - t) / 2) * 1000, y: (d.vasthouden && d.vasthouden[i]) ? 1 : null }));
+                    - entity: sensor.zendure_forecast_grafiek
+                      name: Terugleveren
+                      type: column
+                      color: '#c0392b'
+                      show:
+                        in_header: false
+                      data_generator: |
+                        const d = entity.attributes.tijdlijn;
+                        if (!d || !d.t) return [];
+                        return d.t.map((t, i) => ({ x: (t + ((d.t[i + 1] ?? t + 900) - t) / 2) * 1000, y: (d.terugleveren && d.terugleveren[i]) ? 1 : null }));
                   card_mod:
                     style: |
                       ha-card {
