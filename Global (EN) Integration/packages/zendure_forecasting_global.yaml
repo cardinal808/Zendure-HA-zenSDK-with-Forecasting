@@ -3883,7 +3883,7 @@ template:
           price_source: "{{ price_src }}"
           dip_threshold: "{{ dip_threshold }}"
           in_dip: "{{ in_dip }}"
-          hold_discharge: "{{ (opt_action_now == 'H' and not pd_discharge_now) if planner_new and opt_ok else hold_discharge }}"
+          hold_discharge: "{{ (opt_action_now == 'H') if planner_new and opt_ok else hold_discharge }}"
           smart_hold: "{{ smart_hold }}"
           between_charge_hold: "{{ between_charge_hold }}"
           hold_threshold_price: "{{ sh_threshold }}"

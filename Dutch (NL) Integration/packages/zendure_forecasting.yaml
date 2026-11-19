@@ -3881,7 +3881,7 @@ template:
           prijzen_bron: "{{ raw_bron }}"
           dal_drempel: "{{ dal_drempel }}"
           in_dal: "{{ in_dal }}"
-          ontladen_vasthouden: "{{ (opt_actie_nu == 'H' and not vo_ontladen_nu) if planner_nieuw and opt_ok else ontladen_vasthouden }}"
+          ontladen_vasthouden: "{{ (opt_actie_nu == 'H') if planner_nieuw and opt_ok else ontladen_vasthouden }}"
           slim_vasthouden: "{{ slim_vasthouden }}"
           tussen_laden_vasthouden: "{{ tussen_laden_vasthouden }}"
           vasthouden_grensprijs: "{{ vh_grens }}"
