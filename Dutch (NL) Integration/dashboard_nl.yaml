@@ -652,10 +652,10 @@ views:
             series:
               - entity: sensor.zendure_2400_ac_vermogen_pv_totaal
                 name: Totaal
-                statistics:
-                  period: 5minute
-                  type: mean
-                  align: start
+                group_by:
+                  func: avg
+                  duration: 5min
+                  fill: last
                 type: area
                 stroke_width: 2
                 opacity: 0.35
@@ -686,10 +686,10 @@ views:
                     opacity: 0.5
               - entity: sensor.zendure_2400_ac_vermogen_pv_naar_batterij
                 name: Naar Batterij
-                statistics:
-                  period: 5minute
-                  type: mean
-                  align: start
+                group_by:
+                  func: avg
+                  duration: 5min
+                  fill: last
                 type: area
                 opacity: 0
                 stroke_width: 0
@@ -703,10 +703,10 @@ views:
                   in_legend: false
               - entity: sensor.zendure_2400_ac_vermogen_pv_naar_huis
                 name: Naar Huis
-                statistics:
-                  period: 5minute
-                  type: mean
-                  align: start
+                group_by:
+                  func: avg
+                  duration: 5min
+                  fill: last
                 type: area
                 opacity: 0.35
                 stroke_width: 0
