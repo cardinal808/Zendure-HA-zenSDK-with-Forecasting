@@ -1714,78 +1714,6 @@ views:
               title: ''
             apex_config:
               noData:
-                text: The profile is still being learned (one measurement every full hour).
-              chart:
-                height: 160px
-              plotOptions:
-                bar:
-                  columnWidth: 80%
-              legend:
-                show: true
-                floating: true
-                horizontalAlign: left
-                offsetY: 17
-              tooltip:
-                x:
-                  format: HH:00
-                  show: true
-                'y':
-                  formatter: |
-                    EVAL: (val) => val === null ? '-' : `${val.toFixed(2)} kWh`
-              grid:
-                show: true
-                borderColor: color-mix(in srgb, var(--divider-color) 50%, transparent)
-                strokeDashArray: 0
-                padding:
-                  top: -10
-              xaxis:
-                labels:
-                  show: true
-                  format: HH
-                  style:
-                    colors: grey
-                axisTicks:
-                  show: false
-              yaxis:
-                - decimalsInFloat: 1
-                  min: 0
-                  labels:
-                    style:
-                      colors: >-
-                        color-mix(in srgb, var(--primary-text-color) 75%,
-                        transparent)
-            series:
-              - entity: sensor.forecast_usage_profile
-                name: Workday
-                type: column
-                color: '#01a180'
-                show:
-                  in_header: false
-                  legend_value: false
-                data_generator: |
-                  const d = entity.attributes.workday || [];
-                  const base = new Date(); base.setHours(0, 0, 0, 0);
-                  return d.map((v, i) => [base.getTime() + i * 3600000 + 1800000, v]);
-              - entity: sensor.forecast_usage_profile
-                name: Weekend
-                type: column
-                color: '#a2a2a3'
-                show:
-                  in_header: false
-                  legend_value: false
-                data_generator: |
-                  const d = entity.attributes.weekend || [];
-                  const base = new Date(); base.setHours(0, 0, 0, 0);
-                  return d.map((v, i) => [base.getTime() + i * 3600000 + 1800000, v]);
-          - type: custom:apexcharts-card
-            graph_span: 24h
-            span:
-              start: day
-            header:
-              show: true
-              title: ''
-            apex_config:
-              noData:
                 text: No profile per quarter hour yet.
               chart:
                 height: 140px
@@ -1915,7 +1843,7 @@ views:
                   return v.map((t, d) => ({ x: ma.getTime() + d * 86400000, y: Math.round(t * 10) / 10, fillColor: d < 5 ? '#01a180' : '#a2a2a3' }));
           - type: markdown
             content: >-
-              <ha-alert alert-type="info">Help</ha-alert>Top chart: average usage per hour (kWh), learned from your own measurements, for workdays (green) and weekends (grey). Becomes useful after about a week. Bottom chart: expected usage per weekday (kWh); the own profile per weekday counts fully after 3 weeks.
+              <ha-alert alert-type="info">Help</ha-alert>Top chart: expected usage per quarter hour (kWh), learned from your own measurements, for workdays and weekends. Becomes useful after about a week. Bottom chart: expected usage per weekday (kWh); the own profile per weekday counts fully after 3 weeks.
             text_only: true
             visibility:
               - condition: state
@@ -2348,7 +2276,7 @@ views:
               {% if (o.export | default([])) | length > 0 %}- Export: {% for b in o.export %}{{ b.from }}–{{ b.until }} ({{ '%.1f' | format(b.kwh) }} kWh, €{{ '%.3f' | format(b.price) }}){{ ', ' if not loop.last }}{% endfor %}
               {% endif %}{% if o.calibration_100_at %}- Calibration: battery at 100% at {{ o.calibration_100_at }}
               {% endif %}{% if o.midnight_pct is not none %}- At midnight still about **{{ o.midnight_pct | int }}%**{% if o.empty_at %}; empty {{ 'tomorrow ' if o.empty_at[:10] != now().strftime('%Y-%m-%d') else '' }}at {{ o.empty_at[11:] }}{% endif %}
-              {% endif %}{% if o.difference is not none %}- Costs until the end of the known prices: €{{ '%.2f' | format(o.costs) }}, {{ 'old planner' if nw else 'current plan' }} €{{ '%.2f' | format(o.costs_current_plan) }} (**{{ 'saves' if o.difference >= 0 else 'costs' }} €{{ '%.2f' | format(o.difference | abs) }}**)
+              {% endif %}{% if o.difference is not none %}- Costs until the end of the known prices: €{{ '%.2f' | format(o.costs) }}{% if not nw %}, current plan €{{ '%.2f' | format(o.costs_current_plan) }} (**{{ 'saves' if o.difference >= 0 else 'costs' }} €{{ '%.2f' | format(o.difference | abs) }}**){% endif %}
               {% endif %}{% endif %}
 
               ### Tomorrow

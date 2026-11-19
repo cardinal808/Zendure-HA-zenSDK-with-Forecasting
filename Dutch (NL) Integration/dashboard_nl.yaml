@@ -1718,78 +1718,6 @@ views:
               title: ''
             apex_config:
               noData:
-                text: Het profiel wordt nog geleerd (elk heel uur een meting).
-              chart:
-                height: 160px
-              plotOptions:
-                bar:
-                  columnWidth: 80%
-              legend:
-                show: true
-                floating: true
-                horizontalAlign: left
-                offsetY: 17
-              tooltip:
-                x:
-                  format: HH:00
-                  show: true
-                'y':
-                  formatter: |
-                    EVAL: (val) => val === null ? '-' : `${val.toFixed(2)} kWh`
-              grid:
-                show: true
-                borderColor: color-mix(in srgb, var(--divider-color) 50%, transparent)
-                strokeDashArray: 0
-                padding:
-                  top: -10
-              xaxis:
-                labels:
-                  show: true
-                  format: HH
-                  style:
-                    colors: grey
-                axisTicks:
-                  show: false
-              yaxis:
-                - decimalsInFloat: 1
-                  min: 0
-                  labels:
-                    style:
-                      colors: >-
-                        color-mix(in srgb, var(--primary-text-color) 75%,
-                        transparent)
-            series:
-              - entity: sensor.forecast_verbruiksprofiel
-                name: Werkdag
-                type: column
-                color: '#01a180'
-                show:
-                  in_header: false
-                  legend_value: false
-                data_generator: |
-                  const d = entity.attributes.werkdag || [];
-                  const base = new Date(); base.setHours(0, 0, 0, 0);
-                  return d.map((v, i) => [base.getTime() + i * 3600000 + 1800000, v]);
-              - entity: sensor.forecast_verbruiksprofiel
-                name: Weekend
-                type: column
-                color: '#a2a2a3'
-                show:
-                  in_header: false
-                  legend_value: false
-                data_generator: |
-                  const d = entity.attributes.weekend || [];
-                  const base = new Date(); base.setHours(0, 0, 0, 0);
-                  return d.map((v, i) => [base.getTime() + i * 3600000 + 1800000, v]);
-          - type: custom:apexcharts-card
-            graph_span: 24h
-            span:
-              start: day
-            header:
-              show: true
-              title: ''
-            apex_config:
-              noData:
                 text: Nog geen profiel per kwartier.
               chart:
                 height: 140px
@@ -1919,7 +1847,7 @@ views:
                   return v.map((t, d) => ({ x: ma.getTime() + d * 86400000, y: Math.round(t * 10) / 10, fillColor: d < 5 ? '#01a180' : '#a2a2a3' }));
           - type: markdown
             content: >-
-              <ha-alert alert-type="info">Help</ha-alert>Bovenste grafiek: gemiddeld verbruik per uur (kWh), geleerd uit je eigen meting, voor werkdag (groen) en weekend (grijs). Wordt na ongeveer een week bruikbaar. Onderste grafiek: verwacht verbruik per weekdag (kWh); het eigen profiel per weekdag telt na 3 weken volledig mee.
+              <ha-alert alert-type="info">Help</ha-alert>Bovenste grafiek: verwacht verbruik per kwartier (kWh), geleerd uit je eigen meting, voor werkdag en weekend. Wordt na ongeveer een week bruikbaar. Onderste grafiek: verwacht verbruik per weekdag (kWh); het eigen profiel per weekdag telt na 3 weken volledig mee.
             text_only: true
             visibility:
               - condition: state
@@ -2353,7 +2281,7 @@ views:
               {% if (o.terugleveren | default([])) | length > 0 %}- Terugleveren: {% for b in o.terugleveren %}{{ b.van }}–{{ b.tot }} ({{ '%.1f' | format(b.kwh) }} kWh, €{{ '%.3f' | format(b.prijs) }}){{ ', ' if not loop.last }}{% endfor %}
               {% endif %}{% if o.kalibratie_100_om %}- Kalibratie: accu op 100% om {{ o.kalibratie_100_om }}
               {% endif %}{% if o.middernacht_pct is not none %}- Om middernacht nog ongeveer **{{ o.middernacht_pct | int }}%**{% if o.leeg_om %}; leeg {{ 'morgen ' if o.leeg_om[:10] != now().strftime('%Y-%m-%d') else '' }}om {{ o.leeg_om[11:] }}{% endif %}
-              {% endif %}{% if o.verschil is not none %}- Kosten tot het einde van de bekende prijzen: €{{ '%.2f' | format(o.kosten) }}, {{ 'oude planner' if nw else 'huidig plan' }} €{{ '%.2f' | format(o.kosten_huidig_plan) }} (**{{ 'scheelt' if o.verschil >= 0 else 'kost' }} €{{ '%.2f' | format(o.verschil | abs) }}**)
+              {% endif %}{% if o.verschil is not none %}- Kosten tot het einde van de bekende prijzen: €{{ '%.2f' | format(o.kosten) }}{% if not nw %}, huidig plan €{{ '%.2f' | format(o.kosten_huidig_plan) }} (**{{ 'scheelt' if o.verschil >= 0 else 'kost' }} €{{ '%.2f' | format(o.verschil | abs) }}**){% endif %}
               {% endif %}{% endif %}
 
               ### Morgen
