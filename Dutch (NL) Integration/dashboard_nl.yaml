@@ -440,7 +440,7 @@ views:
               color_threshold: true
             cache: false
             stacked: true
-            update_interval: 5sec
+            update_interval: 15sec
             header:
               show: true
               show_states: true
@@ -1191,20 +1191,29 @@ views:
                     show: false
                   apex_config:
                     yaxis:
-                      - seriesName: Net
+                      - seriesName: Net (huis)
                         show: false
                         min: 'EVAL:function(min) { return Math.min(min, -2.4); }'
                         max: 'EVAL:function(max) { return Math.max(max, 2.4); }'
-                      - seriesName: Net
+                      - seriesName: Net (huis)
+                        show: false
+                      - seriesName: Net (huis)
+                        show: false
+                      - seriesName: Net (huis)
+                        show: false
+                      - seriesName: Net (huis)
+                        show: false
+                      - seriesName: Net (huis)
                         show: false
                       - seriesName: Laadpercentage
                         opposite: true
                         min: -100
                         max: 100
                         show: false
+                      - seriesName: Net (huis)
+                        show: false
                     chart:
                       height: 140px
-                      stacked: true
                       sparkline:
                         enabled: false
                     legend:
@@ -1255,6 +1264,7 @@ views:
                             const v = series[i] ? series[i][k] : null;
                             if (v === null || v === undefined || Number.isNaN(v)) return;
                             const n = naam.toLowerCase();
+                            if (v === 0 && !(n.startsWith('laadperc') || n.startsWith('state'))) return;
                             const txt = (n.startsWith('prijs') || n.startsWith('price')) ? v.toFixed(3) + ' €'
                               : ((n.startsWith('laadperc') || n.startsWith('state')) ? Math.round(v) + '%' : v.toFixed(2) + ' kW');
                             delen.push('<span style="color:' + w.globals.colors[i] + '">●</span> ' + naam + ' ' + txt);
@@ -1273,40 +1283,119 @@ views:
                         show: false
                   series:
                     - entity: sensor.zendure_forecast_grafiek
-                      name: Net
-                      type: column
+                      name: Net (huis)
+                      type: area
+                      curve: stepline
+                      stroke_width: 0
+                      opacity: 0.85
                       color: '#8e7cc3'
                       float_precision: 2
                       show:
                         in_header: false
+                        in_legend: false
                       data_generator: |
                         const d = entity.attributes.tijdlijn;
                         if (!d || !d.t) return [];
-                        return d.t.map((t, i) => {
-                          let v = d.net_kw[i];
-                          // teruglevering terwijl de accu ontlaadt staat al bij Accu (rood)
-                          if (v < 0 && d.accu_kw[i] < -0.01) v = null;
-                          // blauw = accu laden uit het net, paars = huis uit het net, grijs = teruglevering
-                          const c = v < 0 ? '#a2a2a3' : (d.laden[i] ? '#2e7dd7' : '#8e7cc3');
-                          return { x: (t + ((d.t[i + 1] ?? t + (i > 0 ? t - d.t[i - 1] : 900)) - t) / 2) * 1000, t0: t * 1000, t1: (d.t[i + 1] ?? t + (i > 0 ? t - d.t[i - 1] : 900)) * 1000, y: v, fillColor: c };
-                        });
+                        const r = d.t.map((t, i) => ({ x: t * 1000, t0: t * 1000, t1: (d.t[i + 1] ?? t + (i > 0 ? t - d.t[i - 1] : 900)) * 1000, y: (d.net_kw[i] > 0 && !d.laden[i]) ? d.net_kw[i] : 0 }));
+                        // laatste trede tot het einde van het laatste slot
+                        const e = r[r.length - 1].t1;
+                        r.push({ x: e, t0: e, t1: e, y: r[r.length - 1].y });
+                        return r;
                     - entity: sensor.zendure_forecast_grafiek
-                      name: Accu
-                      type: column
-                      color: '#01a180'
+                      name: Laden uit net
+                      type: area
+                      curve: stepline
+                      stroke_width: 0
+                      opacity: 0.85
+                      color: '#2e7dd7'
                       float_precision: 2
                       show:
                         in_header: false
+                        in_legend: false
                       data_generator: |
                         const d = entity.attributes.tijdlijn;
                         if (!d || !d.t) return [];
-                        return d.t.map((t, i) => {
-                          let v = d.accu_kw[i];
-                          // laden uit het net staat al bij Net (blauw); hier alleen zon naar de accu en ontladen
-                          if (v > 0 && d.laden[i]) v = null;
-                          const c = v < 0 ? ((d.terugleveren && d.terugleveren[i]) ? '#c0392b' : '#e8743b') : (d.laden[i] ? '#2e7dd7' : '#f2c037');
-                          return { x: (t + ((d.t[i + 1] ?? t + (i > 0 ? t - d.t[i - 1] : 900)) - t) / 2) * 1000, t0: t * 1000, t1: (d.t[i + 1] ?? t + (i > 0 ? t - d.t[i - 1] : 900)) * 1000, y: v, fillColor: c };
-                        });
+                        const r = d.t.map((t, i) => ({ x: t * 1000, t0: t * 1000, t1: (d.t[i + 1] ?? t + (i > 0 ? t - d.t[i - 1] : 900)) * 1000, y: (d.net_kw[i] > 0 && d.laden[i]) ? d.net_kw[i] : 0 }));
+                        // laatste trede tot het einde van het laatste slot
+                        const e = r[r.length - 1].t1;
+                        r.push({ x: e, t0: e, t1: e, y: r[r.length - 1].y });
+                        return r;
+                    - entity: sensor.zendure_forecast_grafiek
+                      name: Zon naar accu
+                      type: area
+                      curve: stepline
+                      stroke_width: 0
+                      opacity: 0.85
+                      color: '#f2c037'
+                      float_precision: 2
+                      show:
+                        in_header: false
+                        in_legend: false
+                      data_generator: |
+                        const d = entity.attributes.tijdlijn;
+                        if (!d || !d.t) return [];
+                        const r = d.t.map((t, i) => ({ x: t * 1000, t0: t * 1000, t1: (d.t[i + 1] ?? t + (i > 0 ? t - d.t[i - 1] : 900)) * 1000, y: (d.accu_kw[i] > 0.01 && !d.laden[i]) ? d.accu_kw[i] : 0 }));
+                        // laatste trede tot het einde van het laatste slot
+                        const e = r[r.length - 1].t1;
+                        r.push({ x: e, t0: e, t1: e, y: r[r.length - 1].y });
+                        return r;
+                    - entity: sensor.zendure_forecast_grafiek
+                      name: Leveren
+                      type: area
+                      curve: stepline
+                      stroke_width: 0
+                      opacity: 0.85
+                      color: '#e8743b'
+                      float_precision: 2
+                      show:
+                        in_header: false
+                        in_legend: false
+                      data_generator: |
+                        const d = entity.attributes.tijdlijn;
+                        if (!d || !d.t) return [];
+                        const r = d.t.map((t, i) => ({ x: t * 1000, t0: t * 1000, t1: (d.t[i + 1] ?? t + (i > 0 ? t - d.t[i - 1] : 900)) * 1000, y: (d.accu_kw[i] < -0.01 && !(d.terugleveren && d.terugleveren[i])) ? d.accu_kw[i] : 0 }));
+                        // laatste trede tot het einde van het laatste slot
+                        const e = r[r.length - 1].t1;
+                        r.push({ x: e, t0: e, t1: e, y: r[r.length - 1].y });
+                        return r;
+                    - entity: sensor.zendure_forecast_grafiek
+                      name: Terugleveren
+                      type: area
+                      curve: stepline
+                      stroke_width: 0
+                      opacity: 0.85
+                      color: '#c0392b'
+                      float_precision: 2
+                      show:
+                        in_header: false
+                        in_legend: false
+                      data_generator: |
+                        const d = entity.attributes.tijdlijn;
+                        if (!d || !d.t) return [];
+                        const r = d.t.map((t, i) => ({ x: t * 1000, t0: t * 1000, t1: (d.t[i + 1] ?? t + (i > 0 ? t - d.t[i - 1] : 900)) * 1000, y: (d.accu_kw[i] < -0.01 && d.terugleveren && d.terugleveren[i]) ? d.accu_kw[i] : 0 }));
+                        // laatste trede tot het einde van het laatste slot
+                        const e = r[r.length - 1].t1;
+                        r.push({ x: e, t0: e, t1: e, y: r[r.length - 1].y });
+                        return r;
+                    - entity: sensor.zendure_forecast_grafiek
+                      name: Zon naar net
+                      type: area
+                      curve: stepline
+                      stroke_width: 0
+                      opacity: 0.85
+                      color: '#a2a2a3'
+                      float_precision: 2
+                      show:
+                        in_header: false
+                        in_legend: false
+                      data_generator: |
+                        const d = entity.attributes.tijdlijn;
+                        if (!d || !d.t) return [];
+                        const r = d.t.map((t, i) => ({ x: t * 1000, t0: t * 1000, t1: (d.t[i + 1] ?? t + (i > 0 ? t - d.t[i - 1] : 900)) * 1000, y: (d.net_kw[i] < 0 && d.accu_kw[i] >= -0.01) ? d.net_kw[i] : 0 }));
+                        // laatste trede tot het einde van het laatste slot
+                        const e = r[r.length - 1].t1;
+                        r.push({ x: e, t0: e, t1: e, y: r[r.length - 1].y });
+                        return r;
                     - entity: sensor.zendure_forecast_grafiek
                       name: Laadpercentage
                       type: line
@@ -1320,7 +1409,21 @@ views:
                         const d = entity.attributes.tijdlijn;
                         if (!d || !d.t) return [];
                         // laadpercentage aan het begin van elk slot (linkerrand van de kolom)
-                        return d.t.map((t, i) => ({ x: t * 1000, y: i === 0 ? d.soc_nu_pct : d.soc_pct[i - 1] }));
+                        const r = d.t.map((t, i) => ({ x: t * 1000, y: i === 0 ? d.soc_nu_pct : d.soc_pct[i - 1] }));
+                        r.push({ x: (d.t[d.t.length] ?? d.t[d.t.length - 1] + (d.t.length > 1 ? d.t[d.t.length - 1] - d.t[d.t.length - 2] : 900)) * 1000, y: d.soc_pct[d.t.length - 1] });
+                        return r;
+                    - entity: sensor.zendure_forecast_grafiek
+                      name: Uitlijning
+                      type: column
+                      color: 'rgba(0,0,0,0)'
+                      show:
+                        in_header: false
+                        in_legend: false
+                      data_generator: |
+                        // onzichtbare kolommen: geven dezelfde randmarge als de grafieken erboven (tijden onder elkaar)
+                        const d = entity.attributes.tijdlijn;
+                        if (!d || !d.t) return [];
+                        return d.t.slice(0, 2).map((t, i) => ({ x: (t + ((d.t[i + 1] ?? t + 900) - t) / 2) * 1000, y: null }));
                   card_mod:
                     style: |
                       ha-card {
