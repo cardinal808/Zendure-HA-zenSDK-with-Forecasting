@@ -1448,7 +1448,7 @@ views:
             span:
               start: month
               offset: -1month
-            cache: false
+            cache: true
             yaxis:
               - min: ~200
                 apex_config:
@@ -1539,7 +1539,7 @@ views:
             span:
               start: month
               offset: -23month
-            cache: false
+            cache: true
             apex_config:
               yaxis:
                 - decimalsInFloat: 0
@@ -1861,7 +1861,7 @@ views:
                 name: Expensive
                 state_content: name
           - type: custom:apexcharts-card
-            update_interval: 1sec
+            update_interval: 1min
             graph_span: 24h
             apex_config:
               markers:
@@ -2014,7 +2014,7 @@ views:
                 before: '24:00:00'
             badges: []
           - type: custom:apexcharts-card
-            update_interval: 1sec
+            update_interval: 1min
             graph_span: 24h
             apex_config:
               noData:
@@ -2840,7 +2840,7 @@ views:
             span:
               start: month
               offset: -1month
-            cache: false
+            cache: true
             apex_config:
               annotations:
                 yaxis:
@@ -2946,7 +2946,7 @@ views:
             span:
               start: month
               offset: -1month
-            cache: false
+            cache: true
             apex_config:
               yaxis:
                 - decimalsInFloat: 0
