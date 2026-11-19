@@ -199,11 +199,11 @@ input_boolean:
     name: Forecast Shared Battery Model
     icon: mdi:battery-sync
   # New planner (on by default since 2026.11.8): the optimisation per quarter hour controls charging
-  # and holding. Off = fall back to the current planner. Turns the shared battery model on by itself.
+  # and holding. Off = fall back to the old planner. Turns the shared battery model on by itself.
   forecast_setting_new_planner:
     name: Forecast New Planner
     icon: mdi:chart-timeline-variant-shimmer
-  # New planner may export from the battery (test, off by default). Only works when Gielz's PV Export
+  # New planner may export from the battery (off by default). Only works when Gielz's PV Export
   # Disabled is off (otherwise the Zendure is not allowed to export).
   forecast_setting_new_planner_export:
     name: Forecast New Planner Export

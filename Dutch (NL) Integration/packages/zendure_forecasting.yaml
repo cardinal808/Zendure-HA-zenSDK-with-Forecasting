@@ -199,11 +199,11 @@ input_boolean:
     name: Forecast Gedeeld Accumodel
     icon: mdi:battery-sync
   # Nieuwe planner (standaard aan sinds 2026.11.8): de optimalisatie per kwartier stuurt laden en
-  # vasthouden aan. Uit = terugval naar de huidige planner. Zet het gedeelde accumodel vanzelf aan.
+  # vasthouden aan. Uit = terugval naar de oude planner. Zet het gedeelde accumodel vanzelf aan.
   forecast_nieuwe_planner:
     name: Forecast Nieuwe Planner
     icon: mdi:chart-timeline-variant-shimmer
-  # Nieuwe planner mag uit de accu terugleveren (test, standaard uit). Werkt alleen als Gielz'
+  # Nieuwe planner mag uit de accu terugleveren (standaard uit). Werkt alleen als Gielz'
   # PV Export Uitgeschakeld uit staat (anders mag de Zendure niet terugleveren).
   forecast_nieuwe_planner_terugleveren:
     name: Forecast Nieuwe Planner Terugleveren
