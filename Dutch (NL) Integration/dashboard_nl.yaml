@@ -4293,7 +4293,7 @@ views:
               nog uit het net bijgeladen moet worden) en **Slim vasthouden** (haalt de accu het
               niet tot de zon of het volgende laadmoment, dan bewaart hij zijn lading voor de
               duurste kwartieren).
-              **Nieuwe planner mag terugleveren (test)**: de nieuwe planner mag de accu ook
+              **Nieuwe planner mag terugleveren**: de nieuwe planner mag de accu ook
               naar het net leveren als dat meer oplevert dan de lading bewaren (bijvoorbeeld
               's ochtends ruimte maken voor de zon, of opgeslagen zon 's avonds terugleveren).
               Hij rekent met de terugleverprijs zonder saldering (marktprijs + opslag + bonus)
@@ -4577,9 +4577,9 @@ views:
                   entity: input_boolean.forecast_slim_vasthouden
                   name: Slim vasthouden (oude planner)
               - entity: input_boolean.forecast_nieuwe_planner
-                name: Nieuwe planner (uit = huidige planner)
+                name: Nieuwe planner (uit = oude planner)
               - entity: input_boolean.forecast_nieuwe_planner_terugleveren
-                name: Nieuwe planner mag terugleveren (test)
+                name: Nieuwe planner mag terugleveren
               - entity: input_number.forecast_kalibratie_dagen
                 name: Kalibratie na dagen
               - entity: input_boolean.forecast_kalibratieladen

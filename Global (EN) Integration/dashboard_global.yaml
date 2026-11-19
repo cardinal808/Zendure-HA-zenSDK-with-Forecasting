@@ -4287,7 +4287,7 @@ views:
               grid charging is still needed) and **Smart hold** (if the battery won't last
               until the sun or the next charge moment, it keeps its charge for the most
               expensive quarter hours).
-              **New planner may export (test)**: the new planner may also send the battery
+              **New planner may export**: the new planner may also send the battery
               to the grid when that yields more than keeping the charge (for example making
               room for the sun in the morning, or exporting stored solar in the evening). It
               uses the feed-in price without net metering (market price + markup + bonus) and
@@ -4571,9 +4571,9 @@ views:
                   entity: input_boolean.forecast_setting_smart_hold
                   name: Smart hold (old planner)
               - entity: input_boolean.forecast_setting_new_planner
-                name: New planner (off = current planner)
+                name: New planner (off = old planner)
               - entity: input_boolean.forecast_setting_new_planner_export
-                name: New planner may export (test)
+                name: New planner may export
               - entity: input_number.forecast_setting_calibration_days
                 name: Calibration after days
               - entity: input_boolean.forecast_setting_calibration_charging
