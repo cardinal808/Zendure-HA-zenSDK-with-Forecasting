@@ -65,6 +65,8 @@ Versies volgen `jaar.maand.volgnummer`; het volgnummer begint elke maand bij 1. 
 - Plan Tijdlijn, onderste grafiek: vlakken in traptreden in plaats van een staafje per kwartier (paars huis uit het net, blauw laden uit het net, geel zon naar de accu, oranje leveren, rood terugleveren, grijs zon naar het net); ruim 2,5 keer minder elementen, de tijdlijn tekent ongeveer 20% sneller. Muis-over toont alleen wat in dat kwartier niet nul is.
 - *Batterij* (10 minuten): haalt elke 15 seconden nieuwe gegevens op in plaats van elke 5 seconden.
 - EN-dashboard: de balk *Plan* las de NL-sensor (`sensor.zendure_forecast_grafiek`) en bleef daardoor leeg; nu `sensor.zendure_forecast_chart`.
+- Zolang de prijzen van morgen onbekend zijn, heet een laadblok van morgen *indicatief* (uitleg en blok *Planning*) en telt het niet mee in het totaal van de uitleg.
+- Recorder-pakket: sluit ook Gielz' `sensor.dynamisch_nordpool` en `sensor.dynamisch_goedkoopste_periode` uit (attributen > 16 kB; Home Assistant waarschuwde elk kwartier). De prijsgrafieken lezen ze live.
 - Verbruiksprofiel: de grafiek per uur is weg (de grafiek per kwartier laat hetzelfde fijner zien).
 - Blok *Planning*: de kosten staan er zonder vergelijking met de oude planner; die vergelijking staat alleen nog in *Nieuwe planner (rekent mee)*.
 - Dashboard sneller: *Dynamisch Vandaag* en *Morgen* tekenen eens per minuut opnieuw in plaats van elke seconde; de grafieken over 2 en 24 maanden (Nul Import, Import | Export, Gezondheid) bewaren hun gegevens in de browser (`cache: true`) en halen bij een volgend bezoek alleen het nieuwe stuk op.

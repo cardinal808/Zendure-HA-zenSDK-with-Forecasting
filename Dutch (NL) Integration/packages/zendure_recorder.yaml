@@ -42,6 +42,10 @@ recorder:
       - sensor.zendure_2400_ac_resterende_oplaad_tijd
       # Forecasting: grafiekdata > 16 kB, wordt live gelezen
       - sensor.zendure_forecast_grafiek
+      # Gielz: prijzen van vandaag en morgen in de attributen (> 16 kB, Home Assistant waarschuwt
+      # elk kwartier); de prijsgrafieken lezen ze live, geschiedenis wordt nergens gebruikt
+      - sensor.dynamisch_nordpool
+      - sensor.dynamisch_goedkoopste_periode
       # Forecasting: hulpsensoren die alleen live gelezen worden
       - sensor.forecast_prijzen_reserve
       - sensor.forecast_sensor_kandidaten

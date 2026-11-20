@@ -65,6 +65,8 @@ Versions follow `year.month.sequence`; the sequence restarts at 1 every month. E
 - Plan Timeline, bottom chart: stepped areas instead of one bar per quarter hour (purple house from the grid, blue charging from the grid, yellow solar to the battery, orange supply, red export, grey solar to the grid); over 2.5 times fewer elements, the timeline draws about 20% faster. Hover only shows what is not zero in that quarter hour.
 - *Battery* (10 minutes): fetches new data every 15 seconds instead of every 5 seconds.
 - EN dashboard: the *Plan* bar read the NL sensor (`sensor.zendure_forecast_grafiek`) and stayed empty; now `sensor.zendure_forecast_chart`.
+- While tomorrow's prices are unknown, a charge block of tomorrow is called *indicative* (explanation and *Planning* block) and does not count in the explanation's total.
+- Recorder package: also excludes Gielz's `sensor.dynamic_nordpool` and `sensor.dynamic_lowest_price_period` (attributes > 16 kB; Home Assistant warned every quarter hour). The price charts read them live.
 - Usage profile: the per-hour chart is gone (the per-quarter-hour chart shows the same in more detail).
 - *Planning* block: costs are shown without the comparison with the old planner; that comparison only remains in *New planner (calculating along)*.
 - Faster dashboard: *Dynamic Today* and *Tomorrow* redraw once per minute instead of every second; the 2- and 24-month charts (Zero Import, Import | Export, Health) keep their data in the browser (`cache: true`) and only fetch the new part on the next visit.

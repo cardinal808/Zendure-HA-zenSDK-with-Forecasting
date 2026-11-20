@@ -42,6 +42,10 @@ recorder:
       - sensor.zendure_indication_remaining_charge_time
       # Forecasting: chart data > 16 kB, read live
       - sensor.zendure_forecast_chart
+      # Gielz: today's and tomorrow's prices in the attributes (> 16 kB, Home Assistant warns
+      # every quarter hour); the price charts read them live, their history is not used anywhere
+      - sensor.dynamic_nordpool
+      - sensor.dynamic_lowest_price_period
       # Forecasting: helper sensors that are only read live
       - sensor.forecast_price_backup
       - sensor.forecast_sensor_candidates

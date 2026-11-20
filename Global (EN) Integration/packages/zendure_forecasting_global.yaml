@@ -3743,7 +3743,10 @@ template:
           {%- elif opt_action_now == 'X' -%}Battery is exporting to the grid now (that yields more now than keeping the charge).
           {%- else -%}Battery is supplying the house now.{%- endif -%}
           {%- set later = lb | rejectattr('from', 'eq', (now_ts | timestamp_custom('%H:%M'))) | list if opt_action_now == 'L' else lb -%}
-          {%- if later | length > 0 %} Next charge moment: {{ later[0].from }}-{{ later[0].until }} (about {{ '%.1f' | format(later[0].kwh) }} kWh, average €{{ '%.3f' | format(later[0].price) }}){% if lb | length > 1 %}; {{ '%.1f' | format(opt.grid_charge_kwh) }} kWh in {{ lb | length }} blocks in total{% endif %}.
+          {#- While tomorrow's prices are unknown, a block of tomorrow is an estimate (today's pattern) and does not count in the total -#}
+          {%- set fixed = lb if tomorrow_known else (lb | rejectattr('from', 'search', '^tomorrow') | list) -%}
+          {%- set fixed_kwh = fixed | map(attribute='kwh') | sum -%}
+          {%- if later | length > 0 %} Next charge moment: {{ later[0].from }}-{{ later[0].until }} (about {{ '%.1f' | format(later[0].kwh) }} kWh, average €{{ '%.3f' | format(later[0].price) }}{{ "; indicative, tomorrow's prices not known yet" if not tomorrow_known and later[0].from.startswith('tomorrow') else '' }}){% if fixed | length > 1 %}; {{ '%.1f' | format(fixed_kwh) }} kWh in {{ fixed | length }} blocks in total{{ ' (without tomorrow)' if fixed | length < lb | length else '' }}{% endif %}.
           {%- elif lb | length == 0 %} No grid charging needed until the end of the known prices.{%- endif -%}
           {%- set tb = opt.export | default([]) -%}{%- if tb | length > 0 and opt_action_now != 'X' %} Export: {{ tb[0].from }}-{{ tb[0].until }} (about {{ '%.1f' | format(tb[0].kwh) }} kWh, €{{ '%.3f' | format(tb[0].price) }}){% if tb | length > 1 %}; {{ '%.1f' | format(opt.export_kwh) }} kWh in total{% endif %}.{%- endif -%}
           {%- if opt.midnight_pct is not none %} At midnight still about {{ opt.midnight_pct | int }}%.{%- endif -%}

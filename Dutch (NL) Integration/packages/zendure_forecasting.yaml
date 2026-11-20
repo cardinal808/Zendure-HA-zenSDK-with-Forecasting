@@ -3741,7 +3741,10 @@ template:
           {%- elif opt_actie_nu == 'X' -%}Accu levert nu terug aan het net (dat levert nu meer op dan de lading bewaren).
           {%- else -%}Accu levert nu aan het huis.{%- endif -%}
           {%- set later = lb | rejectattr('van', 'eq', (nu_ts | timestamp_custom('%H:%M'))) | list if opt_actie_nu == 'L' else lb -%}
-          {%- if later | length > 0 %} Volgende laadmoment: {{ later[0].van }}-{{ later[0].tot }} (ongeveer {{ '%.1f' | format(later[0].kwh) }} kWh, gemiddeld €{{ '%.3f' | format(later[0].prijs) }}){% if lb | length > 1 %}; totaal {{ '%.1f' | format(opt.netladen_kwh) }} kWh in {{ lb | length }} blokken{% endif %}.
+          {#- Zolang de prijzen van morgen onbekend zijn, is een blok van morgen een schatting (patroon van vandaag) en telt niet mee in het totaal -#}
+          {%- set vast = lb if morgen_bekend else (lb | rejectattr('van', 'search', '^morgen') | list) -%}
+          {%- set vast_kwh = vast | map(attribute='kwh') | sum -%}
+          {%- if later | length > 0 %} Volgende laadmoment: {{ later[0].van }}-{{ later[0].tot }} (ongeveer {{ '%.1f' | format(later[0].kwh) }} kWh, gemiddeld €{{ '%.3f' | format(later[0].prijs) }}{{ '; indicatief, prijzen morgen nog onbekend' if not morgen_bekend and later[0].van.startswith('morgen') else '' }}){% if vast | length > 1 %}; totaal {{ '%.1f' | format(vast_kwh) }} kWh in {{ vast | length }} blokken{{ ' (zonder morgen)' if vast | length < lb | length else '' }}{% endif %}.
           {%- elif lb | length == 0 %} Geen laden uit het net nodig tot het einde van de bekende prijzen.{%- endif -%}
           {%- set tb = opt.terugleveren | default([]) -%}{%- if tb | length > 0 and opt_actie_nu != 'X' %} Terugleveren: {{ tb[0].van }}-{{ tb[0].tot }} (ongeveer {{ '%.1f' | format(tb[0].kwh) }} kWh, €{{ '%.3f' | format(tb[0].prijs) }}){% if tb | length > 1 %}; totaal {{ '%.1f' | format(opt.terugleveren_kwh) }} kWh{% endif %}.{%- endif -%}
           {%- if opt.middernacht_pct is not none %} Om middernacht nog ongeveer {{ opt.middernacht_pct | int }}%.{%- endif -%}
