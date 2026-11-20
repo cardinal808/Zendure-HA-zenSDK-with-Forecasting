@@ -14,9 +14,9 @@ Versies volgen `jaar.maand.volgnummer` (het volgnummer begint elke maand bij 1).
 
 De accu laadt op de goedkoopste momenten, maar **alleen zoveel als nodig is**, rekening houdend met je zonvoorspelling, je verbruik en de prijzen van morgen.
 
-**Nieuwe planner (sinds 2026.11.8 standaard aan).** Eén berekening over alle bekende prijzen (vandaag en morgen) kiest per kwartier de goedkoopste actie: *Laden*, *Vasthouden*, *Leveren* of (optioneel) *Terugleveren*. Rendement, laadmarge, kalibratie, zon-overschot en het aantal laadstarts tellen mee; tekst, Plan Tijdlijn en aansturing komen uit hetzelfde plan. De schakelaar *Nieuwe planner* uit = terugval naar de huidige planner hieronder (blijft nog één versie). Zie de wiki-pagina *Nieuwe planner*.
+**Nieuwe planner (sinds 2026.11.8 standaard aan).** Eén berekening over alle bekende prijzen (vandaag en morgen) kiest per kwartier de goedkoopste actie: *Laden*, *Vasthouden*, *Leveren* of (optioneel) *Terugleveren*. Rendement, laadmarge, kalibratie, zon-overschot en het aantal laadstarts tellen mee; tekst, Plan Tijdlijn en aansturing komen uit hetzelfde plan. De schakelaar *Nieuwe planner* uit = terugval naar de oude planner hieronder (blijft nog één versie). Zie de wiki-pagina *Nieuwe planner*.
 
-De huidige planner (terugval):
+De oude planner (terugval, nog één versie):
 
 - Berekent elk kwartier (en bij elke wijziging) een laadplan (`sensor.zendure_forecast_plan`) met status *Laden / Wachten / Niet nodig / Niet gunstig*.
 - **Scenario A** (morgen goedkoper of gelijk, of prijzen nog onbekend): laadt genoeg om te overbruggen tot het goedkope moment van morgen of tot er voldoende zon is, plus een instelbare marge.

@@ -15,9 +15,9 @@ Versions follow `year.month.sequence` (the sequence restarts at 1 every month). 
 
 The battery charges at the cheapest moments, but **only as much as is actually needed**, taking into account your solar forecast, your usage and tomorrow's prices.
 
-**New planner (on by default since 2026.11.8).** One calculation over all known prices (today and tomorrow) picks the cheapest action per quarter hour: *Charge*, *Hold*, *Supply* or (optionally) *Export*. Efficiency, charge margin, calibration, solar surplus and the number of charge starts all count; text, Plan Timeline and control come from the same plan. Turning the *New planner* switch off = falling back to the current planner below (kept for one more version). See the wiki page *New planner*.
+**New planner (on by default since 2026.11.8).** One calculation over all known prices (today and tomorrow) picks the cheapest action per quarter hour: *Charge*, *Hold*, *Supply* or (optionally) *Export*. Efficiency, charge margin, calibration, solar surplus and the number of charge starts all count; text, Plan Timeline and control come from the same plan. Turning the *New planner* switch off = falling back to the old planner below (kept for one more version). See the wiki page *New planner*.
 
-The current planner (fallback):
+The old planner (fallback, for one more version):
 
 - Calculates a charging plan every quarter hour (and on every change) (`sensor.zendure_forecast_plan`) with the state *Charge / Waiting / Not needed / Not favorable*.
 - **Scenario A** (tomorrow cheaper or equal, or prices not yet known): charges enough to bridge until tomorrow's cheap moment or until there is enough sun, plus an adjustable margin.
