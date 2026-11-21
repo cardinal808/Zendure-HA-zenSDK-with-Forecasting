@@ -1,4 +1,4 @@
-# Zendure zenSDK (Gielz) + Forecasting 2026.11.8 | based on Gielz v20261113
+# Zendure zenSDK (Gielz) + Forecasting 2026.11.9 | based on Gielz v20261113
 # Based on Gielz1986/Zendure-HA-zenSDK (Michiel Hofker). See README.md for license and changes.
 # REQUIRED PACKAGE - part of the base of this set (next to zendure_gielz1986_global.yaml).
 # =====================================================================
@@ -913,7 +913,7 @@ template:
       - name: "Forecasting Version"
         unique_id: forecasting_version
         icon: mdi:one-up
-        state: "2026.11.8"
+        state: "2026.11.9"
         attributes:
           gielz_base: "v20261113"
           # Optional packages that are loaded
@@ -1831,7 +1831,13 @@ template:
       # unavailable (e.g. right after a restart), the previous value is used instead of 0, so the
       # daily usage and the self-consumption do not get skewed. A sensor that does not exist (any
       # more) (package removed) counts as 0.
-      hist_7_prev: "{{ state_attr('sensor.zendure_forecast_plan', 'history_7_days') or {} }}"
+      # After Reset Usage Data no previous values: an empty 7-day sensor then counts as 0.
+      # Otherwise the old daily usage stayed. The plan remembers the last press of the button
+      # (attribute history_reset); if the button differs from it, a reset just happened.
+      hist_reset_button: "{{ states('input_button.forecast_reset_usage_data') }}"
+      hist_7_prev: >
+        {% set r = state_attr('sensor.zendure_forecast_plan', 'history_reset') %}
+        {{ {} if r is not none and r != hist_reset_button else (state_attr('sensor.zendure_forecast_plan', 'history_7_days') or {}) }}
       prod7: >
         {% set e = 'sensor.forecast_solar_production_7_days' %}
         {{ states(e) | float(hist_7_prev.get('prod7', 0) if states[e] is not none and not state_attr(e, 'restored') else 0) }}
@@ -3718,7 +3724,10 @@ template:
             {%- else -%}{%- set nb.v = nb.v + [r] -%}{%- endif -%}
           {%- endfor -%}
           {%- set cost = fw.c - fw.s * endv -%}{%- set cost_p = fw.cp - fw.sp * endv -%}
-          {{ {'now': {'L': 'Charge', 'H': 'Hold', 'N': 'Supply', 'X': 'Export'}[fw.a[0]], 'actions': fw.a, 't0': sl[0].s | int,
+          {#- Battery empty now: supplying or holding while the battery is at the minimum and the sun does not fill it this quarter either -#}
+          {%- set b0 = fw.blok[0] if fw.blok | length > 0 else fw.cur -%}
+          {%- set empty_now = s_now <= 0.01 and ((fw.a[0] == 'N' and b0 is mapping and b0.a == 'E') or fw.a[0] == 'H') -%}
+          {{ {'now': 'Battery empty' if empty_now else {'L': 'Charge', 'H': 'Hold', 'N': 'Supply', 'X': 'Export'}[fw.a[0]], 'empty_now': empty_now, 'actions': fw.a, 't0': sl[0].s | int,
               'charge': nb.l, 'supply': nb.n, 'hold': nb.v, 'export': nb.t, 'grid_charge_kwh': fw.net | round(2), 'export_kwh': fw.terug | round(2),
               'calibration_100_at': ((('tomorrow ' if fw.kal_ts >= end_today_ts else '') ~ fw.kal_ts | timestamp_custom('%H:%M')) if fw.kal_ts > 0 else none) if opt_cal_penalty | float(0) > 0 else none,
               'empty_at': (fw.empty | timestamp_custom('%Y-%m-%d %H:%M')) if fw.empty > 0 else none, 'empty_ts': fw.empty | int,
@@ -3739,6 +3748,7 @@ template:
         {%- else -%}
           {%- set lb = opt.charge -%}
           {%- if opt_action_now == 'L' -%}Charging from the grid now{{ ' (also for calibration: up to 100%)' if opt_cal_penalty | float(0) > 0 else '' }}.
+          {%- elif opt.empty_now | default(false) and opt_action_now in ['N', 'H'] -%}Battery is empty (minimum state of charge): the house uses the grid now.
           {%- elif opt_action_now == 'H' -%}Battery is holding now: the price now is lower than in the hours the charge is kept for.
           {%- elif opt_action_now == 'X' -%}Battery is exporting to the grid now (that yields more now than keeping the charge).
           {%- else -%}Battery is supplying the house now.{%- endif -%}
@@ -3761,7 +3771,7 @@ template:
           {% elif cap <= 0 or not has_value('sensor.zendure_total_state_of_charge') %}
             No battery data
           {% elif planner_new and opt_ok %}
-            {{ {'L': 'Charge', 'H': 'Hold', 'X': 'Export'}.get(opt_action_now, 'Supply') }}
+            {{ 'Battery empty' if opt.empty_now | default(false) and opt_action_now in ['N', 'H'] else {'L': 'Charge', 'H': 'Hold', 'X': 'Export'}.get(opt_action_now, 'Supply') }}
           {% else %}
             {% set threshold = c_charge_stop_kwh if this.state == 'Charge' else c_charge_start_kwh %}
             {% if grid_total_ac < threshold %}
@@ -3961,6 +3971,7 @@ template:
           profile_weeks_per_weekday: "{{ usage_per_weekday.weeks }}"
           history_7_days: "{{ {'prod7': prod7, 'imp7': imp7, 'exp7': exp7, 'exp_solar7': exp_solar7, 'charge7': charge7, 'discharge7': discharge7, 'charge_solar7': charge_solar7, 'ev7': ev7, 'ev_solar7': ev_solar7, 'hvac7': hvac7, 'hvac_solar7': hvac_solar7, 'q7': q7, 'q_solar7': q_solar7} }}"
           history_7_days_previous_value: "{{ hist_7_missing }}"
+          history_reset: "{{ hist_reset_button }}"
           margin_pct: "{{ margin_pct }}"
           margin_kwh: "{{ margin_dc }}"
           efficiency_charge_pct: "{{ (eff_in * 100) | round(1) }}"
@@ -4395,9 +4406,9 @@ automation:
   - id: forecast_reset_usage_data
     alias: Forecast Reset Usage Data
     description: >-
-      Forecasting 2026.11.3 - Clears the 7-day history (solar, grid, battery and the car if
-      zendure_ev_global.yaml is loaded) and reloads the statistics. The usage profile resets
-      itself via the same button.
+      Forecasting 2026.11.9 - Clears the 7-day history (solar, grid, battery and the car if
+      zendure_ev_global.yaml is loaded) and reloads the statistics, until they are really empty
+      (at most 8 rounds). The usage profile resets itself via the same button.
     mode: single
     triggers:
       - trigger: state
@@ -4417,20 +4428,62 @@ automation:
                 'sensor.hvac_counter_separate', 'sensor.hvac_counter_separate_from_solar',
                 'sensor.zendure_quooker_counter_separate', 'sensor.zendure_quooker_counter_separate_from_solar']
                | select('in', states.sensor | map(attribute='entity_id') | list) | list }}
-      - action: recorder.purge_entities
-        target:
-          entity_id: "{{ counters }}"
-        data:
-          keep_days: 0
-      # The recorder purges in the background; wait a moment before reloading the statistics
-      - delay:
-          seconds: 15
-      - action: statistics.reload
+          statistics: >
+            {{ ['sensor.forecast_solar_production_7_days', 'sensor.forecast_grid_import_7_days',
+                'sensor.forecast_grid_export_7_days', 'sensor.forecast_grid_export_from_solar_7_days',
+                'sensor.forecast_zendure_charge_7_days', 'sensor.forecast_zendure_discharge_7_days',
+                'sensor.forecast_zendure_charge_from_solar_7_days', 'sensor.ev_charged_7_days',
+                'sensor.ev_charged_from_solar_7_days', 'sensor.hvac_separate_7_days',
+                'sensor.hvac_separate_from_solar_7_days', 'sensor.zendure_quooker_separate_7_days',
+                'sensor.zendure_quooker_separate_from_solar_7_days']
+               | select('in', states.sensor | map(attribute='entity_id') | list) | list }}
+      # The recorder purges in the background, in parts, between the regular writes. With a large
+      # database it is not done after 15 seconds; if the statistics reload then, they keep the old
+      # 7 days in memory. So repeat until no statistic has more than about an hour of history
+      # (age_coverage_ratio < 0.006 of 7 days).
+      - repeat:
+          sequence:
+            - action: recorder.purge_entities
+              target:
+                entity_id: "{{ counters }}"
+              data:
+                keep_days: 0
+            - delay:
+                seconds: 15
+            - action: statistics.reload
+            - delay:
+                seconds: 5
+          until:
+            - condition: template
+              value_template: >
+                {% set ns = namespace(c=0) %}
+                {% for e in statistics %}{% set c = state_attr(e, 'age_coverage_ratio') %}{% if c is not none %}{% set ns.c = [ns.c, c | float(0)] | max %}{% endif %}{% endfor %}
+                {{ ns.c < 0.006 or repeat.index >= 8 }}
+      - variables:
+          remaining_days: >
+            {% set ns = namespace(c=0) %}
+            {% for e in statistics %}{% set c = state_attr(e, 'age_coverage_ratio') %}{% if c is not none %}{% set ns.c = [ns.c, c | float(0)] | max %}{% endif %}{% endfor %}
+            {{ (7 * ns.c) | round(2) }}
       - action: input_button.press
         target:
           entity_id: input_button.forecast_recalculate
-      - action: logbook.log
-        data:
-          name: Zendure Forecasting
-          message: Usage data reset (usage profile and 7-day history)
-          entity_id: input_button.forecast_reset_usage_data
+      - if:
+          - condition: template
+            value_template: "{{ remaining_days | float(0) < 0.05 }}"
+        then:
+          - action: logbook.log
+            data:
+              name: Zendure Forecasting
+              message: Usage data reset (usage profile and 7-day history)
+              entity_id: input_button.forecast_reset_usage_data
+        else:
+          - action: logbook.log
+            data:
+              name: Zendure Forecasting
+              message: "Reset usage data failed: after 8 attempts the statistics still have {{ remaining_days }} days of history. Press the button again."
+              entity_id: input_button.forecast_reset_usage_data
+          - action: persistent_notification.create
+            data:
+              notification_id: forecast_reset_usage_data
+              title: Zendure Forecasting
+              message: "Reset usage data did not succeed: the 7-day statistics still have {{ remaining_days }} days of history (the recorder had not finished purging). Press **Reset Usage Data** again in a few minutes."

@@ -2,6 +2,18 @@
 
 Versies volgen `jaar.maand.volgnummer`; het volgnummer begint elke maand bij 1. Elke versie vermeldt op welke Gielz-versie hij is gebaseerd. [English](CHANGELOG.md)
 
+## 2026.11.9 — gebaseerd op Gielz v20261113
+
+**In het kort:** twee correcties na 2026.11.8: *Verbruiksgegevens Resetten* werkt nu ook bij een grote database, en de status toont *Accu leeg* in plaats van *Leveren* als de accu op het minimum staat.
+
+**Verbruiksgegevens Resetten**
+- De automation wachtte 15 seconden na het wissen en laadde dan de statistieken opnieuw. De recorder wist echter op de achtergrond, in delen; bij een grote database was hij dan nog niet klaar. De statistieken laadden de oude 7 dagen opnieuw in en hielden die in het geheugen, zodat *Historie beschikbaar* op 7 van 7 dagen bleef staan (ook na *Herberekenen*). Nu herhaalt hij wissen en opnieuw laden (hooguit 8 rondes) tot geen enkele 7-dagen-statistiek nog meer dan ongeveer een uur historie heeft. Lukt dat niet, dan volgt een melding om de knop later nog eens te drukken.
+- Een 7-dagen-sensor die direct na de reset nog geen waarde heeft, telde met de vorige waarde (bedoeld voor een herstart). Daardoor bleven het oude dagverbruik en zelfverbruik staan. Direct na een reset tellen lege sensoren nu als 0 (nieuw attribuut `historie_reset` van het plan onthoudt de laatste druk op de knop).
+- Aanleiding: melding van een gebruiker (21-11).
+
+**Status *Accu leeg***
+- Met de nieuwe planner stond de status op *Leveren* (uitleg *Accu levert nu aan het huis*) terwijl de accu op het minimale laadpercentage stond en dus niets leverde. Kan de accu dit kwartier niet leveren (ook niet met zon), of houdt hij een lege accu vast, dan is de status nu *Accu leeg*, met de uitleg *Accu is leeg (minimale laadpercentage): het huis gebruikt nu het net.* Dezelfde naam als in de balk *Plan* van de Plan Tijdlijn. De aansturing verandert niet (de automation laadt nog steeds alleen bij *Laden*). Nieuw attribuut `optimaal.leeg_nu`.
+
 ## 2026.11.8 — gebaseerd op Gielz v20261113
 
 **In het kort:** een nieuwe planner (standaard aan) die per kwartier de goedkoopste keuze maakt over vandaag en morgen, met de oude planner nog één versie als terugval; optioneel terugleveren uit de accu; een overzichtelijker plankaart en Plan Tijdlijn; een sneller dashboard; een vereist Recorder-pakket; een optioneel Quooker-pakket; prijzenreserve bij uitval van Nord Pool.

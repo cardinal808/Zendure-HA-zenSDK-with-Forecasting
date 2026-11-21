@@ -1,4 +1,4 @@
-# Zendure zenSDK (Gielz) + Forecasting 2026.11.8 | gebaseerd op Gielz v20261113
+# Zendure zenSDK (Gielz) + Forecasting 2026.11.9 | gebaseerd op Gielz v20261113
 # Gebaseerd op Gielz1986/Zendure-HA-zenSDK (Michiel Hofker). Zie README.md voor licentie en wijzigingen.
 # VEREIST PAKKET - hoort bij de basis van deze set (naast zendure_gielz1986_nl.yaml).
 # =====================================================================
@@ -914,7 +914,7 @@ template:
       - name: "Forecasting Versie"
         unique_id: forecasting_versie
         icon: mdi:one-up
-        state: "2026.11.8"
+        state: "2026.11.9"
         attributes:
           gielz_basis: "v20261113"
           # Optionele pakketten die geladen zijn
@@ -1831,7 +1831,13 @@ template:
       # niet beschikbaar (bv. net na een herstart), dan geldt de vorige waarde in plaats van 0, zodat
       # het dagverbruik en het zelfverbruik niet scheef gaan. Een sensor die niet (meer) bestaat
       # (pakket weggehaald) telt als 0.
-      hist_7_vorig: "{{ state_attr('sensor.zendure_forecast_plan', 'historie_7_dagen') or {} }}"
+      # Na Verbruiksgegevens Resetten geen vorige waarden: een lege 7-dagen-sensor telt dan als 0.
+      # Anders bleef het oude dagverbruik staan. Het plan onthoudt de laatste druk op de knop
+      # (attribuut historie_reset); wijkt de knop daarvan af, dan is er net gereset.
+      hist_reset_knop: "{{ states('input_button.forecast_verbruiksgegevens_resetten') }}"
+      hist_7_vorig: >
+        {% set r = state_attr('sensor.zendure_forecast_plan', 'historie_reset') %}
+        {{ {} if r is not none and r != hist_reset_knop else (state_attr('sensor.zendure_forecast_plan', 'historie_7_dagen') or {}) }}
       prod7: >
         {% set e = 'sensor.forecast_zon_productie_7_dagen' %}
         {{ states(e) | float(hist_7_vorig.get('prod7', 0) if states[e] is not none and not state_attr(e, 'restored') else 0) }}
@@ -3716,7 +3722,10 @@ template:
             {%- else -%}{%- set nb.v = nb.v + [r] -%}{%- endif -%}
           {%- endfor -%}
           {%- set kost = fw.c - fw.s * eindw -%}{%- set kost_p = fw.cp - fw.sp * eindw -%}
-          {{ {'nu': {'L': 'Laden', 'H': 'Vasthouden', 'N': 'Leveren', 'X': 'Terugleveren'}[fw.a[0]], 'acties': fw.a, 't0': sl[0].s | int,
+          {#- Accu leeg nu: leveren of vasthouden terwijl de accu op het minimum staat en ook de zon vult hem dit kwartier niet -#}
+          {%- set b0 = fw.blok[0] if fw.blok | length > 0 else fw.cur -%}
+          {%- set leeg_nu = s_nu <= 0.01 and ((fw.a[0] == 'N' and b0 is mapping and b0.a == 'E') or fw.a[0] == 'H') -%}
+          {{ {'nu': 'Accu leeg' if leeg_nu else {'L': 'Laden', 'H': 'Vasthouden', 'N': 'Leveren', 'X': 'Terugleveren'}[fw.a[0]], 'leeg_nu': leeg_nu, 'acties': fw.a, 't0': sl[0].s | int,
               'laden': nb.l, 'leveren': nb.n, 'vasthouden': nb.v, 'terugleveren': nb.t, 'netladen_kwh': fw.net | round(2), 'terugleveren_kwh': fw.terug | round(2),
               'kalibratie_100_om': ((('morgen ' if fw.kal_ts >= eind_vandaag_ts else '') ~ fw.kal_ts | timestamp_custom('%H:%M')) if fw.kal_ts > 0 else none) if opt_kal_straf | float(0) > 0 else none,
               'leeg_om': (fw.leeg | timestamp_custom('%Y-%m-%d %H:%M')) if fw.leeg > 0 else none, 'leeg_ts': fw.leeg | int,
@@ -3737,6 +3746,7 @@ template:
         {%- else -%}
           {%- set lb = opt.laden -%}
           {%- if opt_actie_nu == 'L' -%}Nu laden uit het net{{ ' (ook voor de kalibratie: tot 100%)' if opt_kal_straf | float(0) > 0 else '' }}.
+          {%- elif opt.leeg_nu | default(false) and opt_actie_nu in ['N', 'H'] -%}Accu is leeg (minimale laadpercentage): het huis gebruikt nu het net.
           {%- elif opt_actie_nu == 'H' -%}Accu houdt nu vast: de prijs nu is lager dan in de uren waarvoor de lading bewaard wordt.
           {%- elif opt_actie_nu == 'X' -%}Accu levert nu terug aan het net (dat levert nu meer op dan de lading bewaren).
           {%- else -%}Accu levert nu aan het huis.{%- endif -%}
@@ -3759,7 +3769,7 @@ template:
           {% elif cap <= 0 or not has_value('sensor.zendure_2400_ac_laadpercentage') %}
             Geen batterijdata
           {% elif planner_nieuw and opt_ok %}
-            {{ {'L': 'Laden', 'H': 'Vasthouden', 'X': 'Terugleveren'}.get(opt_actie_nu, 'Leveren') }}
+            {{ 'Accu leeg' if opt.leeg_nu | default(false) and opt_actie_nu in ['N', 'H'] else {'L': 'Laden', 'H': 'Vasthouden', 'X': 'Terugleveren'}.get(opt_actie_nu, 'Leveren') }}
           {% else %}
             {% set drempel = c_laden_stop_kwh if this.state == 'Laden' else c_laden_start_kwh %}
             {% if netladen_ac < drempel %}
@@ -3959,6 +3969,7 @@ template:
           profiel_weken_per_weekdag: "{{ verbruik_per_weekdag.weken }}"
           historie_7_dagen: "{{ {'prod7': prod7, 'imp7': imp7, 'exp7': exp7, 'exp_zon7': exp_zon7, 'laden7': laden7, 'ontladen7': ontladen7, 'laden_zon7': laden_zon7, 'ev7': ev7, 'ev_zon7': ev_zon7, 'hvac7': hvac7, 'hvac_zon7': hvac_zon7, 'q7': q7, 'q_zon7': q_zon7} }}"
           historie_7_dagen_vorige_waarde: "{{ hist_7_ontbreekt }}"
+          historie_reset: "{{ hist_reset_knop }}"
           marge_pct: "{{ marge_pct }}"
           marge_kwh: "{{ marge_dc }}"
           efficientie_laden_pct: "{{ (eff_in * 100) | round(1) }}"
@@ -4394,9 +4405,9 @@ automation:
   - id: forecast_verbruiksgegevens_resetten
     alias: Forecast Verbruiksgegevens Resetten
     description: >-
-      Forecasting 2026.11.3 - Wist de historie van 7 dagen (zon, net, accu en de auto als
-      zendure_ev.yaml geladen is) en laadt de statistieken opnieuw. Het verbruiksprofiel
-      reset zichzelf via dezelfde knop.
+      Forecasting 2026.11.9 - Wist de historie van 7 dagen (zon, net, accu en de auto als
+      zendure_ev.yaml geladen is) en laadt de statistieken opnieuw, tot ze echt leeg zijn
+      (hooguit 8 rondes). Het verbruiksprofiel reset zichzelf via dezelfde knop.
     mode: single
     triggers:
       - trigger: state
@@ -4416,20 +4427,62 @@ automation:
                 'sensor.hvac_teller_apart', 'sensor.hvac_teller_apart_uit_zon',
                 'sensor.zendure_quooker_teller_apart', 'sensor.zendure_quooker_teller_apart_uit_zon']
                | select('in', states.sensor | map(attribute='entity_id') | list) | list }}
-      - action: recorder.purge_entities
-        target:
-          entity_id: "{{ tellers }}"
-        data:
-          keep_days: 0
-      # De recorder wist op de achtergrond; even wachten voordat de statistieken opnieuw laden
-      - delay:
-          seconds: 15
-      - action: statistics.reload
+          statistieken: >
+            {{ ['sensor.forecast_zon_productie_7_dagen', 'sensor.forecast_p1_import_7_dagen',
+                'sensor.forecast_p1_export_7_dagen', 'sensor.forecast_p1_export_uit_zon_7_dagen',
+                'sensor.forecast_zendure_laden_7_dagen', 'sensor.forecast_zendure_ontladen_7_dagen',
+                'sensor.forecast_zendure_laden_uit_zon_7_dagen', 'sensor.ev_geladen_7_dagen',
+                'sensor.ev_geladen_uit_zon_7_dagen', 'sensor.hvac_apart_7_dagen',
+                'sensor.hvac_apart_uit_zon_7_dagen', 'sensor.zendure_quooker_apart_7_dagen',
+                'sensor.zendure_quooker_apart_uit_zon_7_dagen']
+               | select('in', states.sensor | map(attribute='entity_id') | list) | list }}
+      # De recorder wist op de achtergrond, in delen, tussen het gewone schrijfwerk door. Bij een
+      # grote database is dat na 15 seconden nog niet klaar; laden de statistieken dan opnieuw,
+      # dan houden ze de oude 7 dagen in het geheugen. Daarom herhalen tot geen enkele statistiek
+      # nog meer dan ongeveer een uur historie heeft (age_coverage_ratio < 0,006 van 7 dagen).
+      - repeat:
+          sequence:
+            - action: recorder.purge_entities
+              target:
+                entity_id: "{{ tellers }}"
+              data:
+                keep_days: 0
+            - delay:
+                seconds: 15
+            - action: statistics.reload
+            - delay:
+                seconds: 5
+          until:
+            - condition: template
+              value_template: >
+                {% set ns = namespace(c=0) %}
+                {% for e in statistieken %}{% set c = state_attr(e, 'age_coverage_ratio') %}{% if c is not none %}{% set ns.c = [ns.c, c | float(0)] | max %}{% endif %}{% endfor %}
+                {{ ns.c < 0.006 or repeat.index >= 8 }}
+      - variables:
+          rest_dagen: >
+            {% set ns = namespace(c=0) %}
+            {% for e in statistieken %}{% set c = state_attr(e, 'age_coverage_ratio') %}{% if c is not none %}{% set ns.c = [ns.c, c | float(0)] | max %}{% endif %}{% endfor %}
+            {{ (7 * ns.c) | round(2) }}
       - action: input_button.press
         target:
           entity_id: input_button.forecast_herberekenen
-      - action: logbook.log
-        data:
-          name: Zendure Forecasting
-          message: Verbruiksgegevens gereset (verbruiksprofiel en historie van 7 dagen)
-          entity_id: input_button.forecast_verbruiksgegevens_resetten
+      - if:
+          - condition: template
+            value_template: "{{ rest_dagen | float(0) < 0.05 }}"
+        then:
+          - action: logbook.log
+            data:
+              name: Zendure Forecasting
+              message: Verbruiksgegevens gereset (verbruiksprofiel en historie van 7 dagen)
+              entity_id: input_button.forecast_verbruiksgegevens_resetten
+        else:
+          - action: logbook.log
+            data:
+              name: Zendure Forecasting
+              message: "Verbruiksgegevens resetten niet gelukt: de statistieken hebben na 8 pogingen nog {{ rest_dagen }} dagen historie. Druk de knop nog eens."
+              entity_id: input_button.forecast_verbruiksgegevens_resetten
+          - action: persistent_notification.create
+            data:
+              notification_id: forecast_verbruiksgegevens_resetten
+              title: Zendure Forecasting
+              message: "Verbruiksgegevens resetten is niet gelukt: de 7-dagen-statistieken hebben nog {{ rest_dagen }} dagen historie (de recorder was nog niet klaar met wissen). Druk **Verbruiksgegevens Resetten** over een paar minuten nog eens."

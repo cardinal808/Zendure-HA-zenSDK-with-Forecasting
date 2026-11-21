@@ -2,6 +2,18 @@
 
 Versions follow `year.month.sequence`; the sequence restarts at 1 every month. Each version states which Gielz version it is based on. [Nederlands](CHANGELOG.nl.md)
 
+## 2026.11.9 — based on Gielz v20261113
+
+**In short:** two fixes after 2026.11.8: *Reset Usage Data* now also works with a large database, and the state shows *Battery empty* instead of *Supply* when the battery is at the minimum.
+
+**Reset Usage Data**
+- The automation waited 15 seconds after purging and then reloaded the statistics. The recorder purges in the background, in parts; with a large database it was not done yet. The statistics loaded the old 7 days again and kept them in memory, so *History available* stayed at 7 of 7 days (also after *Recalculate*). Now it repeats purging and reloading (at most 8 rounds) until no 7-day statistic has more than about an hour of history. If that fails, a notification asks to press the button again later.
+- A 7-day sensor without a value right after the reset counted with its previous value (meant for a restart). That kept the old daily usage and self-consumption. Right after a reset, empty sensors now count as 0 (new plan attribute `history_reset` remembers the last press of the button).
+- Reason: report from a user (21-11).
+
+**State *Battery empty***
+- With the new planner the state was *Supply* (explanation *Battery is supplying the house now*) while the battery was at the minimum state of charge and supplied nothing. If the battery cannot supply in this quarter hour (not even with sun), or holds an empty battery, the state is now *Battery empty*, with the explanation *Battery is empty (minimum state of charge): the house uses the grid now.* Same name as in the *Plan* bar of the Plan Timeline. Control does not change (the automation still only charges on *Charge*). New attribute `optimal.empty_now`.
+
 ## 2026.11.8 — based on Gielz v20261113
 
 **In short:** a new planner (on by default) that makes the cheapest choice per quarter hour over today and tomorrow, with the old planner as fallback for one more version; optional export from the battery; a clearer plan card and Plan Timeline; a faster dashboard; a required Recorder package; an optional Quooker package; price backup when Nord Pool fails.
