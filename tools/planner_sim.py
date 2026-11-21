@@ -102,19 +102,21 @@ def build_env(st):
         except Exception:
             return default if default is not None else ts
 
-    def ffloat(v, default=None):
+    _NO = object()
+
+    def ffloat(v, default=_NO):
         try:
             return float(v)
         except Exception:
-            if default is None:
+            if default is _NO:
                 raise ValueError('float: %r' % (v,))
             return default
 
-    def fint(v, default=None, base=10):
+    def fint(v, default=_NO, base=10):
         try:
             return int(float(v)) if not isinstance(v, str) or re.match(r'^-?[0-9.]+$', v.strip()) else int(v, base)
         except Exception:
-            if default is None:
+            if default is _NO:
                 raise ValueError('int: %r' % (v,))
             return default
 
