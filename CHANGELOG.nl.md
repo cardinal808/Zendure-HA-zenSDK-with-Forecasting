@@ -4,7 +4,7 @@ Versies volgen `jaar.maand.volgnummer`; het volgnummer begint elke maand bij 1. 
 
 ## 2026.11.9 — gebaseerd op Gielz v20261113
 
-**In het kort:** twee correcties na 2026.11.8: *Verbruiksgegevens Resetten* werkt nu ook bij een grote database, en de status toont *Accu leeg* in plaats van *Leveren* als de accu op het minimum staat.
+**In het kort:** drie correcties na 2026.11.8: *Verbruiksgegevens Resetten* werkt nu ook bij een grote database, de status toont *Accu leeg* in plaats van *Leveren* als de accu op het minimum staat, en de prijzenreserve werkt (geen foutmelding meer in het log).
 
 **Verbruiksgegevens Resetten**
 - De automation wachtte 15 seconden na het wissen en laadde dan de statistieken opnieuw. De recorder wist echter op de achtergrond, in delen; bij een grote database was hij dan nog niet klaar. De statistieken laadden de oude 7 dagen opnieuw in en hielden die in het geheugen, zodat *Historie beschikbaar* op 7 van 7 dagen bleef staan (ook na *Herberekenen*). Nu herhaalt hij wissen en opnieuw laden (hooguit 8 rondes) tot geen enkele 7-dagen-statistiek nog meer dan ongeveer een uur historie heeft. Lukt dat niet, dan volgt een melding om de knop later nog eens te drukken.
@@ -13,6 +13,10 @@ Versies volgen `jaar.maand.volgnummer`; het volgnummer begint elke maand bij 1. 
 
 **Status *Accu leeg***
 - Met de nieuwe planner stond de status op *Leveren* (uitleg *Accu levert nu aan het huis*) terwijl de accu op het minimale laadpercentage stond en dus niets leverde. Kan de accu dit kwartier niet leveren (ook niet met zon), of houdt hij een lege accu vast, dan is de status nu *Accu leeg*, met de uitleg *Accu is leeg (minimale laadpercentage): het huis gebruikt nu het net.* Dezelfde naam als in de balk *Plan* van de Plan Tijdlijn. De aansturing verandert niet (de automation laadt nog steeds alleen bij *Laden*). Nieuw attribuut `optimaal.leeg_nu`.
+
+**Prijzenreserve: foutmelding `'this' is undefined`**
+- De prijzenreserve (`sensor.forecast_prijzen_reserve`, sinds 2026.11.8) las zijn eigen vorige prijzen met `this` in het `variables:`-blok van de trigger-sensor. Daar bestaat `this` niet (alleen in `state:` en `attributes:`), dus elke trigger (start, wijziging van de Nord Pool-sensor, elke 5 minuten) gaf in het log *Error doing job: Task exception was never retrieved … UndefinedError: 'this' is undefined* en werd afgebroken. Daardoor werd de reserve nooit bijgewerkt: bij uitval van Nord Pool na middernacht had de planner geen bewaarde prijzen. Nu via `state_attr('sensor.forecast_prijzen_reserve', 'raw')`.
+- Aanleiding: melding van een gebruiker (21-11).
 
 ## 2026.11.8 — gebaseerd op Gielz v20261113
 

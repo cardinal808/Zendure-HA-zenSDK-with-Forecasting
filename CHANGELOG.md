@@ -4,7 +4,7 @@ Versions follow `year.month.sequence`; the sequence restarts at 1 every month. E
 
 ## 2026.11.9 — based on Gielz v20261113
 
-**In short:** two fixes after 2026.11.8: *Reset Usage Data* now also works with a large database, and the state shows *Battery empty* instead of *Supply* when the battery is at the minimum.
+**In short:** three fixes after 2026.11.8: *Reset Usage Data* now also works with a large database, the state shows *Battery empty* instead of *Supply* when the battery is at the minimum, and the price backup works (no more error in the log).
 
 **Reset Usage Data**
 - The automation waited 15 seconds after purging and then reloaded the statistics. The recorder purges in the background, in parts; with a large database it was not done yet. The statistics loaded the old 7 days again and kept them in memory, so *History available* stayed at 7 of 7 days (also after *Recalculate*). Now it repeats purging and reloading (at most 8 rounds) until no 7-day statistic has more than about an hour of history. If that fails, a notification asks to press the button again later.
@@ -13,6 +13,10 @@ Versions follow `year.month.sequence`; the sequence restarts at 1 every month. E
 
 **State *Battery empty***
 - With the new planner the state was *Supply* (explanation *Battery is supplying the house now*) while the battery was at the minimum state of charge and supplied nothing. If the battery cannot supply in this quarter hour (not even with sun), or holds an empty battery, the state is now *Battery empty*, with the explanation *Battery is empty (minimum state of charge): the house uses the grid now.* Same name as in the *Plan* bar of the Plan Timeline. Control does not change (the automation still only charges on *Charge*). New attribute `optimal.empty_now`.
+
+**Price backup: error `'this' is undefined`**
+- The price backup (`sensor.forecast_price_backup`, since 2026.11.8) read its own previous prices with `this` in the `variables:` block of the trigger sensor. `this` does not exist there (only in `state:` and `attributes:`), so every trigger (start, change of the Nord Pool sensor, every 5 minutes) logged *Error doing job: Task exception was never retrieved … UndefinedError: 'this' is undefined* and was aborted. The backup was therefore never updated: if Nord Pool failed after midnight, the planner had no saved prices. Now via `state_attr('sensor.forecast_price_backup', 'raw')`.
+- Reason: report from a user (21-11).
 
 ## 2026.11.8 — based on Gielz v20261113
 

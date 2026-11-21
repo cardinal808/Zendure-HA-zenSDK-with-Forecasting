@@ -505,7 +505,8 @@ template:
         {%- set ns = namespace(ok=false) -%}
         {%- for p in r_today -%}{%- if as_timestamp(p.start, 0) <= t_nu < as_timestamp(p.end, 0) -%}{%- set ns.ok = true -%}{%- endif -%}{%- endfor -%}
         {{ ns.ok }}
-      old: "{{ (this.attributes.get('raw') if this is not none and this.attributes is defined else none) or [] }}"
+      # Eigen vorige waarde via state_attr: 'this' bestaat niet in variables van een trigger-template.
+      old: "{{ state_attr('sensor.forecast_prijzen_reserve', 'raw') or [] }}"
       saved: >
         {%- set src = r_tomorrow if r_tomorrow | length > 0 else (old if old | length > 0 and as_timestamp((old | last).end, 0) > t_nu else []) -%}
         [
