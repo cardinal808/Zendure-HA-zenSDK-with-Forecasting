@@ -1,4 +1,4 @@
-# Zendure zenSDK (Gielz) + Forecasting 2026.11.9 | gebaseerd op Gielz v20261113
+# Zendure zenSDK (Gielz) + Forecasting 2026.11.10 | gebaseerd op Gielz v20261113
 # Gebaseerd op Gielz1986/Zendure-HA-zenSDK (Michiel Hofker). Zie README.md voor licentie en wijzigingen.
 # OPTIONEEL PAKKET - niet nodig voor Dynamisch NOM + Forecasting. Weglaten = functie uit.
 # Staat in de repo in de map "optional packages". Toevoegen: kopieer het naar je packages-map en herstart
@@ -272,10 +272,10 @@ template:
       eind_ts: "{{ as_timestamp(states('input_datetime.ev_sessie_eind'), 0) }}"
       raw_vandaag: >
         {%- set r = state_attr('sensor.forecast_prijzen', 'raw_today') -%}
-        {{ r if r is not none else (state_attr('sensor.dynamisch_nordpool', 'raw_today') or []) }}
+        {{ r if r else (state_attr('sensor.dynamisch_nordpool', 'raw_today') or []) }}
       raw_morgen: >
         {%- set r = state_attr('sensor.forecast_prijzen', 'raw_tomorrow') -%}
-        {{ r if r is not none else (state_attr('sensor.dynamisch_nordpool', 'raw_tomorrow') or []) }}
+        {{ r if r else (state_attr('sensor.dynamisch_nordpool', 'raw_tomorrow') or []) }}
       morgen_bekend: "{{ raw_morgen | length > 0 }}"
       dag_lengte: "{{ as_timestamp(today_at('00:00') + timedelta(days=1)) - as_timestamp(today_at('00:00')) }}"
       # Prijsslots tot het einde van de sessie; prijzen van morgen onbekend = patroon van vandaag

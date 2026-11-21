@@ -2,6 +2,22 @@
 
 Versions follow `year.month.sequence`; the sequence restarts at 1 every month. Each version states which Gielz version it is based on. [Nederlands](CHANGELOG.nl.md)
 
+## 2026.11.10 — based on Gielz v20261113
+
+**In short:** urgent fix for 2026.11.9. With the Nord Pool integration from HACS the new price sensor stayed empty, so the planner showed *No prices* and did not charge. In addition the *Optional packages* card no longer shows a removed package as loaded.
+
+**Prices (2026.11.9: *No prices*)**
+- `sensor.forecast_prices` passed the lists of the Nord Pool sensor through a `variables:` step. The Nord Pool integration (HACS) provides `start` and `end` as datetime objects; Home Assistant cannot turn a list with those back into a list, so it came through as text. The sensor then found no quarter hour at all: `raw_today` empty, planner *No prices* (since 2026.11.9 that means: no charging, no export, no holding), and the notice *No prices since …* stayed, also after a restart. With Gielz's sensor as the source (text) it worked, which is why the tests did not catch it.
+- Now only counts go through `variables:` and the sensor reads the lists in the calculation itself. Tested with datetime objects as the integration provides them.
+- **Safety net:** if `sensor.forecast_prices` is empty while Gielz's `sensor.dynamic_nordpool` has prices, planner, price backup, savings and EV use Gielz's lists (as before 2026.11.9). The planner still checks per quarter hour whether there is a price for now.
+- Reason: issue #2 (21-11).
+
+**Optional packages**
+- After removing a package (e.g. `zendure_ev_global.yaml`) it stayed listed as loaded on the *Optional packages* card and in the export. Home Assistant keeps the entities of a removed package as *Unavailable* (`restored: true`) in the registry. Those no longer count. To get rid of them completely: Settings → Entities, filter on *Unavailable* and delete them.
+- Reason: issue #2 (21-11).
+
+**Filling in the Nord Pool sensors** (no change): Gielz's *Dynamic Nordpool Sensor* gets the all-in price (with the Nordpool package `sensor.nordpool_kwh_nl_eur_5_09_0`), the *Market price sensor* the bare market price, with or without VAT (`…_3_10_0` or `…_3_10_021`; the set reads the VAT from the name).
+
 ## 2026.11.9 — based on Gielz v20261113
 
 **In short:** fixes after 2026.11.8: *Reset Usage Data* now also works with a large database, the state shows *Battery empty* instead of *Supply* when the battery is at the minimum, and the price backup works (no more error in the log). In addition the planner never charges without a price for now any more, and it reads the prices straight from the Nord Pool sensor, so after midnight it no longer has to wait for Gielz's price sensor.

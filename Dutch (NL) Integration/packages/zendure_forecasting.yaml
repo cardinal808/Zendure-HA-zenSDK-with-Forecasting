@@ -1,4 +1,4 @@
-# Zendure zenSDK (Gielz) + Forecasting 2026.11.9 | gebaseerd op Gielz v20261113
+# Zendure zenSDK (Gielz) + Forecasting 2026.11.10 | gebaseerd op Gielz v20261113
 # Gebaseerd op Gielz1986/Zendure-HA-zenSDK (Michiel Hofker). Zie README.md voor licentie en wijzigingen.
 # VEREIST PAKKET - hoort bij de basis van deze set (naast zendure_gielz1986_nl.yaml).
 # =====================================================================
@@ -506,16 +506,20 @@ template:
       np_ent: >
         {%- set v = states('input_text.dynamisch_nordpool_sensor') | trim | lower | replace(' ', '') -%}
         {{ v if v is match('^sensor\\.') else '' }}
-      np_alle: >
-        {%- set a = (state_attr(np_ent, 'raw_today') or []) if np_ent != '' else [] -%}
-        {%- set b = (state_attr(np_ent, 'raw_tomorrow') or []) if np_ent != '' else [] -%}
-        {{ (a | list if a is iterable and a is not string else []) + (b | list if b is iterable and b is not string else []) }}
-      gz_alle: "{{ (state_attr('sensor.dynamisch_nordpool', 'raw_today') or []) | list + (state_attr('sensor.dynamisch_nordpool', 'raw_tomorrow') or []) | list }}"
-      bron: "{{ 'nordpool' if np_alle | length > 0 else ('gielz' if gz_alle | length > 0 else 'none') }}"
+      # Alleen aantallen en getallen door variables: de Nord Pool-integratie (HACS) levert start/end als
+      # datetime, en een lijst daarmee komt als tekst uit een variabele (2026.11.9: geen prijzen).
+      np_n: >
+        {%- set a = state_attr(np_ent, 'raw_today') if np_ent != '' else none -%}
+        {%- set b = state_attr(np_ent, 'raw_tomorrow') if np_ent != '' else none -%}
+        {{ (a | length if a is iterable and a is not string else 0) + (b | length if b is iterable and b is not string else 0) }}
+      gz_n: "{{ (state_attr('sensor.dynamisch_nordpool', 'raw_today') or []) | length + (state_attr('sensor.dynamisch_nordpool', 'raw_tomorrow') or []) | length }}"
+      bron: "{{ 'nordpool' if np_n | int(0) > 0 else ('gielz' if gz_n | int(0) > 0 else 'none') }}"
       slots: >
         {%- set uur = not is_state('input_boolean.dynamisch_15_minuten', 'on') -%}
+        {%- set ent = np_ent if bron == 'nordpool' else 'sensor.dynamisch_nordpool' -%}
+        {%- set a = state_attr(ent, 'raw_today') -%}{%- set b = state_attr(ent, 'raw_tomorrow') -%}
         {%- set ns = namespace(l=[], k=-1, som=0, n=0) -%}
-        {%- for p in (np_alle if bron == 'nordpool' else gz_alle) -%}
+        {%- for p in (a | list if a is iterable and a is not string else []) + (b | list if b is iterable and b is not string else []) -%}
           {%- set s = as_timestamp(p.start, 0) -%}{%- set e = as_timestamp(p.end, 0) -%}{%- set v = p.value | float(none) -%}
           {%- if s > 0 and e > s and v is number -%}
             {%- if uur and e - s < 3600 -%}
@@ -574,8 +578,8 @@ template:
         minutes: "/5"
     variables:
       t_nu: "{{ as_timestamp(now()) }}"
-      r_today: "{{ state_attr('sensor.forecast_prijzen', 'raw_today') or [] }}"
-      r_tomorrow: "{{ state_attr('sensor.forecast_prijzen', 'raw_tomorrow') or [] }}"
+      r_today: "{% set r = state_attr('sensor.forecast_prijzen', 'raw_today') %}{{ r if r else (state_attr('sensor.dynamisch_nordpool', 'raw_today') or []) }}"
+      r_tomorrow: "{% set r = state_attr('sensor.forecast_prijzen', 'raw_tomorrow') %}{{ r if r else (state_attr('sensor.dynamisch_nordpool', 'raw_tomorrow') or []) }}"
       covered: >
         {%- set ns = namespace(ok=false) -%}
         {%- for p in r_today -%}{%- if as_timestamp(p.start, 0) <= t_nu < as_timestamp(p.end, 0) -%}{%- set ns.ok = true -%}{%- endif -%}{%- endfor -%}
@@ -990,19 +994,19 @@ template:
       - name: "Forecasting Versie"
         unique_id: forecasting_versie
         icon: mdi:one-up
-        state: "2026.11.9"
+        state: "2026.11.10"
         attributes:
           gielz_basis: "v20261113"
           # Optionele pakketten die geladen zijn
           pakketten: >
             {% set ns = namespace(l=[]) %}
-            {% if states.sensor.zendure_besparing is not none %}{% set ns.l = ns.l + ['Besparing'] %}{% endif %}
-            {% if states.sensor.zendure_terugleverprijs_nu is not none %}{% set ns.l = ns.l + ['Negatieve Prijs'] %}{% endif %}
-            {% if states.binary_sensor.hvac_actief is not none %}{% set ns.l = ns.l + ['HVAC'] %}{% endif %}
-            {% if states.sensor.ev_laadplan is not none %}{% set ns.l = ns.l + ['EV'] %}{% endif %}
-            {% if states.sensor.zendure_quooker_ontlaad_correctie is not none %}{% set ns.l = ns.l + ['Quooker'] %}{% endif %}
-            {% if states.script.zendure_diagnose_export is not none %}{% set ns.l = ns.l + ['Export'] %}{% endif %}
-            {% if states.input_number.nordpool_energiebelasting is not none %}{% set ns.l = ns.l + ['Nordpool'] %}{% endif %}
+            {% if states.sensor.zendure_besparing is not none and not states.sensor.zendure_besparing.attributes.get('restored', false) %}{% set ns.l = ns.l + ['Besparing'] %}{% endif %}
+            {% if states.sensor.zendure_terugleverprijs_nu is not none and not states.sensor.zendure_terugleverprijs_nu.attributes.get('restored', false) %}{% set ns.l = ns.l + ['Negatieve Prijs'] %}{% endif %}
+            {% if states.binary_sensor.hvac_actief is not none and not states.binary_sensor.hvac_actief.attributes.get('restored', false) %}{% set ns.l = ns.l + ['HVAC'] %}{% endif %}
+            {% if states.sensor.ev_laadplan is not none and not states.sensor.ev_laadplan.attributes.get('restored', false) %}{% set ns.l = ns.l + ['EV'] %}{% endif %}
+            {% if states.sensor.zendure_quooker_ontlaad_correctie is not none and not states.sensor.zendure_quooker_ontlaad_correctie.attributes.get('restored', false) %}{% set ns.l = ns.l + ['Quooker'] %}{% endif %}
+            {% if states.script.zendure_diagnose_export is not none and not states.script.zendure_diagnose_export.attributes.get('restored', false) %}{% set ns.l = ns.l + ['Export'] %}{% endif %}
+            {% if states.input_number.nordpool_energiebelasting is not none and not states.input_number.nordpool_energiebelasting.attributes.get('restored', false) %}{% set ns.l = ns.l + ['Nordpool'] %}{% endif %}
             {{ ns.l }}
           github: "https://github.com/cardinal808/Zendure-HA-zenSDK-with-Forecasting"
 
@@ -2193,13 +2197,13 @@ template:
 
       # ---- Prijsslots -------------------------------------------------
       # Prijzen uit sensor.forecast_prijzen (rechtstreeks uit de Nord Pool-sensor, op datum verdeeld).
-      # Bestaat die nog niet (net na de upgrade), dan Gielz' sensor.dynamisch_nordpool.
+      # Leeg of nog niet bestaand (net na de upgrade), dan Gielz' sensor.dynamisch_nordpool.
       np_vandaag: >
         {%- set r = state_attr('sensor.forecast_prijzen', 'raw_today') -%}
-        {{ r if r is not none else (state_attr('sensor.dynamisch_nordpool', 'raw_today') or []) }}
+        {{ r if r else (state_attr('sensor.dynamisch_nordpool', 'raw_today') or []) }}
       np_morgen: >
         {%- set r = state_attr('sensor.forecast_prijzen', 'raw_tomorrow') -%}
-        {{ r if r is not none else (state_attr('sensor.dynamisch_nordpool', 'raw_tomorrow') or []) }}
+        {{ r if r else (state_attr('sensor.dynamisch_nordpool', 'raw_tomorrow') or []) }}
       # Bron van de prijzen van vandaag: Nord Pool, of de bewaarde prijzen (sensor.forecast_prijzen_reserve)
       # als Nord Pool geen prijs voor nu heeft maar de reserve wel (bv. na middernacht zonder nieuwe prijzen).
       # Heeft geen van beide een prijs voor nu, dan 'none': status Geen prijzen, niet laden, niet terugleveren

@@ -1,4 +1,4 @@
-# Zendure zenSDK (Gielz) + Forecasting 2026.11.9 | gebaseerd op Gielz v20261113
+# Zendure zenSDK (Gielz) + Forecasting 2026.11.10 | gebaseerd op Gielz v20261113
 # Gebaseerd op Gielz1986/Zendure-HA-zenSDK (Michiel Hofker). Zie README.md voor licentie en wijzigingen.
 # OPTIONEEL PAKKET - niet nodig voor Dynamisch NOM + Forecasting. Weglaten = functie uit.
 # Staat in de repo in de map "optional packages". Toevoegen: kopieer het naar je packages-map en herstart
@@ -151,7 +151,7 @@ template:
       # ---- Dynamische prijs van het slot dat nu loopt (wordt bewaard voor het volgende kwartier) ----
       prijzen: >
         {%- set r = state_attr('sensor.forecast_prijzen', 'raw_today') -%}
-        {{ r if r is not none else (state_attr('sensor.dynamisch_nordpool', 'raw_today') or []) }}
+        {{ r if r else (state_attr('sensor.dynamisch_nordpool', 'raw_today') or []) }}
       slot_nu: >
         {%- set ns = namespace(p=none, e=none) -%}
         {%- for x in prijzen -%}

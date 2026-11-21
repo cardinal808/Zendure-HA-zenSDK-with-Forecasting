@@ -1,4 +1,4 @@
-# Zendure zenSDK (Gielz) + Forecasting 2026.11.9 | based on Gielz v20261113
+# Zendure zenSDK (Gielz) + Forecasting 2026.11.10 | based on Gielz v20261113
 # Based on Gielz1986/Zendure-HA-zenSDK (Michiel Hofker). See README.md for license and changes.
 # OPTIONAL PACKAGE - not needed for Dynamic Smart Matching + Forecasting. Leave it out = feature off.
 # In the repo this file is in the "optional packages" folder. To add it: copy it to your packages folder
@@ -150,7 +150,7 @@ template:
       # ---- Dynamic price of the slot running now (kept for the next quarter hour) ----
       prices: >
         {%- set r = state_attr('sensor.forecast_prices', 'raw_today') -%}
-        {{ r if r is not none else (state_attr('sensor.dynamic_nordpool', 'raw_today') or []) }}
+        {{ r if r else (state_attr('sensor.dynamic_nordpool', 'raw_today') or []) }}
       slot_now: >
         {%- set ns = namespace(p=none, e=none) -%}
         {%- for x in prices -%}

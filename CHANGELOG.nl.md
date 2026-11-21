@@ -2,6 +2,22 @@
 
 Versies volgen `jaar.maand.volgnummer`; het volgnummer begint elke maand bij 1. Elke versie vermeldt op welke Gielz-versie hij is gebaseerd. [English](CHANGELOG.md)
 
+## 2026.11.10 — gebaseerd op Gielz v20261113
+
+**In het kort:** spoedcorrectie voor 2026.11.9. Met de Nord Pool-integratie uit HACS bleef de nieuwe prijzensensor leeg, waardoor de planner *Geen prijzen* toonde en niet laadde. Daarnaast toont de kaart *Optionele pakketten* een verwijderd pakket niet meer als geladen.
+
+**Prijzen (2026.11.9: *Geen prijzen*)**
+- `sensor.forecast_prijzen` gaf de lijsten van de Nord Pool-sensor door een `variables:`-stap. De Nord Pool-integratie (HACS) levert `start` en `end` als datetime-object; een lijst daarmee kan Home Assistant niet terugzetten naar een lijst, en kwam als tekst door. De sensor vond dan geen enkel kwartier: `raw_today` leeg, planner *Geen prijzen* (sinds 2026.11.9 betekent dat: niet laden, niet terugleveren, niet vasthouden), en de melding *Geen prijzen sinds …* bleef staan, ook na een herstart. Met Gielz' sensor als bron (tekst) ging het wel goed, en daarom kwam het in de tests niet naar boven.
+- Nu gaan alleen aantallen door `variables:` en leest de sensor de lijsten pas in de berekening zelf. Getest met datetime-objecten zoals de integratie ze levert.
+- **Vangnet:** is `sensor.forecast_prijzen` leeg terwijl Gielz' `sensor.dynamisch_nordpool` wel prijzen heeft, dan gebruiken planner, prijzenreserve, besparing en EV Gielz' lijsten (zoals vóór 2026.11.9). Of er voor nu een prijs is, toetst de planner daarna nog steeds per kwartier.
+- Aanleiding: issue #2 (21-11).
+
+**Optionele pakketten**
+- Na het weghalen van een pakket (bv. `zendure_ev.yaml`) bleef het op de kaart *Optionele pakketten* en in de export als geladen staan. Home Assistant houdt de entiteiten van een verwijderd pakket als *Niet beschikbaar* (`restored: true`) in het register. Die tellen nu niet meer mee. Wil je ze helemaal kwijt: Instellingen → Entiteiten, filter op *Niet beschikbaar* en verwijder ze.
+- Aanleiding: issue #2 (21-11).
+
+**Nord Pool-sensoren invullen** (geen wijziging): bij Gielz' *Dynamisch Nordpool Sensor* de all-in prijs (met het Nordpool-pakket `sensor.nordpool_kwh_nl_eur_5_09_0`), bij *Marktprijs sensor* de kale marktprijs, met of zonder btw (`…_3_10_0` of `…_3_10_021`; de set leest de btw uit de naam).
+
 ## 2026.11.9 — gebaseerd op Gielz v20261113
 
 **In het kort:** correcties na 2026.11.8: *Verbruiksgegevens Resetten* werkt nu ook bij een grote database, de status toont *Accu leeg* in plaats van *Leveren* als de accu op het minimum staat, en de prijzenreserve werkt (geen foutmelding meer in het log). Daarnaast laadt de planner nooit meer zonder prijs voor nu, en leest hij de prijzen rechtstreeks uit de Nord Pool-sensor, zodat hij na middernacht niet meer op Gielz' prijzensensor hoeft te wachten.
