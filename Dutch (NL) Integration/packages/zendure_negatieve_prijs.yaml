@@ -231,14 +231,14 @@ template:
           {%- set ns = namespace(p=none) -%}
           {%- set nu = as_timestamp(now()) -%}
           {%- if bron.startswith('sensor.') -%}
-            {%- for x in (state_attr(bron, 'raw_today') or []) -%}
+            {%- for x in (state_attr(bron, 'raw_today') or []) | list + (state_attr(bron, 'raw_tomorrow') or []) | list -%}
               {%- if x.value is number and as_timestamp(x.start, 0) <= nu < as_timestamp(x.end, 0) -%}
                 {%- set ns.p = x.value -%}
               {%- endif -%}
             {%- endfor -%}
           {%- endif -%}
           {%- if ns.p is none -%}
-            {%- set ns.p = states('sensor.dynamisch_nordpool') | float(none) -%}
+            {%- set ns.p = states('sensor.forecast_prijzen') | float(none) -%}
           {%- endif -%}
           {%- if ns.p is number -%}
             {#- Zelfde instellingen als in de attributen hieronder (hier herhaald: geen afhankelijkheid van this) -#}
@@ -268,13 +268,13 @@ template:
             {%- set ns = namespace(p=none) -%}
             {%- if bron.startswith('sensor.') -%}
               {%- set nu = as_timestamp(now()) -%}
-              {%- for x in (state_attr(bron, 'raw_today') or []) -%}
+              {%- for x in (state_attr(bron, 'raw_today') or []) | list + (state_attr(bron, 'raw_tomorrow') or []) | list -%}
                 {%- if x.value is number and as_timestamp(x.start, 0) <= nu < as_timestamp(x.end, 0) -%}
                   {%- set ns.p = x.value -%}
                 {%- endif -%}
               {%- endfor -%}
             {%- endif -%}
-            {{ ns.p if ns.p is not none else states('sensor.dynamisch_nordpool') | float(none) }}
+            {{ ns.p if ns.p is not none else states('sensor.forecast_prijzen') | float(none) }}
           marktprijs_bron: "{{ states('input_text.dynamisch_marktprijs_sensor') | trim if (states('input_text.dynamisch_marktprijs_sensor') | trim | lower).startswith('sensor.') else states('input_text.dynamisch_nordpool_sensor') | trim }}"
           opslag_teruglevering: "{{ states('input_number.besparing_dyn_opslag_teruglevering') | float(0) }}"
           bonus_teruglevering_pct: "{{ states('input_number.besparing_dyn_bonus_teruglevering') | float(0) }}"

@@ -148,7 +148,9 @@ template:
       measurement_ok: "{{ t_imp >= 0 and t_exp >= 0 and t_charge >= 0 and t_disch >= 0 and prod_now >= 0 }}"
 
       # ---- Dynamic price of the slot running now (kept for the next quarter hour) ----
-      prices: "{{ state_attr('sensor.dynamic_nordpool', 'raw_today') or [] }}"
+      prices: >
+        {%- set r = state_attr('sensor.forecast_prices', 'raw_today') -%}
+        {{ r if r is not none else (state_attr('sensor.dynamic_nordpool', 'raw_today') or []) }}
       slot_now: >
         {%- set ns = namespace(p=none, e=none) -%}
         {%- for x in prices -%}
@@ -161,7 +163,7 @@ template:
         {%- set m = states('input_text.dynamic_setting_market_price_sensor') | trim | lower -%}
         {%- set ns = namespace(p=none) -%}
         {%- if m.startswith('sensor.') -%}
-          {%- for x in (state_attr(m, 'raw_today') or []) -%}
+          {%- for x in (state_attr(m, 'raw_today') or []) | list + (state_attr(m, 'raw_tomorrow') or []) | list -%}
             {%- if x.value is number and as_timestamp(x.start, 0) <= now_ts < as_timestamp(x.end, 0) -%}{%- set ns.p = x.value | float(0) -%}{%- endif -%}
           {%- endfor -%}
         {%- endif -%}

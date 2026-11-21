@@ -47,6 +47,7 @@ recorder:
       - sensor.dynamic_nordpool
       - sensor.dynamic_lowest_price_period
       # Forecasting: helper sensors that are only read live
+      - sensor.forecast_prices
       - sensor.forecast_price_backup
       - sensor.forecast_sensor_candidates
       - sensor.forecast_notices

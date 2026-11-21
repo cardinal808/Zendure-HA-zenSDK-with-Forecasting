@@ -232,14 +232,14 @@ template:
           {%- set ns = namespace(p=none) -%}
           {%- set now_ts = as_timestamp(now()) -%}
           {%- if src.startswith('sensor.') -%}
-            {%- for x in (state_attr(src, 'raw_today') or []) -%}
+            {%- for x in (state_attr(src, 'raw_today') or []) | list + (state_attr(src, 'raw_tomorrow') or []) | list -%}
               {%- if x.value is number and as_timestamp(x.start, 0) <= now_ts < as_timestamp(x.end, 0) -%}
                 {%- set ns.p = x.value -%}
               {%- endif -%}
             {%- endfor -%}
           {%- endif -%}
           {%- if ns.p is none -%}
-            {%- set ns.p = states('sensor.dynamic_nordpool') | float(none) -%}
+            {%- set ns.p = states('sensor.forecast_prices') | float(none) -%}
           {%- endif -%}
           {%- if ns.p is number -%}
             {#- Same settings as in the attributes below (repeated here: no dependency on this) -#}
@@ -269,13 +269,13 @@ template:
             {%- set ns = namespace(p=none) -%}
             {%- if src.startswith('sensor.') -%}
               {%- set now_ts = as_timestamp(now()) -%}
-              {%- for x in (state_attr(src, 'raw_today') or []) -%}
+              {%- for x in (state_attr(src, 'raw_today') or []) | list + (state_attr(src, 'raw_tomorrow') or []) | list -%}
                 {%- if x.value is number and as_timestamp(x.start, 0) <= now_ts < as_timestamp(x.end, 0) -%}
                   {%- set ns.p = x.value -%}
                 {%- endif -%}
               {%- endfor -%}
             {%- endif -%}
-            {{ ns.p if ns.p is not none else states('sensor.dynamic_nordpool') | float(none) }}
+            {{ ns.p if ns.p is not none else states('sensor.forecast_prices') | float(none) }}
           market_price_source: "{{ states('input_text.dynamic_setting_market_price_sensor') | trim if (states('input_text.dynamic_setting_market_price_sensor') | trim | lower).startswith('sensor.') else states('input_text.dynamic_setting_nordpool_sensor') | trim }}"
           feedin_markup: "{{ states('input_number.savings_setting_dynamic_feedin_markup') | float(0) }}"
           feedin_bonus_pct: "{{ states('input_number.savings_setting_dynamic_feedin_bonus') | float(0) }}"

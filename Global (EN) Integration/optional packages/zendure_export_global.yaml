@@ -16,8 +16,9 @@
 #    packages write to the logbook (logbook.log on the operation mode), with time, mode and SOC.
 #    The last 50 lines.
 # 2. Snapshots (sensor.zendure_diagnostics_snapshots): every quarter hour the mode, SOC, grid
-#    meter, Zendure power, PV, price, planned grid charge, HVAC block, EV and Quooker correction.
-#    The last 24 hours.
+#    meter, Zendure power, PV, price, planned grid charge, HVAC block, EV and Quooker correction,
+#    planner state, price source, action of the current quarter hour and whether dynamic charging
+#    is running. The last 24 hours.
 # 3. Errors (sensor.zendure_diagnostics_errors): warnings and errors from the Home Assistant log
 #    that concern this set (Zendure, Forecasting, Dynamic, HVAC, EV, ...). The last 20.
 #    For this the package turns on system_log: fire_event: true (see the bottom of this file).
@@ -134,14 +135,16 @@ template:
         attributes:
           columns: >-
             {{ ['time', 'mode', 'soc_pct', 'grid_w', 'zendure_w', 'pv_zendure_w', 'price_eur_kwh',
-                'planned_grid_charge_kwh', 'hvac_blocks', 'ev_correction_w', 'quooker_correction_w'] }}
+                'planned_grid_charge_kwh', 'hvac_blocks', 'ev_correction_w', 'quooker_correction_w',
+                'plan_state', 'price_source', 'action_now', 'dynamic_charging_running'] }}
           rows: >-
-            {#- Rows from before the column quooker_correction_w: pad with none -#}
+            {#- Rows from before the last columns (quooker_correction_w, plan_state ...): pad with none -#}
             {%- set nr = namespace(l=[]) -%}
-            {%- for r in this.attributes.get('rows') or [] -%}{%- set nr.l = nr.l + [r + [none] * ([11 - (r | length), 0] | max)] -%}{%- endfor -%}
+            {%- for r in this.attributes.get('rows') or [] -%}{%- set nr.l = nr.l + [r + [none] * ([15 - (r | length), 0] | max)] -%}{%- endfor -%}
             {%- set old = nr.l -%}
             {%- if trigger.id == 'snapshot' -%}
               {%- set hvac = states('binary_sensor.hvac_discharge_blocked') -%}
+              {%- set dl = states('input_boolean.dynamic_charging_running') -%}
               {{ (old + [[now().strftime('%Y-%m-%d %H:%M'),
                          states('input_select.zendure_operation_mode'),
                          states('sensor.zendure_total_state_of_charge') | float(none),
@@ -152,7 +155,11 @@ template:
                          state_attr('sensor.zendure_forecast_plan', 'planned_grid_charge_kwh') | float(none),
                          1 if hvac == 'on' else (0 if hvac == 'off' else none),
                          states('sensor.ev_discharge_correction') | float(none),
-                         states('sensor.zendure_quooker_discharge_correction') | float(none)]])[-96:] }}
+                         states('sensor.zendure_quooker_discharge_correction') | float(none),
+                         states('sensor.zendure_forecast_plan'),
+                         state_attr('sensor.zendure_forecast_plan', 'price_source'),
+                         (state_attr('sensor.zendure_forecast_plan', 'optimal') or {}).get('now'),
+                         1 if dl == 'on' else (0 if dl == 'off' else none)]])[-96:] }}
             {%- else -%}
               {{ old }}
             {%- endif -%}
@@ -253,7 +260,7 @@ script:
                  'sensor.zendure_indication_available_energy', 'sensor.zendure_feedin_price_now',
                  'sensor.zendure_savings', 'sensor.ev_charge_plan', 'sensor.hvac_mode',
                  'binary_sensor.hvac_discharge_blocked', 'binary_sensor.zendure_export_blocked_negative_price',
-                 'sensor.zendure_forecast_chart', 'sensor.forecast_sensor_candidates', 'sensor.forecast_solar_month_measurement', 'sensor.hvac_power_from_counter', 'sensor.zendure_quooker_power', 'sensor.forecast_price_backup', 'sensor.dynamic_spread_indication', 'sensor.dynamic_spread_indication_dsc',
+                 'sensor.zendure_forecast_chart', 'sensor.forecast_sensor_candidates', 'sensor.forecast_solar_month_measurement', 'sensor.hvac_power_from_counter', 'sensor.zendure_quooker_power', 'sensor.forecast_price_backup', 'sensor.forecast_prices', 'sensor.dynamic_spread_indication', 'sensor.dynamic_spread_indication_dsc',
                  'sensor.dynamic_spread_indication_tomorrow', 'sensor.dynamic_spread_indication_dsc_tomorrow'] -%}
             {#- Collected data: all counters and 7-day statistics with their attributes
                 (age_coverage_ratio, source, last_jump, ...) -#}
@@ -340,7 +347,7 @@ script:
             {%- set total = j(export) | length -%}
             {%- if total > limit -%}
               {%- set protected = ['sensor.zendure_forecast_plan', 'sensor.dynamic_nordpool|raw_today',
-                   'sensor.dynamic_nordpool|raw_tomorrow'] -%}
+                   'sensor.dynamic_nordpool|raw_tomorrow', 'sensor.forecast_prices|raw_today', 'sensor.forecast_prices|raw_tomorrow'] -%}
               {%- set nm = namespace(l=[]) -%}
               {%- for e, v in ns.det -%}
                 {%- for k, w in v.attributes.items() -%}

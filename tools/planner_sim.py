@@ -202,6 +202,13 @@ def build_env(st):
              timedelta=timedelta, expand=expand, min=fmin, max=fmax, float=ffloat, int=fint,
              as_datetime=lambda v, d=None: datetime.fromisoformat(str(v)) if v else d,
              as_local=lambda d: d.astimezone(TZ))
+    def timestamp_local(ts, default=None):
+        try:
+            return datetime.fromtimestamp(float(ts), TZ).isoformat()
+        except Exception:
+            return default if default is not None else ts
+
+    env.filters.update(timestamp_local=timestamp_local)
     env.filters.update(iif=iif, float=ffloat, int=fint, round=fround, timestamp_custom=timestamp_custom,
                        regex_match=regex_match, regex_search=regex_search, regex_replace=regex_replace,
                        multiply=multiply, as_timestamp=as_timestamp, states=states, has_value=has_value,
@@ -249,6 +256,18 @@ def run(yaml_path, export, overrides, tijd=None):
                          {'next_rising': nr.isoformat(), 'next_setting': ns_.isoformat()})
     env = build_env(st)
     d = yaml.load(open(yaml_path, encoding='utf-8'), Loader=L)
+    # Eerst de prijzensensor (Forecast Prijzen / Forecast Prices) uit de export-invoer opnieuw opbouwen,
+    # zoals Home Assistant dat elke minuut doet; daarna de planner. Overrides op die sensor winnen.
+    for naam, eid in (('Forecast Prijzen', 'sensor.forecast_prijzen'), ('Forecast Prices', 'sensor.forecast_prices')):
+        pb = next((t for t in d['template'] if any(x.get('name') == naam for x in t.get('sensor', []))), None)
+        if pb is None or eid in overrides:
+            continue
+        pc = {}
+        for k, v in pb['variables'].items():
+            pc[k] = parse(env.from_string(v).render(**pc)) if isinstance(v, str) else v
+        ps = next(x for x in pb['sensor'] if x.get('name') == naam)
+        st[eid] = (env.from_string(ps['state']).render(**pc).strip(),
+                   {k: parse(env.from_string(v).render(**pc)) for k, v in ps['attributes'].items()})
     blok = next(t for t in d['template'] if any(s.get('name') == 'Zendure Forecast Plan' for s in t.get('sensor', [])))
     plan_oud = e['details'].get('sensor.zendure_forecast_plan', {})
     this = This(plan_oud.get('state'), plan_oud.get('attributes', {}))

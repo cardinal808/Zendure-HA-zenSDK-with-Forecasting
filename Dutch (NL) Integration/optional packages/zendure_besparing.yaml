@@ -149,7 +149,9 @@ template:
       meting_ok: "{{ t_imp >= 0 and t_exp >= 0 and t_laden >= 0 and t_ontl >= 0 and prod_nu >= 0 }}"
 
       # ---- Dynamische prijs van het slot dat nu loopt (wordt bewaard voor het volgende kwartier) ----
-      prijzen: "{{ state_attr('sensor.dynamisch_nordpool', 'raw_today') or [] }}"
+      prijzen: >
+        {%- set r = state_attr('sensor.forecast_prijzen', 'raw_today') -%}
+        {{ r if r is not none else (state_attr('sensor.dynamisch_nordpool', 'raw_today') or []) }}
       slot_nu: >
         {%- set ns = namespace(p=none, e=none) -%}
         {%- for x in prijzen -%}
@@ -162,7 +164,7 @@ template:
         {%- set m = states('input_text.dynamisch_marktprijs_sensor') | trim | lower -%}
         {%- set ns = namespace(p=none) -%}
         {%- if m.startswith('sensor.') -%}
-          {%- for x in (state_attr(m, 'raw_today') or []) -%}
+          {%- for x in (state_attr(m, 'raw_today') or []) | list + (state_attr(m, 'raw_tomorrow') or []) | list -%}
             {%- if x.value is number and as_timestamp(x.start, 0) <= nu_ts < as_timestamp(x.end, 0) -%}{%- set ns.p = x.value | float(0) -%}{%- endif -%}
           {%- endfor -%}
         {%- endif -%}

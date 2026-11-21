@@ -47,6 +47,7 @@ recorder:
       - sensor.dynamisch_nordpool
       - sensor.dynamisch_goedkoopste_periode
       # Forecasting: hulpsensoren die alleen live gelezen worden
+      - sensor.forecast_prijzen
       - sensor.forecast_prijzen_reserve
       - sensor.forecast_sensor_kandidaten
       - sensor.forecast_meldingen

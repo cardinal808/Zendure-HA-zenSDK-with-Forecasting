@@ -16,7 +16,8 @@
 #    pakketten in het logboek zetten (logbook.log op de modus-selectie), met tijd, modus en SOC.
 #    De laatste 50 regels.
 # 2. Momentopnames (sensor.zendure_diagnose_momentopnames): elk kwartier modus, SOC, P1, vermogen
-#    Zendure, PV, prijs, gepland netladen, HVAC-blokkade, EV- en Quooker-correctie. De laatste 24 uur.
+#    Zendure, PV, prijs, gepland netladen, HVAC-blokkade, EV- en Quooker-correctie, plannerstatus,
+#    bron van de prijzen, actie van het lopende kwartier en of het dynamisch laden loopt. De laatste 24 uur.
 # 3. Foutmeldingen (sensor.zendure_diagnose_fouten): waarschuwingen en fouten uit het
 #    Home Assistant-log die over deze set gaan (Zendure, Forecasting, Dynamisch, HVAC, EV, ...).
 #    De laatste 20. Daarvoor zet dit pakket system_log: fire_event: true aan (zie onderaan).
@@ -133,14 +134,16 @@ template:
         attributes:
           kolommen: >-
             {{ ['tijd', 'modus', 'soc_pct', 'p1_w', 'zendure_w', 'pv_zendure_w', 'prijs_eur_kwh',
-                'gepland_netladen_kwh', 'hvac_blokkeert', 'ev_correctie_w', 'quooker_correctie_w'] }}
+                'gepland_netladen_kwh', 'hvac_blokkeert', 'ev_correctie_w', 'quooker_correctie_w',
+                'plan_status', 'prijzen_bron', 'actie_nu', 'dynamisch_laden_loopt'] }}
           regels: >-
-            {#- Regels van vóór de kolom quooker_correctie_w aanvullen met none -#}
+            {#- Regels van vóór de laatste kolommen (quooker_correctie_w, plan_status ...) aanvullen met none -#}
             {%- set nr = namespace(l=[]) -%}
-            {%- for r in this.attributes.get('regels') or [] -%}{%- set nr.l = nr.l + [r + [none] * ([11 - (r | length), 0] | max)] -%}{%- endfor -%}
+            {%- for r in this.attributes.get('regels') or [] -%}{%- set nr.l = nr.l + [r + [none] * ([15 - (r | length), 0] | max)] -%}{%- endfor -%}
             {%- set oud = nr.l -%}
             {%- if trigger.id == 'momentopname' -%}
               {%- set hvac = states('binary_sensor.hvac_ontladen_geblokkeerd') -%}
+              {%- set dl = states('input_boolean.dynamisch_laden_loopt') -%}
               {{ (oud + [[now().strftime('%Y-%m-%d %H:%M'),
                          states('input_select.zendure_2400_ac_modus_selecteren'),
                          states('sensor.zendure_2400_ac_laadpercentage') | float(none),
@@ -151,7 +154,11 @@ template:
                          state_attr('sensor.zendure_forecast_plan', 'gepland_netladen_kwh') | float(none),
                          1 if hvac == 'on' else (0 if hvac == 'off' else none),
                          states('sensor.ev_ontlaad_correctie') | float(none),
-                         states('sensor.zendure_quooker_ontlaad_correctie') | float(none)]])[-96:] }}
+                         states('sensor.zendure_quooker_ontlaad_correctie') | float(none),
+                         states('sensor.zendure_forecast_plan'),
+                         state_attr('sensor.zendure_forecast_plan', 'prijzen_bron'),
+                         (state_attr('sensor.zendure_forecast_plan', 'optimaal') or {}).get('nu'),
+                         1 if dl == 'on' else (0 if dl == 'off' else none)]])[-96:] }}
             {%- else -%}
               {{ oud }}
             {%- endif -%}
@@ -252,7 +259,7 @@ script:
                  'sensor.zendure_2400_ac_indicatie_beschikbare_energie', 'sensor.zendure_terugleverprijs_nu',
                  'sensor.zendure_besparing', 'sensor.ev_laadplan', 'sensor.hvac_modus',
                  'binary_sensor.hvac_ontladen_geblokkeerd', 'binary_sensor.zendure_export_geblokkeerd_negatieve_prijs',
-                 'sensor.zendure_forecast_grafiek', 'sensor.forecast_sensor_kandidaten', 'sensor.forecast_zon_maandmeting', 'sensor.hvac_vermogen_uit_teller', 'sensor.zendure_quooker_vermogen', 'sensor.forecast_prijzen_reserve', 'sensor.dynamisch_spread_indicatie', 'sensor.dynamisch_spread_indicatie_nom',
+                 'sensor.zendure_forecast_grafiek', 'sensor.forecast_sensor_kandidaten', 'sensor.forecast_zon_maandmeting', 'sensor.hvac_vermogen_uit_teller', 'sensor.zendure_quooker_vermogen', 'sensor.forecast_prijzen_reserve', 'sensor.forecast_prijzen', 'sensor.dynamisch_spread_indicatie', 'sensor.dynamisch_spread_indicatie_nom',
                  'sensor.dynamisch_spread_indicatie_morgen', 'sensor.dynamisch_spread_indicatie_nom_morgen'] -%}
             {#- Verzamelde gegevens: alle tellers en 7-dagen-statistieken met hun attributen
                 (age_coverage_ratio, bron, laatste_sprong, ...) -#}
@@ -339,7 +346,7 @@ script:
             {%- set totaal = j(export) | length -%}
             {%- if totaal > limiet -%}
               {%- set beschermd = ['sensor.zendure_forecast_plan', 'sensor.dynamisch_nordpool|raw_today',
-                   'sensor.dynamisch_nordpool|raw_tomorrow'] -%}
+                   'sensor.dynamisch_nordpool|raw_tomorrow', 'sensor.forecast_prijzen|raw_today', 'sensor.forecast_prijzen|raw_tomorrow'] -%}
               {%- set nm = namespace(l=[]) -%}
               {%- for e, v in ns.det -%}
                 {%- for k, w in v.attributes.items() -%}

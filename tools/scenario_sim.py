@@ -125,6 +125,8 @@ def bouw_export(basis, sc, t, soc, vorig_plan, laden_loopt):
     zet('input_boolean.forecast_slim_vasthouden', 'on' if sc['slim'] else 'off')
     zet('input_boolean.forecast_dal_ontladen_blokkeren', 'on' if sc['dal'] else 'off')
     zet('input_boolean.dynamisch_laden_loopt', 'on' if laden_loopt else 'off')
+    # Laadt de Zendure (vorig kwartier Laden), dan staat er ook laadvermogen op de meting
+    zet('sensor.zendure_2400_ac_vermogen_aansturing', sc['p_max_w'] if laden_loopt else 0)
     zet('input_boolean.zonoverschot_ontladen', 'off')
     zet('input_boolean.negatieve_prijs_vooraf_ontladen', 'off')
     zet('input_boolean.forecast_gedeeld_accumodel', MODEL)
@@ -247,7 +249,9 @@ def optimum(sc, stap=0.005):
 #   A  meer verbruik boekt nooit minder netladen;
 #   B  geen geboekt laadslot verliest geld (prijs / rendement < een latere prijs);
 #   C  een kwartier later herberekenen met de verwachte laadstand houdt het plan (zelfde slots);
-#   D  geen laadslot terwijl de accu volgens het plan al vol is (in de gesloten lus: kolom 'vol').
+#   D  geen laadslot terwijl de accu volgens het plan al vol is (in de gesloten lus: kolom 'vol');
+#   E  zonder prijs voor nu (Nord Pool na middernacht niet doorgeschoven: raw_today = gisteren, geen
+#      reserve) nooit laden, terugleveren of vasthouden, en status Geen prijzen.
 def schaal(fn, f):
     return lambda h: fn(h) * f
 
@@ -317,6 +321,23 @@ def regeltests(basis, yaml_path=YAML_NL):
             fouten += 1
             print('%-26s %s' % (naam, '; '.join(meld)))
     print('%d van %d situaties met een afwijking' % (fouten, n))
+    # E: verouderde prijslijst na middernacht
+    fe = ne = 0
+    for naam, sc in raster():
+        if not sc['start'].endswith('07:00'):
+            continue
+        ne += 1
+        t = datetime.fromisoformat(sc['start'][:10] + 'T00:05').replace(tzinfo=TZ)
+        ex = bouw_export(basis, sc, t, sc['soc'], None, sc['soc'] < 50)
+        det = ex.get('export', ex)['details']
+        gisteren = t.date() - timedelta(days=1)
+        det['sensor.dynamisch_nordpool'] = {'state': 'unknown', 'attributes': {'raw_today': raw_dag(gisteren, sc['prijs']), 'raw_tomorrow': []}}
+        det['sensor.forecast_prijzen_reserve'] = {'state': 'none', 'attributes': {'raw': []}}
+        out, _ = ps.run(yaml_path, ex, {}, t.strftime('%Y-%m-%dT%H:%M'))
+        if out['state'] != 'Geen prijzen' or out.get('ontladen_vasthouden') is True or out.get('zonoverschot_nu') is True:
+            fe += 1
+            print('%-26s E zonder prijs: %s, vasthouden %s, terugleveren %s' % (naam, out['state'], out.get('ontladen_vasthouden'), out.get('zonoverschot_nu')))
+    print('E: %d van %d situaties zonder prijs met een afwijking' % (fe, ne))
 
 
 MODEL = 'off'

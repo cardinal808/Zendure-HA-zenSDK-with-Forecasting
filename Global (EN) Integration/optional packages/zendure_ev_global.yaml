@@ -254,7 +254,7 @@ template:
           - input_number.ev_charger_power
           - input_number.ev_session_meter_start
           - input_datetime.ev_session_end
-          - sensor.dynamic_nordpool
+          - sensor.forecast_prices
     variables:
       now_ts: "{{ as_timestamp(now()) }}"
       moment: "{{ states('input_select.ev_charge_moment') }}"
@@ -268,8 +268,12 @@ template:
       charged: "{{ states('sensor.ev_session_charged') | float(0) if active else 0 }}"
       remaining: "{{ ([needed - charged, 0] | max) | round(3) if active else 0 }}"
       end_ts: "{{ as_timestamp(states('input_datetime.ev_session_end'), 0) }}"
-      raw_today: "{{ state_attr('sensor.dynamic_nordpool', 'raw_today') or [] }}"
-      raw_tomorrow: "{{ state_attr('sensor.dynamic_nordpool', 'raw_tomorrow') or [] }}"
+      raw_today: >
+        {%- set r = state_attr('sensor.forecast_prices', 'raw_today') -%}
+        {{ r if r is not none else (state_attr('sensor.dynamic_nordpool', 'raw_today') or []) }}
+      raw_tomorrow: >
+        {%- set r = state_attr('sensor.forecast_prices', 'raw_tomorrow') -%}
+        {{ r if r is not none else (state_attr('sensor.dynamic_nordpool', 'raw_tomorrow') or []) }}
       tomorrow_known: "{{ raw_tomorrow | length > 0 }}"
       day_length: "{{ as_timestamp(today_at('00:00') + timedelta(days=1)) - as_timestamp(today_at('00:00')) }}"
       # Price slots until the end of the session; tomorrow's prices unknown = today's pattern
