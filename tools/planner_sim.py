@@ -51,6 +51,26 @@ def load_states(export, overrides):
         a = v.get('attributes') or {}
         a = {k: w for k, w in a.items() if k not in ('(te groot, alleen namen)', '(too large, names only)')}
         st[k] = (v.get('state'), a)
+    # Nord Pool-sensor met alleen namen in de export: de lijsten opnieuw opbouwen uit Gielz' sensor, in de
+    # vorm die de export meldt (raw_voorbeeld / raw_sample: start als datetime bij de HACS-integratie).
+    # Zo rekent de simulatie met dezelfde invoer als Home Assistant (zie 2026.11.10).
+    for k, v in (e.get('extern') or e.get('external') or {}).items():
+        a = st[k][1]
+        vb = a.get('raw_voorbeeld') or a.get('raw_sample') or {}
+        if not vb or 'raw_today' in a:
+            continue
+        g = (st.get('sensor.dynamisch_nordpool') or st.get('sensor.dynamic_nordpool') or (None, {}))[1]
+        eerste = vb.get('raw_today_eerste') or vb.get('raw_today_first') or {}
+        als_dt = (eerste.get('type_start') or eerste.get('start_type')) == 'datetime'
+        def vorm(lst):
+            out = []
+            for p in lst or []:
+                if als_dt:
+                    out.append({'start': datetime.fromisoformat(str(p['start'])), 'end': datetime.fromisoformat(str(p['end'])), 'value': p['value']})
+                else:
+                    out.append(dict(p))
+            return out
+        st[k] = (st[k][0], dict(a, raw_today=vorm(g.get('raw_today')), raw_tomorrow=vorm(g.get('raw_tomorrow'))))
     for k, v in overrides.items():
         old = st.get(k, (None, {}))
         st[k] = (v, old[1])

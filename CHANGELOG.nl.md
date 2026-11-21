@@ -2,6 +2,13 @@
 
 Versies volgen `jaar.maand.volgnummer`; het volgnummer begint elke maand bij 1. Elke versie vermeldt op welke Gielz-versie hij is gebaseerd. [English](CHANGELOG.md)
 
+## Volgende versie (nog niet uitgebracht)
+
+**Diagnose-export en tests** (na de fout in 2026.11.9)
+- **Export:** bij de ingevulde Nord Pool-sensor staat nu `raw_voorbeeld`: het aantal regels van `raw_today` en `raw_tomorrow`, de eerste en laatste regel, en of `start` tekst of een datetime is. De lijsten zelf zijn te groot voor de export; zo is toch te zien in welke vorm de integratie ze levert.
+- `tools/planner_sim.py` bouwt de lijsten van de Nord Pool-sensor op uit Gielz' sensor in die vorm (datetime bij de HACS-integratie), zodat de simulatie dezelfde invoer krijgt als Home Assistant. `float(none)` en `int(none)` geven nu `none` bij ongeldige invoer, zoals in Home Assistant.
+- `tools/scenario_sim.py --regels`: nieuwe regel F, prijzen alleen in de Nord Pool-sensor met datetime-tijden (Gielz' sensor leeg). Met de code van 2026.11.9 faalt deze regel; zo was de fout vóór de release gevonden.
+
 ## 2026.11.10 — gebaseerd op Gielz v20261113
 
 **In het kort:** spoedcorrectie voor 2026.11.9. Met de Nord Pool-integratie uit HACS bleef de nieuwe prijzensensor leeg, waardoor de planner *Geen prijzen* toonde en niet laadde. Daarnaast toont de kaart *Optionele pakketten* een verwijderd pakket niet meer als geladen.

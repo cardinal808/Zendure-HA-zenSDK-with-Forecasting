@@ -252,6 +252,9 @@ def optimum(sc, stap=0.005):
 #   D  geen laadslot terwijl de accu volgens het plan al vol is (in de gesloten lus: kolom 'vol');
 #   E  zonder prijs voor nu (Nord Pool na middernacht niet doorgeschoven: raw_today = gisteren, geen
 #      reserve) nooit laden, terugleveren of vasthouden, en status Geen prijzen.
+#   F  prijzen alleen uit de Nord Pool-sensor zelf, met start/end als datetime zoals de HACS-integratie
+#      ze levert (Gielz' sensor leeg, geen reserve): de planner vindt de prijzen (prijzen_bron nordpool).
+#      Vangt de fout van 2026.11.9 (lijst met datetime kwam als tekst uit variables).
 def schaal(fn, f):
     return lambda h: fn(h) * f
 
@@ -338,6 +341,30 @@ def regeltests(basis, yaml_path=YAML_NL):
             fe += 1
             print('%-26s E zonder prijs: %s, vasthouden %s, terugleveren %s' % (naam, out['state'], out.get('ontladen_vasthouden'), out.get('zonoverschot_nu')))
     print('E: %d van %d situaties zonder prijs met een afwijking' % (fe, ne))
+    # F: prijzen zoals de Nord Pool-integratie (HACS) ze levert
+    ff = nf = 0
+    for naam, sc in raster():
+        if not sc['start'].endswith('07:00'):
+            continue
+        nf += 1
+        t = datetime.fromisoformat(sc['start']).replace(tzinfo=TZ)
+        ex = bouw_export(basis, sc, t, sc['soc'], None, False)
+        e = ex.get('export', ex)
+        det = e['details']
+        inst = e.get('instellingen') or {}
+        ent = str(inst.get('input_text.dynamisch_nordpool_sensor') or 'sensor.nordpool_kwh_nl_eur_5_09_0').strip() or 'sensor.nordpool_kwh_nl_eur_5_09_0'
+        inst['input_text.dynamisch_nordpool_sensor'] = ent
+        als_dt = lambda l: [{'start': datetime.fromisoformat(p['start']), 'end': datetime.fromisoformat(p['end']), 'value': p['value']} for p in l]
+        e.setdefault('extern', {})[ent] = {'state': '0.3', 'attributes': {'raw_today': als_dt(raw_dag(t.date(), sc['prijs'])),
+                                                                     'raw_tomorrow': als_dt(raw_dag(t.date() + timedelta(days=1), sc['prijs']))}}
+        det['sensor.dynamisch_nordpool'] = {'state': 'unknown', 'attributes': {'raw_today': [], 'raw_tomorrow': []}}
+        det['sensor.forecast_prijzen_reserve'] = {'state': 'none', 'attributes': {'raw': []}}
+        det.pop('sensor.forecast_prijzen', None)
+        out, _ = ps.run(yaml_path, ex, {}, t.strftime('%Y-%m-%dT%H:%M'))
+        if out.get('prijzen_bron') != 'nordpool' or out['state'] == 'Geen prijzen':
+            ff += 1
+            print('%-26s F prijzen uit Nord Pool (datetime): %s, bron %s' % (naam, out['state'], out.get('prijzen_bron')))
+    print('F: %d van %d situaties met prijzen uit Nord Pool (datetime) met een afwijking' % (ff, nf))
 
 
 MODEL = 'off'

@@ -292,6 +292,17 @@ script:
                 {%- endfor -%}
                 {%- set at = dict(at, detailedForecast=nd.l) -%}
               {%- endif -%}
+              {#- Nord Pool: counts and the first/last row, with the type of start (text or datetime) -#}
+              {%- set rt = a.get('raw_today') -%}{%- set rm = a.get('raw_tomorrow') -%}
+              {%- set rt = rt if rt is iterable and rt is not string and rt is not mapping else none -%}
+              {%- set rm = rm if rm is iterable and rm is not string and rm is not mapping else [] -%}
+              {%- if rt is not none -%}
+                {%- set nr = namespace(d={'raw_today_count': rt | length, 'raw_tomorrow_count': rm | length}) -%}
+                {%- for naam, p in [['raw_today_first', rt | first if rt | length > 0 else none], ['raw_today_last', rt | last if rt | length > 0 else none], ['raw_tomorrow_first', rm | first if rm | length > 0 else none]] if p is mapping -%}
+                  {%- set nr.d = dict(nr.d, **{naam: {'start': p.start | string, 'end': p.end | string, 'value': p.value, 'start_type': 'text' if p.start is string else 'datetime'}}) -%}
+                {%- endfor -%}
+                {%- set at = dict(at, raw_sample=nr.d) -%}
+              {%- endif -%}
               {%- set ns.ext = ns.ext + [[s.entity_id, {'state': s.state, 'last_changed': s.last_changed.isoformat(),
                    'attributes': at}]] -%}
             {%- endfor -%}

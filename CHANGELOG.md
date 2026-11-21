@@ -2,6 +2,13 @@
 
 Versions follow `year.month.sequence`; the sequence restarts at 1 every month. Each version states which Gielz version it is based on. [Nederlands](CHANGELOG.nl.md)
 
+## Next version (not released yet)
+
+**Diagnostics export and tests** (after the bug in 2026.11.9)
+- **Export:** the Nord Pool sensor you filled in now has `raw_sample`: the number of rows of `raw_today` and `raw_tomorrow`, the first and last row, and whether `start` is text or a datetime. The lists themselves are too large for the export; this still shows in which shape the integration provides them.
+- `tools/planner_sim.py` rebuilds the Nord Pool sensor's lists from Gielz's sensor in that shape (datetime with the HACS integration), so the simulation gets the same input as Home Assistant. `float(none)` and `int(none)` now return `none` on invalid input, as in Home Assistant.
+- `tools/scenario_sim.py --regels`: new rule F, prices only in the Nord Pool sensor with datetime times (Gielz's sensor empty). With the 2026.11.9 code this rule fails; that would have caught the bug before the release.
+
 ## 2026.11.10 — based on Gielz v20261113
 
 **In short:** urgent fix for 2026.11.9. With the Nord Pool integration from HACS the new price sensor stayed empty, so the planner showed *No prices* and did not charge. In addition the *Optional packages* card no longer shows a removed package as loaded.

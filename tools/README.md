@@ -6,7 +6,7 @@ Nodig: Python 3.11+ met `jinja2` en `pyyaml` (`pip install jinja2 pyyaml`).
 
 ## planner_sim.py
 
-Rekent het plan uit met de YAML van de planner en een export. Met `entity=waarde` overschrijf je een stand, met `--tijd` reken je op een ander moment van de dag. Eerst bouwt hij `sensor.forecast_prijzen` opnieuw op uit de prijzen in de export (zoals Home Assistant elke minuut doet), tenzij je die sensor overschrijft.
+Rekent het plan uit met de YAML van de planner en een export. Met `entity=waarde` overschrijf je een stand, met `--tijd` reken je op een ander moment van de dag. Eerst bouwt hij `sensor.forecast_prijzen` opnieuw op uit de prijzen in de export (zoals Home Assistant elke minuut doet), tenzij je die sensor overschrijft. Staan de lijsten van de Nord Pool-sensor niet in de export (te groot), dan bouwt hij ze op uit Gielz' sensor, in de vorm die `raw_voorbeeld` in de export meldt (start als tekst of als datetime).
 
 ```bash
 python3 tools/planner_sim.py "Dutch (NL) Integration/packages/zendure_forecasting.yaml" export.json
@@ -38,7 +38,7 @@ python3 tools/scenario_sim.py export.json --regels               # regeltests ov
 
 Kolommen: netto kosten van het plan, van het optimum, het verschil, het aantal laadstarts, kWh uit het net geladen, de lading aan het eind en het aantal kwartieren *Laden* met een volle accu. De lading die overblijft telt mee tegen wat hij minstens uitspaart (goedkoopste prijs × ontlaadrendement).
 
-Met `--regels` draait de planner los over 54 situaties (accu 5,76 / 11,52 kWh, laadstand 10 / 50 / 90%, drie prijsvormen, 07:00 / 14:30 / 22:00) en toetst: (A) 25% meer verbruik boekt nooit minder netladen, (B) geen gekozen laadslot is na verlies duurder dan elke latere prijs, (C) een kwartier later opnieuw plannen met de verwachte laadstand geeft dezelfde laadslots. Daarna (E) 18 situaties om 00:05 met een verouderde prijslijst (Nord Pool nog op gisteren, geen reserve): altijd *Geen prijzen*, nooit laden, terugleveren of vasthouden. Alleen afwijkingen worden getoond. Alleen de NL-planner (de scenario's zetten NL-entiteiten).
+Met `--regels` draait de planner los over 54 situaties (accu 5,76 / 11,52 kWh, laadstand 10 / 50 / 90%, drie prijsvormen, 07:00 / 14:30 / 22:00) en toetst: (A) 25% meer verbruik boekt nooit minder netladen, (B) geen gekozen laadslot is na verlies duurder dan elke latere prijs, (C) een kwartier later opnieuw plannen met de verwachte laadstand geeft dezelfde laadslots. Daarna (E) 18 situaties om 00:05 met een verouderde prijslijst (Nord Pool nog op gisteren, geen reserve): altijd *Geen prijzen*, nooit laden, terugleveren of vasthouden. En (F) 18 situaties met de prijzen alleen in de Nord Pool-sensor zelf, met start/end als datetime zoals de HACS-integratie ze levert (Gielz' sensor leeg): de planner moet ze vinden. Alleen afwijkingen worden getoond. Alleen de NL-planner (de scenario's zetten NL-entiteiten).
 
 ## Beperkingen
 
@@ -57,7 +57,7 @@ Tools to run the planner (`sensor.zendure_forecast_plan`) outside Home Assistant
 
 Requires Python 3.11+ with `jinja2` and `pyyaml`.
 
-- `planner_sim.py <forecasting.yaml> <export.json> [entity=value ...] [--tijd YYYY-MM-DDTHH:MM]` calculates the plan; `entity=value` overrides a state, `--tijd` sets the time of day. It first rebuilds `sensor.forecast_prices` / `sensor.forecast_prijzen` from the prices in the export.
+- `planner_sim.py <forecasting.yaml> <export.json> [entity=value ...] [--tijd YYYY-MM-DDTHH:MM]` calculates the plan; `entity=value` overrides a state, `--tijd` sets the time of day. It first rebuilds `sensor.forecast_prices` / `sensor.forecast_prijzen` from the prices in the export; if the Nord Pool sensor's lists are not in the export, it rebuilds them from Gielz's sensor in the shape `raw_sample` reports (start as text or datetime). `scenario_sim.py --regels` also runs rule F: prices only in the Nord Pool sensor, with datetime start/end as the HACS integration provides them.
 - `vergelijk.py <old.yaml> <new.yaml> <export.json> [entity=value ...] [--varieer entity=v1,v2,...]` compares two planner versions on the same export, optionally for a range of values of one setting.
 - `scenario_sim.py <export.json> [scenario ...] [--yaml planner.yaml] [--log]` runs the planner in a closed loop on synthetic scenarios (fixed prices and usage, no solar) and compares the cost with the optimum (dynamic programming over charge / hold / zero on the meter). The export only provides the entities; scenarios are in `SCENARIOS`. NL planner only.
 
