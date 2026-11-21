@@ -2303,7 +2303,7 @@ views:
               {%- set exp_zon = states('sensor.forecast_p1_export_uit_zon_7_dagen') | float(0) -%}
               {%- set laden_zon = states('sensor.forecast_zendure_laden_uit_zon_7_dagen') | float(0) -%}
               {%- set direct = [prod - exp_zon - laden_zon, 0] | max -%}
-              - Historie beschikbaar: **{{ a.historie_dagen }}** van 7 dagen
+              - Historie beschikbaar: **{{ a.historie_dagen }}** van 7 dagen{{ ' (reset: de recorder wist de oude historie nog, die telt niet mee)' if a.historie_wacht_op_reset | default(false) else '' }}
 
               - Zonproductie: **{{ prod | round(1) }} kWh**, waarvan direct verbruikt **{{ direct | round(1) }} kWh** ({{ ((direct / prod * 100) | round(1)) if prod > 0 else '-' }}%), naar de accu **{{ laden_zon | round(1) }} kWh**, teruggeleverd **{{ exp_zon | round(1) }} kWh**
 

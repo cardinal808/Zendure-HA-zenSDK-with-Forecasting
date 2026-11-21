@@ -2298,7 +2298,7 @@ views:
               {%- set exp_solar = states('sensor.forecast_grid_export_from_solar_7_days') | float(0) -%}
               {%- set charge_solar = states('sensor.forecast_zendure_charge_from_solar_7_days') | float(0) -%}
               {%- set direct = [prod - exp_solar - charge_solar, 0] | max -%}
-              - History available: **{{ a.history_days }}** of 7 days
+              - History available: **{{ a.history_days }}** of 7 days{{ ' (reset: the recorder is still purging the old history, it does not count)' if a.history_waiting_for_reset | default(false) else '' }}
 
               - Solar production: **{{ prod | round(1) }} kWh**, of which used directly **{{ direct | round(1) }} kWh** ({{ ((direct / prod * 100) | round(1)) if prod > 0 else '-' }}%), to the battery **{{ charge_solar | round(1) }} kWh**, exported **{{ exp_solar | round(1) }} kWh**
 

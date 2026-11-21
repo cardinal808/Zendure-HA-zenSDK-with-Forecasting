@@ -1318,14 +1318,17 @@ template:
       # Knop Verbruiksgegevens Resetten: het profiel begint opnieuw
       - platform: state
         entity_id: input_button.forecast_verbruiksgegevens_resetten
+        # Ook de eerste druk ooit telt (van unknown naar een tijd); niet bij opstarten of herladen
         not_from:
+          - unavailable
+        not_to:
           - unknown
           - unavailable
         id: reset
     variables:
       # Bij een reset leest de sensor zijn eigen vorige waarden niet (een entiteit die niet bestaat),
       # zodat alle waarden terugvallen op leeg / 0 / gelijk verdeeld.
-      profiel: "{{ 'sensor.forecast_verbruiksprofiel_gereset' if trigger.id == 'reset' else 'sensor.forecast_verbruiksprofiel' }}"
+      profiel: "{{ 'sensor.forecast_verbruiksprofiel_gereset' if trigger.id == 'reset' and trigger.from_state is not none else 'sensor.forecast_verbruiksprofiel' }}"
       # Gewicht van een nieuwe meting zodra er genoeg metingen zijn (geheugen = ongeveer 1 / gewicht metingen):
       c_alpha_min_werkdag: 0.1           # werkdag: ~10 metingen = ongeveer 2 weken
       c_alpha_min_weekend: 0.2           # weekend: ~5 metingen = ongeveer 2,5 week
@@ -1888,6 +1891,16 @@ template:
           {%- if states[e] is not none and not state_attr(e, 'restored') and not has_value(e) -%}{%- set ns.l = ns.l + [k] -%}{%- endif -%}
         {%- endfor -%}
         {{ ns.l }}
+      # Reicht de historie verder terug dan de laatste Verbruiksgegevens Resetten (+ ruim een uur),
+      # dan is de recorder nog niet klaar met wissen: oude historie, nog niet gebruiken.
+      hist_wacht_op_reset: >
+        {% set t = as_timestamp(hist_reset_knop, none) %}
+        {% set ns = namespace(c=0) %}
+        {% for e in ['sensor.forecast_zon_productie_7_dagen', 'sensor.forecast_p1_import_7_dagen', 'sensor.forecast_zendure_laden_7_dagen'] %}
+          {% set c = state_attr(e, 'age_coverage_ratio') %}
+          {% if c is not none %}{% set ns.c = [ns.c, c | float(0)] | max %}{% endif %}
+        {% endfor %}
+        {{ t is not none and 7 * ns.c > (as_timestamp(now()) - t) / 86400 + 0.06 }}
       hist_dagen: >
         {# Grootste dekking van zon, net-import en accu laden: zonder zonnepanelen (of als de
            zon-teller tijdelijk ontbreekt) telt de historie van de andere tellers. Geen enkele
@@ -1897,7 +1910,7 @@ template:
           {% set c = state_attr(e, 'age_coverage_ratio') %}
           {% if c is not none %}{% set ns.c = [ns.c, c | float(0)] | max %}{% endif %}
         {% endfor %}
-        {{ (7 * ns.c) | round(2) }}
+        {{ 0 if hist_wacht_op_reset else (7 * ns.c) | round(2) }}
 
       # Direct verbruikte zon in 7 dagen = productie - teruglevering uit zon - laden uit zon - auto uit zon
       # - airco en Quooker uit zon (apart geteld)
@@ -3971,6 +3984,7 @@ template:
           historie_7_dagen: "{{ {'prod7': prod7, 'imp7': imp7, 'exp7': exp7, 'exp_zon7': exp_zon7, 'laden7': laden7, 'ontladen7': ontladen7, 'laden_zon7': laden_zon7, 'ev7': ev7, 'ev_zon7': ev_zon7, 'hvac7': hvac7, 'hvac_zon7': hvac_zon7, 'q7': q7, 'q_zon7': q_zon7} }}"
           historie_7_dagen_vorige_waarde: "{{ hist_7_ontbreekt }}"
           historie_reset: "{{ hist_reset_knop }}"
+          historie_wacht_op_reset: "{{ hist_wacht_op_reset }}"
           marge_pct: "{{ marge_pct }}"
           marge_kwh: "{{ marge_dc }}"
           efficientie_laden_pct: "{{ (eff_in * 100) | round(1) }}"
@@ -4408,15 +4422,20 @@ automation:
     description: >-
       Forecasting 2026.11.9 - Wist de historie van 7 dagen (zon, net, accu en de auto als
       zendure_ev.yaml geladen is) en laadt de statistieken opnieuw, tot ze echt leeg zijn
-      (hooguit 8 rondes). Het verbruiksprofiel reset zichzelf via dezelfde knop.
+      (hooguit 10 minuten). Het verbruiksprofiel reset zichzelf via dezelfde knop.
     mode: single
     triggers:
       - trigger: state
         entity_id: input_button.forecast_verbruiksgegevens_resetten
+        # Ook de eerste druk ooit telt (van unknown naar een tijd)
         not_from:
+          - unavailable
+        not_to:
           - unknown
           - unavailable
-    conditions: []
+    conditions:
+      - condition: template
+        value_template: "{{ trigger.from_state is not none }}"
     actions:
       - variables:
           tellers: >
@@ -4437,28 +4456,29 @@ automation:
                 'sensor.hvac_apart_uit_zon_7_dagen', 'sensor.zendure_quooker_apart_7_dagen',
                 'sensor.zendure_quooker_apart_uit_zon_7_dagen']
                | select('in', states.sensor | map(attribute='entity_id') | list) | list }}
-      # De recorder wist op de achtergrond, in delen, tussen het gewone schrijfwerk door. Bij een
-      # grote database is dat na 15 seconden nog niet klaar; laden de statistieken dan opnieuw,
-      # dan houden ze de oude 7 dagen in het geheugen. Daarom herhalen tot geen enkele statistiek
-      # nog meer dan ongeveer een uur historie heeft (age_coverage_ratio < 0,006 van 7 dagen).
+      - action: recorder.purge_entities
+        target:
+          entity_id: "{{ tellers }}"
+        data:
+          keep_days: 0
+      # De recorder wist op de achtergrond, in delen, achter het gewone schrijfwerk aan. Bij een
+      # grote database duurt dat minuten. Laden de statistieken te vroeg opnieuw, dan houden ze de
+      # oude 7 dagen in het geheugen. Daarom elke 30 seconden opnieuw laden (hooguit 10 minuten)
+      # tot geen enkele statistiek nog meer dan ongeveer een uur historie heeft (age_coverage_ratio
+      # < 0,006 van 7 dagen). Tot dan negeert de planner de oude historie (zie hist_dagen).
       - repeat:
           sequence:
-            - action: recorder.purge_entities
-              target:
-                entity_id: "{{ tellers }}"
-              data:
-                keep_days: 0
             - delay:
-                seconds: 15
+                seconds: 30
             - action: statistics.reload
             - delay:
-                seconds: 5
+                seconds: 3
           until:
             - condition: template
               value_template: >
                 {% set ns = namespace(c=0) %}
                 {% for e in statistieken %}{% set c = state_attr(e, 'age_coverage_ratio') %}{% if c is not none %}{% set ns.c = [ns.c, c | float(0)] | max %}{% endif %}{% endfor %}
-                {{ ns.c < 0.006 or repeat.index >= 8 }}
+                {{ ns.c < 0.006 or repeat.index >= 20 }}
       - variables:
           rest_dagen: >
             {% set ns = namespace(c=0) %}
@@ -4480,10 +4500,10 @@ automation:
           - action: logbook.log
             data:
               name: Zendure Forecasting
-              message: "Verbruiksgegevens resetten niet gelukt: de statistieken hebben na 8 pogingen nog {{ rest_dagen }} dagen historie. Druk de knop nog eens."
+              message: "Verbruiksgegevens resetten niet gelukt: de statistieken hebben na 10 minuten nog {{ rest_dagen }} dagen historie. Druk de knop later nog eens."
               entity_id: input_button.forecast_verbruiksgegevens_resetten
           - action: persistent_notification.create
             data:
               notification_id: forecast_verbruiksgegevens_resetten
               title: Zendure Forecasting
-              message: "Verbruiksgegevens resetten is niet gelukt: de 7-dagen-statistieken hebben nog {{ rest_dagen }} dagen historie (de recorder was nog niet klaar met wissen). Druk **Verbruiksgegevens Resetten** over een paar minuten nog eens."
+              message: "Verbruiksgegevens resetten is niet gelukt: de 7-dagen-statistieken hebben nog {{ rest_dagen }} dagen historie (de recorder was na 10 minuten nog niet klaar met wissen). De planner negeert de oude historie wel al. Druk **Verbruiksgegevens Resetten** later (bv. na een herstart) nog eens."

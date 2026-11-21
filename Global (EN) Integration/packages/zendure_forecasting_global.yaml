@@ -1317,14 +1317,17 @@ template:
       # Button Reset Usage Data: the profile starts over
       - platform: state
         entity_id: input_button.forecast_reset_usage_data
+        # The very first press counts too (from unknown to a time); not on startup or reload
         not_from:
+          - unavailable
+        not_to:
           - unknown
           - unavailable
         id: reset
     variables:
       # On a reset the sensor does not read its own previous values (an entity that does not exist),
       # so all values fall back to empty / 0 / evenly spread.
-      profile: "{{ 'sensor.forecast_usage_profile_reset' if trigger.id == 'reset' else 'sensor.forecast_usage_profile' }}"
+      profile: "{{ 'sensor.forecast_usage_profile_reset' if trigger.id == 'reset' and trigger.from_state is not none else 'sensor.forecast_usage_profile' }}"
       # Weight of a new measurement once there are enough measurements (memory = about 1 / weight measurements):
       c_alpha_min_workday: 0.1           # workday: ~10 measurements = about 2 weeks
       c_alpha_min_weekend: 0.2           # weekend: ~5 measurements = about 2.5 weeks
@@ -1888,6 +1891,16 @@ template:
           {%- if states[e] is not none and not state_attr(e, 'restored') and not has_value(e) -%}{%- set ns.l = ns.l + [k] -%}{%- endif -%}
         {%- endfor -%}
         {{ ns.l }}
+      # If the history reaches further back than the last Reset Usage Data (+ a bit over an hour),
+      # the recorder has not finished purging: old history, do not use it yet.
+      hist_waiting_for_reset: >
+        {% set t = as_timestamp(hist_reset_button, none) %}
+        {% set ns = namespace(c=0) %}
+        {% for e in ['sensor.forecast_solar_production_7_days', 'sensor.forecast_grid_import_7_days', 'sensor.forecast_zendure_charge_7_days'] %}
+          {% set c = state_attr(e, 'age_coverage_ratio') %}
+          {% if c is not none %}{% set ns.c = [ns.c, c | float(0)] | max %}{% endif %}
+        {% endfor %}
+        {{ t is not none and 7 * ns.c > (as_timestamp(now()) - t) / 86400 + 0.06 }}
       hist_days: >
         {# Largest coverage of solar, grid import and battery charging: without solar panels (or
            when the solar counter is temporarily missing) the history of the other counters
@@ -1897,7 +1910,7 @@ template:
           {% set c = state_attr(e, 'age_coverage_ratio') %}
           {% if c is not none %}{% set ns.c = [ns.c, c | float(0)] | max %}{% endif %}
         {% endfor %}
-        {{ (7 * ns.c) | round(2) }}
+        {{ 0 if hist_waiting_for_reset else (7 * ns.c) | round(2) }}
 
       # Directly used solar in 7 days = production - export from solar - charging from solar - car from solar
       # - AC and Quooker from solar (counted separately)
@@ -3973,6 +3986,7 @@ template:
           history_7_days: "{{ {'prod7': prod7, 'imp7': imp7, 'exp7': exp7, 'exp_solar7': exp_solar7, 'charge7': charge7, 'discharge7': discharge7, 'charge_solar7': charge_solar7, 'ev7': ev7, 'ev_solar7': ev_solar7, 'hvac7': hvac7, 'hvac_solar7': hvac_solar7, 'q7': q7, 'q_solar7': q_solar7} }}"
           history_7_days_previous_value: "{{ hist_7_missing }}"
           history_reset: "{{ hist_reset_button }}"
+          history_waiting_for_reset: "{{ hist_waiting_for_reset }}"
           margin_pct: "{{ margin_pct }}"
           margin_kwh: "{{ margin_dc }}"
           efficiency_charge_pct: "{{ (eff_in * 100) | round(1) }}"
@@ -4409,15 +4423,20 @@ automation:
     description: >-
       Forecasting 2026.11.9 - Clears the 7-day history (solar, grid, battery and the car if
       zendure_ev_global.yaml is loaded) and reloads the statistics, until they are really empty
-      (at most 8 rounds). The usage profile resets itself via the same button.
+      (at most 10 minutes). The usage profile resets itself via the same button.
     mode: single
     triggers:
       - trigger: state
         entity_id: input_button.forecast_reset_usage_data
+        # The very first press counts too (from unknown to a time)
         not_from:
+          - unavailable
+        not_to:
           - unknown
           - unavailable
-    conditions: []
+    conditions:
+      - condition: template
+        value_template: "{{ trigger.from_state is not none }}"
     actions:
       - variables:
           counters: >
@@ -4438,28 +4457,29 @@ automation:
                 'sensor.hvac_separate_from_solar_7_days', 'sensor.zendure_quooker_separate_7_days',
                 'sensor.zendure_quooker_separate_from_solar_7_days']
                | select('in', states.sensor | map(attribute='entity_id') | list) | list }}
-      # The recorder purges in the background, in parts, between the regular writes. With a large
-      # database it is not done after 15 seconds; if the statistics reload then, they keep the old
-      # 7 days in memory. So repeat until no statistic has more than about an hour of history
-      # (age_coverage_ratio < 0.006 of 7 days).
+      - action: recorder.purge_entities
+        target:
+          entity_id: "{{ counters }}"
+        data:
+          keep_days: 0
+      # The recorder purges in the background, in parts, behind the regular writes. With a large
+      # database that takes minutes. If the statistics reload too early, they keep the old 7 days
+      # in memory. So reload every 30 seconds (at most 10 minutes) until no statistic has more than
+      # about an hour of history (age_coverage_ratio < 0.006 of 7 days). Until then the planner
+      # ignores the old history (see hist_days).
       - repeat:
           sequence:
-            - action: recorder.purge_entities
-              target:
-                entity_id: "{{ counters }}"
-              data:
-                keep_days: 0
             - delay:
-                seconds: 15
+                seconds: 30
             - action: statistics.reload
             - delay:
-                seconds: 5
+                seconds: 3
           until:
             - condition: template
               value_template: >
                 {% set ns = namespace(c=0) %}
                 {% for e in statistics %}{% set c = state_attr(e, 'age_coverage_ratio') %}{% if c is not none %}{% set ns.c = [ns.c, c | float(0)] | max %}{% endif %}{% endfor %}
-                {{ ns.c < 0.006 or repeat.index >= 8 }}
+                {{ ns.c < 0.006 or repeat.index >= 20 }}
       - variables:
           remaining_days: >
             {% set ns = namespace(c=0) %}
@@ -4481,10 +4501,10 @@ automation:
           - action: logbook.log
             data:
               name: Zendure Forecasting
-              message: "Reset usage data failed: after 8 attempts the statistics still have {{ remaining_days }} days of history. Press the button again."
+              message: "Reset usage data failed: after 10 minutes the statistics still have {{ remaining_days }} days of history. Press the button again later."
               entity_id: input_button.forecast_reset_usage_data
           - action: persistent_notification.create
             data:
               notification_id: forecast_reset_usage_data
               title: Zendure Forecasting
-              message: "Reset usage data did not succeed: the 7-day statistics still have {{ remaining_days }} days of history (the recorder had not finished purging). Press **Reset Usage Data** again in a few minutes."
+              message: "Reset usage data did not succeed: the 7-day statistics still have {{ remaining_days }} days of history (the recorder had not finished purging after 10 minutes). The planner already ignores the old history. Press **Reset Usage Data** again later (e.g. after a restart)."
